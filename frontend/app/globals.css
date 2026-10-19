@@ -1,0 +1,159 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:ital,wght@0,100..900;1,100..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+@import "tailwindcss";
+
+/* AutoPulse Design Tokens - CSS Variables */
+:root {
+  /* Core brand colors */
+  --color-paper: #F8FAFC;
+  --color-surface: #FFFFFF;
+  --color-ink: #0F172A;
+  --color-muted: #526071;
+  --color-line: #E2E8F0;
+
+  /* Primary signal & state colors */
+  --color-signal: #0B7F70;
+  --color-signal-hover: #09685C;
+  --color-signal-soft: #E6F7F5;
+  --color-signal-border: #93D7CE;
+
+  /* Status badge colors */
+  --color-draft-text: #8A5A0B;
+  --color-draft-bg: #FDF6E2;
+  --color-approved-text: #0B7F70;
+  --color-approved-bg: #E6F7F5;
+  --color-rejected-text: #B4412E;
+  --color-rejected-bg: #FBE9E5;
+
+  /* Radii */
+  --radius-control: 8px;
+  --radius-hero-panel: 16px;
+  --radius-pill: 9999px;
+}
+
+@theme {
+  --color-paper: #F8FAFC;
+  --color-surface: #FFFFFF;
+  --color-ink: #0F172A;
+  --color-muted: #526071;
+  --color-line: #E2E8F0;
+  --color-signal: #0B7F70;
+  --color-signal-hover: #09685C;
+  --color-signal-soft: #E6F7F5;
+  --color-signal-border: #93D7CE;
+  --color-draft-text: #8A5A0B;
+  --color-draft-bg: #FDF6E2;
+  --color-approved-text: #0B7F70;
+  --color-approved-bg: #E6F7F5;
+  --color-rejected-text: #B4412E;
+  --color-rejected-bg: #FBE9E5;
+
+  --font-geist: var(--font-geist), "Geist", sans-serif;
+  --font-manrope: var(--font-manrope), "Manrope", sans-serif;
+  --font-display: var(--font-geist), "Geist", sans-serif;
+  --font-body: var(--font-manrope), "Manrope", sans-serif;
+
+  --radius-control: 8px;
+  --radius-hero-panel: 16px;
+  --radius-pill: 9999px;
+}
+
+/* Base resets & typography rules */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-manrope), "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  text-align: left;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Headings use Geist with font-normal and tracking-tighter */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-geist), "Geist", sans-serif;
+  font-weight: 400;
+  letter-spacing: -0.05em;
+  line-height: 1.05;
+  color: var(--color-ink);
+  text-align: left;
+}
+
+/* Display H1 scale */
+.font-display-h1 {
+  font-family: var(--font-geist), "Geist", sans-serif;
+  font-size: clamp(2.5rem, 5.5vw, 4.25rem);
+  font-weight: 400;
+  letter-spacing: -0.05em;
+  line-height: 1.02;
+}
+
+/* Readable line length constraint for copy */
+.max-prose-copy {
+  max-width: 65ch;
+}
+
+/* Accessible visible focus outline: 2px signal with offset */
+:focus-visible {
+  outline: 2px solid var(--color-signal);
+  outline-offset: 2px;
+}
+
+/* Elevated glass and card shadows */
+.hero-panel-shadow {
+  box-shadow: 0 20px 40px -15px rgba(15, 23, 42, 0.08), 0 1px 3px 0 rgba(15, 23, 42, 0.04);
+}
+
+.card-subtle-shadow {
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.04), 0 2px 6px -1px rgba(15, 23, 42, 0.02);
+}
+
+.card-hover-lift {
+  transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+}
+
+.card-hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px -8px rgba(15, 23, 42, 0.08);
+  border-color: rgba(11, 127, 112, 0.3);
+}
+
+/* Subtle pulse dot animation */
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.15);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Respect user motion preference */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .card-hover-lift,
+  .animate-pulse-glow {
+    transition: none !important;
+    animation: none !important;
+    transform: none !important;
+  }
+}
