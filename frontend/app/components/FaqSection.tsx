@@ -1,12 +1,14 @@
 "use client";
 
-import * as Accordion from "@radix-ui/react-accordion";
+import { useState } from "react";
 
 interface FaqSectionProps {
   contactEmail: string;
 }
 
 export function FaqSection({ contactEmail }: FaqSectionProps) {
+  const [openId, setOpenId] = useState<string | null>(null);
+
   const items = [
     {
       id: "item-1",
@@ -39,37 +41,59 @@ export function FaqSection({ contactEmail }: FaqSectionProps) {
     },
   ];
 
+  const toggleItem = (id: string) => {
+    setOpenId((current) => (current === id ? null : id));
+  };
+
   return (
-    <Accordion.Root type="single" collapsible className="w-full space-y-3">
-      {items.map((item) => (
-        <Accordion.Item
-          key={item.id}
-          value={item.id}
-          className="border border-line rounded-[10px] bg-surface overflow-hidden transition-all duration-200 hover:border-signal/30 card-subtle-shadow"
-        >
-          <Accordion.Header className="flex">
-            <Accordion.Trigger className="flex flex-1 items-center justify-between text-left text-base font-medium text-ink hover:text-signal transition-colors cursor-pointer group px-5 py-4">
-              <span className="font-geist font-normal tracking-tighter text-lg pr-4">
-                {item.question}
-              </span>
-              <div className="w-7 h-7 rounded-full bg-paper border border-line flex items-center justify-center shrink-0 text-muted group-hover:text-signal group-hover:border-signal/40 transition-colors">
-                <svg
-                  className="w-3.5 h-3.5 transition-transform duration-200 group-data-[state=open]:rotate-180"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
+    <div className="w-full space-y-3">
+      {items.map((item) => {
+        const isOpen = openId === item.id;
+        return (
+          <div
+            key={item.id}
+            className="border border-line rounded-[10px] bg-surface overflow-hidden transition-all duration-200 hover:border-signal/30 card-subtle-shadow"
+          >
+            <h3>
+              <button
+                type="button"
+                onClick={() => toggleItem(item.id)}
+                aria-expanded={isOpen}
+                aria-controls={`faq-answer-${item.id}`}
+                id={`faq-question-${item.id}`}
+                className="flex w-full items-center justify-between text-left text-base font-medium text-ink hover:text-signal transition-colors cursor-pointer group px-5 py-4"
+              >
+                <span className="font-geist font-normal tracking-tighter text-lg pr-4">
+                  {item.question}
+                </span>
+                <div className="w-7 h-7 rounded-full bg-paper border border-line flex items-center justify-center shrink-0 text-muted group-hover:text-signal group-hover:border-signal/40 transition-colors">
+                  <svg
+                    className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                      isOpen ? "rotate-180" : ""
+                    }`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
+              </button>
+            </h3>
+            {isOpen && (
+              <div
+                id={`faq-answer-${item.id}`}
+                role="region"
+                aria-labelledby={`faq-question-${item.id}`}
+                className="px-5 pt-1 pb-5 text-sm text-muted leading-relaxed border-t border-line/60 bg-paper/40"
+              >
+                <p className="max-prose-copy">{item.answer}</p>
               </div>
-            </Accordion.Trigger>
-          </Accordion.Header>
-          <Accordion.Content className="px-5 pt-1 pb-5 text-sm text-muted leading-relaxed border-t border-line/60 bg-paper/40">
-            <p className="max-prose-copy">{item.answer}</p>
-          </Accordion.Content>
-        </Accordion.Item>
-      ))}
-    </Accordion.Root>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }

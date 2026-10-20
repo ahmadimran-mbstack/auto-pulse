@@ -1,13 +1,13 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth/client";
 import { AuthStatusLegend } from "../components/AuthStatusLegend";
 
-interface ResetPasswordClient {
-  resetPassword: (options: {
+interface LegacyResetClient {
+  resetPassword?: (options: {
     newPassword: string;
     token: string;
   }) => Promise<{ data?: { status: boolean }; error?: { message?: string } }>;
@@ -16,24 +16,79 @@ interface ResetPasswordClient {
 function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  const initialEmail = searchParams.get("email") || "";
   const token = searchParams.get("token");
   const urlError = searchParams.get("error");
 
+  const [email, setEmail] = useState(initialEmail);
+  const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState<string | null>(urlError || null);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resendNotice, setResendNotice] = useState<string | null>(null);
 
-  // Submit new password to Neon Auth with the token from the reset email
-  // Reference: https://neon.com/docs/auth/quick-start/nextjs-api-only
+  // Resend cooldown timer
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setTimeout(() => setResendCooldown((prev) => prev - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendCooldown]);
+
+  // Request a fresh OTP code
+  const handleResendCode = async () => {
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
+      setError("Please enter your email address to request a new code.");
+      return;
+    }
+
+    setError(null);
+    setResendNotice(null);
+
+    try {
+      const res = await fetch("/api/auth/email-otp/send-verification-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: cleanEmail,
+          type: "forget-password",
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || data.error) {
+        setError(data.error?.message || "Failed to resend code. Please try again.");
+      } else {
+        setResendCooldown(60);
+        setResendNotice(`A fresh verification code was sent to ${cleanEmail}.`);
+      }
+    } catch {
+      setError("Failed to resend verification code. Please check your network connection.");
+    }
+  };
+
+  // Submit password reset
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
+    setResendNotice(null);
 
-    if (!token) {
-      setError("Reset token is missing. Please request a new password reset link.");
+    const cleanEmail = email.trim();
+    const cleanOtp = otp.trim();
+
+    if (!cleanEmail) {
+      setError("Please enter your account email address.");
+      return;
+    }
+
+    if (!token && (!cleanOtp || cleanOtp.length < 6)) {
+      setError("Please enter the complete 6-digit verification code sent to your email.");
       return;
     }
 
@@ -50,14 +105,46 @@ function ResetPasswordForm() {
     setIsPending(true);
 
     try {
-      const client = authClient as unknown as ResetPasswordClient;
-      const result = await client.resetPassword({
-        newPassword,
-        token,
+      // If a token was provided via link, use legacy token reset
+      if (token) {
+        const client = authClient as unknown as LegacyResetClient;
+        if (typeof client.resetPassword === "function") {
+          const result = await client.resetPassword({
+            newPassword,
+            token,
+          });
+
+          if (result?.error) {
+            setError(result.error.message || "Failed to reset password. The link may have expired.");
+            setIsPending(false);
+            return;
+          }
+
+          setIsSuccess(true);
+          setIsPending(false);
+          return;
+        }
+      }
+
+      // Standard Neon Auth Email OTP password reset
+      const res = await fetch("/api/auth/email-otp/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: cleanEmail,
+          otp: cleanOtp,
+          password: newPassword,
+        }),
       });
 
-      if (result?.error) {
-        setError(result.error.message || "Failed to reset password. The link may have expired.");
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || data.error || data.code === "INVALID_OTP") {
+        const msg =
+          data.code === "INVALID_OTP"
+            ? "Invalid or expired verification code. Please check your inbox or request a new code."
+            : data.error?.message || data.message || "Failed to reset password. Please try again.";
+        setError(msg);
       } else {
         setIsSuccess(true);
       }
@@ -72,33 +159,15 @@ function ResetPasswordForm() {
     }
   };
 
-  // If no token is provided in the URL, advise the user to request a fresh link
-  if (!token && !isSuccess) {
-    return (
-      <div className="w-full max-w-[400px] text-left space-y-4">
-        <h1 className="text-3xl font-geist font-normal tracking-tighter mb-2">
-          Invalid reset link
-        </h1>
-        <p className="text-sm text-muted">
-          This password reset link is invalid or incomplete. Password reset links expire after a short period.
-        </p>
-        <Link
-          href="/auth/forgot-password"
-          className="inline-block py-2.5 px-4 rounded-[8px] bg-signal text-surface text-sm font-medium hover:bg-signal-hover transition-colors shadow-xs"
-        >
-          Request new reset link
-        </Link>
-      </div>
-    );
-  }
-
   return (
     <div className="w-full max-w-[400px] text-left">
       <h1 className="text-3xl font-geist font-normal tracking-tighter mb-2">
         Set new password
       </h1>
       <p className="text-sm text-muted mb-6">
-        Choose a secure password for your AutoPulse account.
+        {token
+          ? "Choose a secure password for your AutoPulse account."
+          : `Enter the 6-digit code sent to ${email || "your email"} and your new password.`}
       </p>
 
       {isSuccess ? (
@@ -122,7 +191,7 @@ function ResetPasswordForm() {
               <span>Password updated</span>
             </div>
             <p className="text-xs text-muted leading-relaxed">
-              Your password has been changed successfully. You can now use your new password to sign in.
+              Your password has been changed successfully. You can now sign in with your new credentials.
             </p>
           </div>
 
@@ -135,7 +204,63 @@ function ResetPasswordForm() {
           </button>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Email address field */}
+          <div>
+            <label
+              htmlFor="email"
+              className="block text-sm font-medium text-ink mb-1.5"
+            >
+              Account email
+            </label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              placeholder="you@company.com"
+              className="w-full px-3.5 py-2.5 rounded-[8px] border border-line bg-surface text-ink text-sm placeholder:text-muted/60 focus:border-signal focus:ring-2 focus:ring-signal/15 transition-all outline-hidden"
+            />
+          </div>
+
+          {/* Verification Code field (when not using URL token) */}
+          {!token && (
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label
+                  htmlFor="otp"
+                  className="block text-sm font-medium text-ink"
+                >
+                  6-digit reset code
+                </label>
+                <button
+                  type="button"
+                  onClick={handleResendCode}
+                  disabled={resendCooldown > 0}
+                  className="text-xs text-signal hover:underline disabled:text-muted disabled:no-underline cursor-pointer disabled:cursor-not-allowed"
+                >
+                  {resendCooldown > 0
+                    ? `Resend in ${resendCooldown}s`
+                    : "Resend code"}
+                </button>
+              </div>
+              <input
+                id="otp"
+                name="otp"
+                type="text"
+                maxLength={6}
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+                required
+                placeholder="123456"
+                className="w-full px-3.5 py-2.5 rounded-[8px] border border-line bg-surface text-ink font-mono text-center tracking-widest text-lg placeholder:text-muted/40 focus:border-signal focus:ring-2 focus:ring-signal/15 transition-all outline-hidden"
+              />
+            </div>
+          )}
+
+          {/* New password field */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label
@@ -165,6 +290,7 @@ function ResetPasswordForm() {
             />
           </div>
 
+          {/* Confirm password field */}
           <div>
             <label
               htmlFor="confirmPassword"
@@ -185,6 +311,12 @@ function ResetPasswordForm() {
             />
           </div>
 
+          {resendNotice && (
+            <div className="p-3 rounded-[8px] bg-signal-soft border border-[#93D7CE] text-xs text-ink">
+              {resendNotice}
+            </div>
+          )}
+
           {error && (
             <div className="p-3 rounded-[8px] bg-rejected-bg text-rejected-text text-sm leading-relaxed border border-rose-200">
               {error}
@@ -193,10 +325,10 @@ function ResetPasswordForm() {
 
           <button
             type="submit"
-            disabled={isPending || !newPassword || !confirmPassword}
+            disabled={isPending || !newPassword || !confirmPassword || (!token && !otp)}
             className="w-full py-2.5 px-4 rounded-[8px] bg-signal text-surface text-sm font-medium hover:bg-signal-hover disabled:opacity-60 transition-all cursor-pointer disabled:cursor-not-allowed shadow-xs active:translate-y-[1px]"
           >
-            {isPending ? "Updating password..." : "Save new password"}
+            {isPending ? "Updating password..." : "Update password"}
           </button>
         </form>
       )}

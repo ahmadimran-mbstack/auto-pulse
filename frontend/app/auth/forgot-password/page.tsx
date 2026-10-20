@@ -2,41 +2,46 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { authClient } from "@/lib/auth/client";
+import { useRouter } from "next/navigation";
 import { AuthStatusLegend } from "../components/AuthStatusLegend";
 
-interface ForgetPasswordClient {
-  forgetPassword: (options: {
-    email: string;
-    redirectTo?: string;
-  }) => Promise<{ data?: { status: boolean }; error?: { message?: string } }>;
-}
-
 export default function ForgotPasswordPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [isPending, setIsPending] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Send password reset request via Neon Auth SDK
-  // Reference: https://neon.com/docs/auth/quick-start/nextjs-api-only
+  // Send password reset OTP code via Neon Auth Email OTP endpoint
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const cleanEmail = email.trim();
+
+    if (!cleanEmail) {
+      setError("Please enter your email address.");
+      return;
+    }
+
     setIsPending(true);
     setError(null);
 
     try {
-      // The redirectTo URL tells Neon Auth where to send the user with their reset token
-      const client = authClient as unknown as ForgetPasswordClient;
-      const result = await client.forgetPassword({
-        email: email.trim(),
-        redirectTo: "/auth/reset-password",
+      const res = await fetch("/api/auth/email-otp/send-verification-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: cleanEmail,
+          type: "forget-password",
+        }),
       });
 
-      if (result?.error) {
-        setError(result.error.message || "Failed to send reset email. Please try again.");
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || data.error) {
+        const msg = data.error?.message || data.message || "Failed to send reset code. Please try again.";
+        setError(msg);
       } else {
-        setIsSuccess(true);
+        // Redirect directly to the reset-password page with email prefilled
+        router.push(`/auth/reset-password?email=${encodeURIComponent(cleanEmail)}`);
       }
     } catch (err: unknown) {
       const message =
@@ -82,91 +87,54 @@ export default function ForgotPasswordPage() {
               Reset your password
             </h1>
             <p className="text-sm text-muted mb-6">
-              Enter your account email and we will send you a link to reset your password.
+              Enter your account email and we will send you a verification code to reset your password.
             </p>
 
-            {isSuccess ? (
-              <div className="space-y-5">
-                <div className="p-4 rounded-[10px] bg-signal-soft border border-[#93D7CE] text-sm text-ink space-y-2">
-                  <div className="flex items-center gap-2 text-signal font-medium">
-                    <svg
-                      className="w-4 h-4 shrink-0"
-                      viewBox="0 0 16 16"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M3 8.5L6.5 12L13 4"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    <span>Check your email</span>
-                  </div>
-                  <p className="text-xs text-muted leading-relaxed">
-                    If an account is registered with <strong className="text-ink">{email}</strong>, you will receive a password reset link shortly. Please check your spam folder if it does not appear within a few minutes.
-                  </p>
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div>
+                <label
+                  htmlFor="email"
+                  className="block text-sm font-medium text-ink mb-1.5"
+                >
+                  Email address
+                </label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                  placeholder="you@company.com"
+                  className="w-full px-3.5 py-2.5 rounded-[8px] border border-line bg-surface text-ink text-sm placeholder:text-muted/60 focus:border-signal focus:ring-2 focus:ring-signal/15 transition-all outline-hidden"
+                />
+              </div>
+
+              {error && (
+                <div className="p-3 rounded-[8px] bg-rejected-bg text-rejected-text text-sm leading-relaxed border border-rose-200">
+                  {error}
                 </div>
+              )}
 
-                <div className="flex flex-col gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsSuccess(false);
-                      setEmail("");
-                    }}
-                    className="w-full py-2.5 px-4 rounded-[8px] border border-line bg-surface text-ink text-sm font-medium hover:bg-paper transition-colors cursor-pointer text-center"
-                  >
-                    Send to a different email
-                  </button>
+              <button
+                type="submit"
+                disabled={isPending || !email.trim()}
+                className="w-full py-2.5 px-4 rounded-[8px] bg-signal text-surface text-sm font-medium hover:bg-signal-hover disabled:opacity-60 transition-all cursor-pointer disabled:cursor-not-allowed shadow-xs active:translate-y-[1px]"
+              >
+                {isPending ? "Sending code..." : "Send reset code"}
+              </button>
 
+              <div className="pt-2 text-center space-y-2">
+                <div>
                   <Link
-                    href="/auth/sign-in"
-                    className="w-full py-2.5 px-4 rounded-[8px] bg-signal text-surface text-sm font-medium hover:bg-signal-hover transition-colors cursor-pointer text-center shadow-xs"
+                    href={`/auth/reset-password${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ""}`}
+                    className="text-xs text-muted hover:text-ink inline-block"
                   >
-                    Return to sign in
+                    Already have a reset code? <span className="text-signal underline">Enter code</span>
                   </Link>
                 </div>
-              </div>
-            ) : (
-              <form onSubmit={handleSubmit} className="space-y-5">
                 <div>
-                  <label
-                    htmlFor="email"
-                    className="block text-sm font-medium text-ink mb-1.5"
-                  >
-                    Email address
-                  </label>
-                  <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    autoComplete="email"
-                    placeholder="you@company.com"
-                    className="w-full px-3.5 py-2.5 rounded-[8px] border border-line bg-surface text-ink text-sm placeholder:text-muted/60 focus:border-signal focus:ring-2 focus:ring-signal/15 transition-all outline-hidden"
-                  />
-                </div>
-
-                {error && (
-                  <div className="p-3 rounded-[8px] bg-rejected-bg text-rejected-text text-sm leading-relaxed border border-rose-200">
-                    {error}
-                  </div>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={isPending || !email.trim()}
-                  className="w-full py-2.5 px-4 rounded-[8px] bg-signal text-surface text-sm font-medium hover:bg-signal-hover disabled:opacity-60 transition-all cursor-pointer disabled:cursor-not-allowed shadow-xs active:translate-y-[1px]"
-                >
-                  {isPending ? "Sending link..." : "Send reset link"}
-                </button>
-
-                <div className="pt-2 text-center">
                   <Link
                     href="/auth/sign-in"
                     className="text-xs text-muted hover:text-ink inline-block"
@@ -174,8 +142,8 @@ export default function ForgotPasswordPage() {
                     Remember your password? <span className="text-signal underline">Sign in</span>
                   </Link>
                 </div>
-              </form>
-            )}
+              </div>
+            </form>
 
             <div className="mt-8 pt-6 border-t border-line text-sm text-muted">
               <span>Do not have an account? </span>

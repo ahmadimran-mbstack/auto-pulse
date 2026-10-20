@@ -33,6 +33,7 @@ function SignUpForm() {
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedNotice, setCopiedNotice] = useState(false);
+  const [existingAccountEmail, setExistingAccountEmail] = useState<string | null>(null);
 
   const urlError = searchParams.get("error");
   const criteria = checkPasswordCriteria(password);
@@ -68,6 +69,7 @@ function SignUpForm() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
+    setExistingAccountEmail(null);
 
     const cleanEmail = email.trim();
     const cleanName = name.trim();
@@ -93,6 +95,21 @@ function SignUpForm() {
       });
 
       if (result.error) {
+        const errorMsg = result.error.message || "";
+        const isUserExists =
+          result.error.code === "USER_ALREADY_EXISTS" ||
+          result.error.code === "USER_EXISTS" ||
+          errorMsg.toLowerCase().includes("already exists") ||
+          errorMsg.toLowerCase().includes("user already") ||
+          errorMsg.toLowerCase().includes("already registered");
+
+        if (isUserExists) {
+          setExistingAccountEmail(cleanEmail);
+          setError(null);
+          setIsPending(false);
+          return;
+        }
+
         setError(result.error.message || "Failed to create account. Please try again.");
         setIsPending(false);
         return;
@@ -134,6 +151,46 @@ function SignUpForm() {
       <p className="text-sm text-muted mb-6">
         Start generating and reviewing daily LinkedIn content.
       </p>
+
+      {/* Prominent warning when account with email already exists */}
+      {existingAccountEmail && (
+        <div
+          role="alert"
+          className="mb-5 p-4 rounded-[10px] border border-signal bg-signal-soft text-ink text-sm leading-relaxed space-y-2.5 shadow-xs"
+        >
+          <div className="flex items-center gap-2 font-medium text-signal">
+            <svg className="w-4 h-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+              <path
+                fillRule="evenodd"
+                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                clipRule="evenodd"
+              />
+            </svg>
+            <span className="font-semibold">Account already exists</span>
+          </div>
+          <p className="text-xs text-muted leading-relaxed">
+            An account is already registered with <strong className="text-ink">{existingAccountEmail}</strong>. Please sign in to access your workspace.
+          </p>
+          <div className="pt-1 flex flex-col sm:flex-row gap-2">
+            <Link
+              href={`/auth/sign-in?email=${encodeURIComponent(existingAccountEmail)}`}
+              className="px-4 py-2 rounded-[8px] bg-signal text-surface text-xs font-medium hover:bg-signal-hover transition-colors text-center shadow-xs"
+            >
+              Sign in to your account
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                setExistingAccountEmail(null);
+                setEmail("");
+              }}
+              className="px-3 py-2 rounded-[8px] border border-line bg-surface text-ink text-xs font-medium hover:bg-paper transition-colors text-center cursor-pointer"
+            >
+              Use another email
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Account exists warning if user tried OAuth with existing email */}
       {urlError === "account_not_linked" ? (

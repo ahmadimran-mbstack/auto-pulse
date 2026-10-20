@@ -39,7 +39,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${manrope.variable} ${geist.variable}`}>
+    <html
+      lang="en"
+      data-scroll-behavior="smooth"
+      className={`${manrope.variable} ${geist.variable}`}
+    >
       <body className="min-h-screen bg-paper text-ink font-manrope antialiased flex flex-col">
         {children}
       </body>

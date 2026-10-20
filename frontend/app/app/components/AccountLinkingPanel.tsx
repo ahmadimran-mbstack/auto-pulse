@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth/client";
 
 interface AccountLinkingPanelProps {
@@ -8,42 +9,98 @@ interface AccountLinkingPanelProps {
 }
 
 export function AccountLinkingPanel({ userEmail }: AccountLinkingPanelProps) {
-  const [isLinking, setIsLinking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const urlError = searchParams.get("error");
 
-  // Trigger Google account linking via Better Auth linkSocial
-  // Reference: https://neon.com/docs/auth/quick-start/nextjs-api-only
+  const [isLinking, setIsLinking] = useState(false);
+  const [isGoogleLinked, setIsGoogleLinked] = useState(false);
+  const [error, setError] = useState<string | null>(
+    urlError === "google_link_failed"
+      ? "Google OAuth provider is not configured in your Neon Console. Please add Google Client ID and Secret in your Neon project dashboard under Auth > Providers to enable Google linking."
+      : null
+  );
+
+  // Check if Google is already linked to this account
+  useEffect(() => {
+    let isMounted = true;
+
+    async function checkAccounts() {
+      try {
+        const client = authClient as unknown as {
+          listAccounts?: () => Promise<{
+            data?: Array<{ provider: string; accountId?: string }>;
+            error?: { message?: string };
+          }>;
+        };
+
+        if (typeof client.listAccounts === "function") {
+          const res = await client.listAccounts();
+          if (isMounted && res?.data && Array.isArray(res.data)) {
+            const hasGoogle = res.data.some((acc) => acc.provider === "google");
+            setIsGoogleLinked(hasGoogle);
+          }
+        }
+      } catch {
+        // Silently ignore check errors
+      }
+    }
+
+    checkAccounts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Trigger Google account linking via Neon Auth linkSocial
   const handleLinkGoogle = async () => {
     setIsLinking(true);
     setError(null);
 
     try {
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
       const client = authClient as unknown as {
         linkSocial?: (options: {
           provider: "google";
           callbackURL: string;
+          errorCallbackURL?: string;
         }) => Promise<{ error?: { message?: string } }>;
       };
 
       if (typeof client.linkSocial === "function") {
-        await client.linkSocial({
+        const result = await client.linkSocial({
           provider: "google",
-          callbackURL: "/app",
+          callbackURL: `${origin}/app`,
+          errorCallbackURL: `${origin}/app?error=google_link_failed`,
         });
+
+        if (result?.error) {
+          const msg =
+            result.error.message?.toLowerCase().includes("provider") ||
+            result.error.message?.toLowerCase().includes("not configured")
+              ? "Google OAuth provider is not enabled in your Neon Console. Please add Google Client ID and Secret in Neon Auth > Providers."
+              : result.error.message || "Failed to link Google account.";
+          setError(msg);
+          setIsLinking(false);
+        }
       } else {
         // Fallback to signIn.social if linkSocial is not exposed directly
         await authClient.signIn.social({
           provider: "google",
-          callbackURL: "/app",
-          newUserCallbackURL: "/app",
+          callbackURL: `${origin}/app`,
+          newUserCallbackURL: `${origin}/app`,
+          errorCallbackURL: `${origin}/app?error=google_link_failed`,
         });
       }
     } catch (err: unknown) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : "Failed to link Google account. Please try again.";
-      setError(message);
+      const rawMessage = err instanceof Error ? err.message : "";
+      const friendlyMessage =
+        rawMessage.toLowerCase().includes("provider") ||
+        rawMessage.toLowerCase().includes("not configured") ||
+        rawMessage.toLowerCase().includes("oauth")
+          ? "Google OAuth provider is not enabled in your Neon Console. To enable Google linking, configure your Google Client ID and Secret in your Neon project under Auth > Providers."
+          : rawMessage || "Failed to link Google account. Please ensure Google provider is enabled in Neon console.";
+      setError(friendlyMessage);
       setIsLinking(false);
     }
   };
@@ -84,9 +141,18 @@ export function AccountLinkingPanel({ userEmail }: AccountLinkingPanelProps) {
               </svg>
             </div>
             <div>
-              <p className="text-sm font-semibold text-ink">Google Sign-In</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-ink">Google Sign-In</p>
+                {isGoogleLinked && (
+                  <span className="px-2 py-0.5 rounded-full bg-signal-soft text-signal text-[10px] font-medium border border-[#93D7CE]">
+                    Connected
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-muted">
-                Link to sign in seamlessly with your Google workspace identity.
+                {isGoogleLinked
+                  ? "Your Google account is linked and active."
+                  : "Link to sign in seamlessly with your Google workspace identity."}
               </p>
             </div>
           </div>
@@ -94,10 +160,18 @@ export function AccountLinkingPanel({ userEmail }: AccountLinkingPanelProps) {
           <button
             type="button"
             onClick={handleLinkGoogle}
-            disabled={isLinking}
-            className="px-4 py-2 border border-line rounded-[8px] bg-surface hover:bg-paper text-sm font-medium text-ink transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+            disabled={isLinking || isGoogleLinked}
+            className={`px-4 py-2 border rounded-[8px] text-sm font-medium transition-colors shrink-0 ${
+              isGoogleLinked
+                ? "border-signal/30 bg-signal-soft/50 text-signal cursor-default"
+                : "border-line bg-surface hover:bg-paper text-ink cursor-pointer disabled:opacity-50"
+            }`}
           >
-            {isLinking ? "Connecting..." : "Link Google Account"}
+            {isGoogleLinked
+              ? "Connected"
+              : isLinking
+              ? "Connecting..."
+              : "Link Google Account"}
           </button>
         </div>
 
@@ -129,7 +203,10 @@ export function AccountLinkingPanel({ userEmail }: AccountLinkingPanelProps) {
       </div>
 
       {error && (
-        <div className="p-3 rounded-[8px] bg-rejected-bg text-rejected-text text-sm border border-rose-200">
+        <div
+          role="alert"
+          className="p-3.5 rounded-[10px] bg-rejected-bg text-rejected-text text-xs leading-relaxed border border-rose-200"
+        >
           {error}
         </div>
       )}
