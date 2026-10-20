@@ -15,76 +15,23 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-# Set fake environment variables BEFORE importing app configuration
-os.environ["NEON_AUTH_BASE_URL"] = "https://fake-auth.neon.tech/neondb/auth"
-os.environ["DATABASE_URL"] = "postgresql://fakeuser:fakepass@ep-fake-pooler.neon.tech/neondb?sslmode=require"
-os.environ["DATABASE_URL_DIRECT"] = "postgresql://fakeuser:fakepass@ep-fake-direct.neon.tech/neondb?sslmode=require"
-os.environ["FRONTEND_URL"] = "http://localhost:3000"
-os.environ["ENV"] = "development"
-os.environ["LOG_LEVEL"] = "INFO"
+# Set default test environment variables if .env is not present
+ENV_FILE = BACKEND_DIR / ".env"
+os.environ.setdefault("NEON_AUTH_BASE_URL", "https://fake-auth.neon.tech/neondb/auth")
+if not ENV_FILE.exists():
+    os.environ.setdefault("DATABASE_URL", "postgresql://fakeuser:fakepass@ep-fake-pooler.neon.tech/neondb?sslmode=require")
+    os.environ.setdefault("DATABASE_URL_DIRECT", "postgresql://fakeuser:fakepass@ep-fake-direct.neon.tech/neondb?sslmode=require")
+os.environ.setdefault("FRONTEND_URL", "http://localhost:3000")
+os.environ.setdefault("ENV", "development")
+os.environ.setdefault("LOG_LEVEL", "INFO")
 
 from app.core import auth
 from app.core.config import settings
 from app.main import app
 
 
-# Test fixture for FastAPI TestClient
-@pytest.fixture
-def client():
-    return TestClient(app)
+from tests.conftest import client, ed25519_keys, create_test_token
 
-
-# Test fixture that generates a real Ed25519 key pair and a matching JWKS response
-@pytest.fixture
-def ed25519_keys():
-    private_key = ed25519.Ed25519PrivateKey.generate()
-    public_key = private_key.public_key()
-
-    # Extract the raw 32-byte public key and encode it as base64url
-    public_bytes = public_key.public_bytes(
-        encoding=serialization.Encoding.Raw,
-        format=serialization.PublicFormat.Raw,
-    )
-    x_b64 = base64.urlsafe_b64encode(public_bytes).decode("ascii").rstrip("=")
-
-    jwks = {
-        "keys": [
-            {
-                "kty": "OKP",
-                "crv": "Ed25519",
-                "kid": "key-1",
-                "x": x_b64,
-            }
-        ]
-    }
-    return private_key, jwks
-
-
-# Helper function to mint test JWT tokens signed with EdDSA
-def create_test_token(
-    private_key,
-    kid: str = "key-1",
-    sub: str = "user-12345",
-    email: str = "student@example.com",
-    name: str = "Student Engineer",
-    iss: str = "https://fake-auth.neon.tech",
-    aud: str = "https://fake-auth.neon.tech",
-    exp_delta: int = 900,
-    iat_delta: int = 0,
-) -> str:
-    now = int(time.time())
-    payload = {
-        "sub": sub,
-        "id": sub,
-        "email": email,
-        "name": name,
-        "iss": iss,
-        "aud": aud,
-        "iat": now + iat_delta,
-        "exp": now + exp_delta,
-    }
-    headers = {"kid": kid}
-    return jwt.encode(payload, private_key, algorithm="EdDSA", headers=headers)
 
 
 # Test case: GET /health returns 200 without requiring auth or database

@@ -11,6 +11,8 @@ if str(BACKEND_DIR) not in sys.path:
 
 from app.core.config import settings
 from app.db.session import Base, normalize_db_url
+import app.models  # Registers Profile model with Base.metadata
+
 
 # Interpret the config file for Python logging
 config = context.config
