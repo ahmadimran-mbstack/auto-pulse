@@ -8,6 +8,8 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.api.routes.health import router as health_router
 from app.api.routes.me import router as me_router
+from app.api.routes.profile import router as profile_router
+from app.api.routes.connections import router as connections_router
 from app.core.config import settings
 
 # Configure server logging based on LOG_LEVEL
@@ -66,28 +68,60 @@ app.add_middleware(RequestLoggingMiddleware)
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     if isinstance(exc.detail, dict) and "code" in exc.detail and "message" in exc.detail:
-        code = exc.detail["code"]
-        message = exc.detail["message"]
+        error_dict = dict(exc.detail)
     else:
         code = "not_found" if exc.status_code == 404 else "http_error"
-        message = str(exc.detail)
+        error_dict = {"code": code, "message": str(exc.detail)}
 
     return JSONResponse(
         status_code=exc.status_code,
-        content={"error": {"code": code, "message": message}},
+        content={"error": error_dict},
         headers=exc.headers,
     )
 
 
 # Exception handler for request validation failures
+# Returns per-field error messages in our standardized error shape
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    field_errors = {}
+    for err in exc.errors():
+        loc = err.get("loc", ())
+        # Extract the specific field name from error location
+        if len(loc) >= 2 and loc[0] == "body":
+            field_name = str(loc[1])
+        elif loc:
+            field_name = str(loc[-1])
+        else:
+            field_name = "general"
+
+        raw_msg = err.get("msg", "Invalid value.")
+        err_type = err.get("type", "")
+
+        # Clean Pydantic error prefixes so errors are plain and human-friendly
+        if raw_msg.startswith("Value error, "):
+            msg = raw_msg.replace("Value error, ", "", 1)
+        elif err_type == "extra_forbidden":
+            msg = f"Unexpected field '{field_name}' is not allowed."
+        elif err_type == "missing":
+            msg = f"{field_name.replace('_', ' ').capitalize()} is required."
+        elif "string_too_short" in err_type:
+            msg = raw_msg
+        elif "string_too_long" in err_type:
+            msg = raw_msg
+        else:
+            msg = raw_msg
+
+        if field_name not in field_errors:
+            field_errors[field_name] = msg
+
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
             "error": {
                 "code": "validation_error",
-                "message": "Invalid request parameters",
+                "message": "Some fields need fixing.",
+                "fields": field_errors,
             }
         },
     )
@@ -111,3 +145,6 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 # Register API route modules
 app.include_router(health_router)
 app.include_router(me_router)
+app.include_router(profile_router)
+app.include_router(connections_router)
+

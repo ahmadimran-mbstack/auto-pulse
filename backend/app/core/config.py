@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     # Logging level: defaults to INFO
     LOG_LEVEL: str = "INFO"
 
+    # LinkedIn OAuth 2.0 credentials and redirect URI
+    LINKEDIN_CLIENT_ID: str
+    LINKEDIN_CLIENT_SECRET: str
+    LINKEDIN_REDIRECT_URI: str
+
+    # Fernet key for encrypting OAuth tokens in the database
+    TOKEN_ENCRYPTION_KEY: str
+
     # Configure pydantic-settings to read from backend/.env if it exists
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE) if ENV_FILE.exists() else None,
