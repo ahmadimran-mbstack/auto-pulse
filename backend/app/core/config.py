@@ -1,8 +1,9 @@
+import os
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 from urllib.parse import urlparse
 import sys
-from pydantic import AliasChoices, Field, ValidationError, field_validator
+from pydantic import AliasChoices, Field, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Find the backend directory so we can load backend/.env regardless of where uvicorn is launched
@@ -36,6 +37,27 @@ class Settings(BaseSettings):
     # Fernet key for encrypting OAuth tokens in the database
     TOKEN_ENCRYPTION_KEY: str
 
+    # Search provider configuration: tavily or exa
+    SEARCH_PROVIDER: str = "tavily"
+    TAVILY_API_KEY: Optional[str] = None
+    EXA_API_KEY: Optional[str] = None
+
+    # LLM configuration (Google Gemini, OpenAI, Anthropic, etc.)
+    LLM_PROVIDER: Optional[str] = None
+    LLM_API_KEY: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("LLM_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"),
+    )
+    LLM_MODEL: str = "gemini-3.5-flash-lite"
+    LLM_MODEL_FAST: str = "gemini-3.1-flash-lite"
+
+    # Pipeline schedule and lead time settings
+    DRAFT_LEAD_MINUTES: int = 180
+    SEARCH_LOOKBACK_DAYS: int = 3
+
+    # Master switch for pipeline execution
+    GENERATION_ENABLED: bool = True
+
     # Configure pydantic-settings to read from backend/.env if it exists
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE) if ENV_FILE.exists() else None,
@@ -60,6 +82,27 @@ class Settings(BaseSettings):
             raise ValueError(f"{info.field_name} must contain 'sslmode=require'")
         return value
 
+    # Validate that SEARCH_PROVIDER is either tavily or exa
+    @field_validator("SEARCH_PROVIDER")
+    @classmethod
+    def validate_search_provider(cls, value: str) -> str:
+        cleaned = value.strip().lower()
+        if cleaned not in {"tavily", "exa"}:
+            raise ValueError("SEARCH_PROVIDER must be either 'tavily' or 'exa'")
+        return cleaned
+
+    # Validate provider keys when generation is enabled
+    @model_validator(mode="after")
+    def validate_generation_keys(self):
+        if self.GENERATION_ENABLED:
+            if self.SEARCH_PROVIDER == "tavily" and not self.TAVILY_API_KEY:
+                raise ValueError("TAVILY_API_KEY is required when SEARCH_PROVIDER is 'tavily'")
+            if self.SEARCH_PROVIDER == "exa" and not self.EXA_API_KEY:
+                raise ValueError("EXA_API_KEY is required when SEARCH_PROVIDER is 'exa'")
+            if not self.LLM_API_KEY:
+                raise ValueError("LLM_API_KEY is required when GENERATION_ENABLED is true")
+        return self
+
     # Direct (unpooled) connection string for Alembic migrations.
     # Automatically derived by removing '-pooler.' from DATABASE_URL.
     @property
@@ -69,7 +112,12 @@ class Settings(BaseSettings):
     # Split comma-separated frontend URLs into a clean list of origins for CORS
     @property
     def cors_origins(self) -> List[str]:
-        return [origin.strip() for origin in self.FRONTEND_URL.split(",") if origin.strip()]
+        origins = [origin.strip() for origin in self.FRONTEND_URL.split(",") if origin.strip()]
+        if self.ENV == "development":
+            for local_origin in ("http://localhost:3000", "http://127.0.0.1:3000"):
+                if local_origin not in origins:
+                    origins.append(local_origin)
+        return origins
 
     # Neon tokens use the scheme + host of NEON_AUTH_BASE_URL as both issuer and audience
     # Reference: https://neon.com/docs/auth/guides/plugins/jwt
@@ -98,3 +146,21 @@ except ValidationError as exc:
         print(msg, file=sys.stderr)
         raise SystemExit(msg) from exc
     raise exc
+
+
+# Startup check: Ensure LangSmith and LangChain tracing are disabled to protect customer privacy
+def check_tracing_disabled() -> None:
+    tracing_env_vars = [
+        "LANGSMITH_TRACING",
+        "LANGCHAIN_TRACING_V2",
+        "LANGCHAIN_TRACING",
+    ]
+    for var in tracing_env_vars:
+        val = os.environ.get(var, "").strip().lower()
+        if val in {"true", "1", "yes", "on"}:
+            msg = f"Security error: {var} is enabled. LangChain and LangSmith tracing must stay OFF to protect user privacy."
+            print(msg, file=sys.stderr)
+            raise SystemExit(msg)
+
+
+check_tracing_disabled()

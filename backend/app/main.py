@@ -10,6 +10,7 @@ from app.api.routes.health import router as health_router
 from app.api.routes.me import router as me_router
 from app.api.routes.profile import router as profile_router
 from app.api.routes.connections import router as connections_router
+from app.api.routes.posts import router as posts_router
 from app.core.config import settings
 
 # Configure server logging based on LOG_LEVEL
@@ -31,13 +32,14 @@ app = FastAPI(
 )
 
 # CORS middleware configuration
-# Allows only the origins configured in FRONTEND_URL (never a wildcard)
+# Allows origins configured in FRONTEND_URL and local dev URLs
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["X-Request-ID"],
 )
 
 
@@ -147,4 +149,5 @@ app.include_router(health_router)
 app.include_router(me_router)
 app.include_router(profile_router)
 app.include_router(connections_router)
+app.include_router(posts_router)
 
