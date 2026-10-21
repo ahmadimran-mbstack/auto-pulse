@@ -8,6 +8,11 @@ import type {
   Step3Payload,
   Step4Payload,
 } from "@/types/profile";
+import type {
+  PostDetail,
+  PostListItem,
+  PostSchedule,
+} from "@/types/posts";
 
 // Error class carrying HTTP status code and optional per-field validation errors
 export class ApiClientError extends Error {
@@ -27,6 +32,7 @@ export class ApiClientError extends Error {
 // In-memory cache for the auth token to make consecutive API requests fast
 let cachedToken: string | null = null;
 let cachedTokenExpiresAt = 0;
+let inFlightTokenPromise: Promise<string | null> | null = null;
 
 // Reads token expiration from JWT payload without an external library
 function readTokenExpiry(token: string): number {
@@ -51,48 +57,59 @@ async function getFreshToken(): Promise<string | null> {
     return cachedToken;
   }
 
-  // Method 1: authClient.token() as recommended in Neon Auth JWT guide
-  try {
-    const clientWithToken = authClient as unknown as {
-      token?: () => Promise<{ data?: { token?: string } }>;
-    };
-    if (typeof clientWithToken.token === "function") {
-      const tokenRes = await clientWithToken.token();
-      if (tokenRes?.data?.token) {
-        cachedToken = tokenRes.data.token;
+  // Reuse ongoing token fetch to avoid duplicate concurrent calls
+  if (inFlightTokenPromise) {
+    return inFlightTokenPromise;
+  }
+
+  inFlightTokenPromise = (async () => {
+    // Method 1: authClient.token() as recommended in Neon Auth JWT guide
+    try {
+      const clientWithToken = authClient as unknown as {
+        token?: () => Promise<{ data?: { token?: string } }>;
+      };
+      if (typeof clientWithToken.token === "function") {
+        const tokenRes = await clientWithToken.token();
+        if (tokenRes?.data?.token) {
+          cachedToken = tokenRes.data.token;
+          cachedTokenExpiresAt = readTokenExpiry(cachedToken);
+          return cachedToken;
+        }
+      }
+    } catch (err) {
+      console.warn("authClient.token() error:", err);
+    }
+
+    // Method 2: Fallback to reading set-auth-jwt response header from getSession
+    try {
+      let headerToken: string | null = null;
+      await authClient.getSession({
+        fetchOptions: {
+          onSuccess: (ctx: { response?: { headers?: Headers } }) => {
+            const jwt = ctx.response?.headers?.get("set-auth-jwt");
+            if (jwt) {
+              headerToken = jwt;
+            }
+          },
+        },
+      });
+      if (headerToken) {
+        cachedToken = headerToken;
         cachedTokenExpiresAt = readTokenExpiry(cachedToken);
         return cachedToken;
       }
+    } catch (err) {
+      console.warn("authClient.getSession() fallback error:", err);
     }
-  } catch (err) {
-    console.warn("authClient.token() error:", err);
-  }
 
-  // Method 2: Fallback to reading set-auth-jwt response header from getSession
-  try {
-    let headerToken: string | null = null;
-    await authClient.getSession({
-      fetchOptions: {
-        onSuccess: (ctx: { response?: { headers?: Headers } }) => {
-          const jwt = ctx.response?.headers?.get("set-auth-jwt");
-          if (jwt) {
-            headerToken = jwt;
-          }
-        },
-      },
-    });
-    if (headerToken) {
-      cachedToken = headerToken;
-      cachedTokenExpiresAt = readTokenExpiry(cachedToken);
-      return cachedToken;
-    }
-  } catch (err) {
-    console.warn("authClient.getSession() fallback error:", err);
-  }
+    cachedToken = null;
+    cachedTokenExpiresAt = 0;
+    return null;
+  })().finally(() => {
+    inFlightTokenPromise = null;
+  });
 
-  cachedToken = null;
-  cachedTokenExpiresAt = 0;
-  return null;
+  return inFlightTokenPromise;
 }
 
 // Single core API caller function used for all backend communication
@@ -269,5 +286,96 @@ export async function disconnectLinkedInConnection(): Promise<void> {
   return apiCall<void>("/connections/linkedin", {
     method: "DELETE",
   });
+}
+
+// Typed helpers for post drafts, generation, and schedules
+export async function getPosts(limit: number = 10): Promise<PostListItem[]> {
+  return apiCall<PostListItem[]>(`/posts?limit=${limit}`, {
+    method: "GET",
+  });
+}
+
+export async function getPost(id: string): Promise<PostDetail> {
+  return apiCall<PostDetail>(`/posts/${id}`, {
+    method: "GET",
+  });
+}
+
+export async function getPostSchedule(): Promise<PostSchedule> {
+  return apiCall<PostSchedule>("/posts/schedule", {
+    method: "GET",
+  });
+}
+
+export async function generateDraft(replace: boolean = true): Promise<PostDetail> {
+  return apiCall<PostDetail>(`/posts/generate?replace=${replace}`, {
+    method: "POST",
+  });
+}
+
+// Fetches the post branded image as a raw Blob using fresh Bearer authentication
+export async function fetchPostImageBlob(id: string): Promise<Blob> {
+  const token = await getFreshToken();
+
+  if (!token) {
+    try {
+      await authClient.signOut();
+    } catch {
+      // Ignore cleanup error if already signed out
+    }
+    if (typeof window !== "undefined") {
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.href = "/auth/sign-in";
+    }
+    throw new ApiClientError(401, {
+      code: "unauthorized",
+      message: "Your session is no longer valid. Please sign in again.",
+    });
+  }
+
+  const url = `${env.apiUrl}/posts/${id}/image.png`;
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+  } catch {
+    throw new ApiClientError(503, {
+      code: "service_unavailable",
+      message: "We can't reach the server right now. Try again in a moment.",
+    });
+  }
+
+  if (response.status === 401) {
+    cachedToken = null;
+    cachedTokenExpiresAt = 0;
+    try {
+      await authClient.signOut();
+    } catch {
+      // Ignore cleanup error
+    }
+    if (typeof window !== "undefined") {
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.href = "/auth/sign-in";
+    }
+    throw new ApiClientError(401, {
+      code: "unauthorized",
+      message: "Your session is no longer valid. Please sign in again.",
+    });
+  }
+
+  if (!response.ok) {
+    const json = await response.json().catch(() => ({}));
+    const errorObj = json?.error || {};
+    throw new ApiClientError(response.status, {
+      code: errorObj.code || "image_error",
+      message: errorObj.message || "Failed to load image.",
+    });
+  }
+
+  return await response.blob();
 }
 
