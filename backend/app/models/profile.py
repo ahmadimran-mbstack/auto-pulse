@@ -57,6 +57,11 @@ class Profile(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # Boolean helper property indicating whether onboarding has been completed
+    @property
+    def onboarding_complete(self) -> bool:
+        return self.onboarding_completed_at is not None
+
     # Timestamps with timezone
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
