@@ -3,21 +3,48 @@ from typing import Any, Dict, List, Optional
 import uuid
 import zoneinfo
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.auth import User, current_user
 from app.core.config import settings
 from app.db.session import get_db
+from app.models.approval import Approval
 from app.models.post import GenerationRun, Post
+from app.models.publication import PostPublication
 from app.repositories import post as post_repo
 from app.repositories import profile as profile_repo
-from app.schemas.post import PostDetail, PostListItem, ScheduleResponse
+from app.schemas.post import (
+    DecisionRequest,
+    PostApprovalInfo,
+    PostDetail,
+    PostListItem,
+    PostPublicationInfo,
+    PublicationRetryRequest,
+    ScheduleResponse,
+)
+from app.services.approval import decide_approval, request_approval
 from app.services.image import render_post_image
 from app.services.pipeline import build_graph, create_chat_model
 from app.services.prompts import PROMPT_VERSION
 from app.services.search import get_search_adapter
 
 router = APIRouter(prefix="/posts", tags=["posts"])
+
+
+# Helper to compute publish_at in UTC from user run_date, post_time, and timezone
+def compute_publish_at(
+    run_date: datetime.date,
+    post_time: Optional[datetime.time],
+    tz_name: Optional[str],
+) -> datetime.datetime:
+    target_time = post_time or datetime.time(9, 0)
+    try:
+        user_tz = zoneinfo.ZoneInfo(tz_name or "UTC")
+    except Exception:
+        user_tz = datetime.timezone.utc
+    local_dt = datetime.datetime.combine(run_date, target_time, tzinfo=user_tz)
+    return local_dt.astimezone(datetime.timezone.utc)
 
 
 # Helper to compute upcoming post and draft timestamps in user timezone
@@ -95,17 +122,127 @@ def get_post(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "not_found", "message": "Post not found"},
         )
+
+    # Check for approval info
+    approval = db.query(Approval).filter(Approval.post_id == p.id).first()
+    approval_info = None
+    if approval:
+        now_utc = datetime.datetime.now(datetime.timezone.utc)
+        if approval.decision:
+            state_str = approval.decision
+        elif approval.expires_at <= now_utc:
+            state_str = "expired"
+        else:
+            state_str = "pending"
+
+        approval_info = PostApprovalInfo(
+            state=state_str,
+            expires_at=approval.expires_at.isoformat(),
+            decided_at=approval.decided_at.isoformat() if approval.decided_at else None,
+        )
+
+    # Check for platform publications
+    pubs = db.query(PostPublication).filter(PostPublication.post_id == p.id).all()
+    publication_infos = [
+        PostPublicationInfo(
+            platform=pub.platform,
+            status=pub.status,
+            external_url=f"https://www.linkedin.com/feed/update/{pub.external_id}/" if pub.external_id else None,
+            error_code=pub.error_code,
+            published_at=pub.published_at.isoformat() if pub.published_at else None,
+        )
+        for pub in pubs
+    ]
+
     return PostDetail(
         id=p.id,
         status=p.status,
         run_date=p.run_date.isoformat(),
+        publish_at=p.publish_at.isoformat() if p.publish_at else None,
         topic_title=p.topic_title,
         topic_url=p.topic_url,
         sources=p.sources,
         caption=p.caption,
         hashtags=p.hashtags,
         created_at=p.created_at.isoformat(),
+        approval=approval_info,
+        publications=publication_infos,
     )
+
+
+# POST /posts/{id}/decision: dashboard user decision route
+@router.post("/{post_id}/decision")
+def make_post_decision(
+    post_id: uuid.UUID,
+    payload: DecisionRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    # Verify post belongs to caller
+    p = post_repo.get_caller_post(db=db, user_id=user.id, post_id=post_id)
+    if not p:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "not_found", "message": "Post not found"},
+        )
+    return decide_approval(
+        db=db,
+        decision=payload.decision,
+        decided_via="dashboard",
+        post_id=post_id,
+        user_id=user.id,
+    )
+
+
+# POST /posts/{id}/publications/linkedin/retry: retry failed publication
+@router.post("/{post_id}/publications/linkedin/retry")
+def retry_linkedin_publication(
+    post_id: uuid.UUID,
+    payload: PublicationRetryRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    # Verify post belongs to caller
+    p = post_repo.get_caller_post(db=db, user_id=user.id, post_id=post_id)
+    if not p:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "not_found", "message": "Post not found"},
+        )
+
+    pub = db.query(PostPublication).filter(
+        PostPublication.post_id == post_id,
+        PostPublication.platform == "linkedin",
+        PostPublication.user_id == user.id,
+    ).first()
+
+    if not pub or pub.status != "failed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "not_retryable", "message": "Publication is not in failed status"},
+        )
+
+    if pub.error_code == "outcome_unknown" and not payload.confirm_not_posted:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "confirmation_required", "message": "Confirmation that post was not published is required"},
+        )
+
+    # Reset publication to pending without not_before and reset post to approved
+    pub.status = "pending"
+    pub.not_before = None
+    pub.claimed_at = None
+    pub.error_code = None
+    pub.error_detail = None
+
+    db.execute(
+        text("UPDATE posts SET status = 'approved', updated_at = now() WHERE id = :id AND user_id = :user_id"),
+        {"id": post_id, "user_id": user.id},
+    )
+    db.commit()
+    db.refresh(pub)
+
+    return {"status": "ok", "message": "Publication retry queued"}
 
 
 # GET /posts/{id}/image.png: render branded PNG image
@@ -289,10 +426,13 @@ def generate_draft_now(
         "template_version": "v1",
     }
 
+    publish_at = compute_publish_at(today_local, profile.post_time, profile.timezone)
+
     post = Post(
         user_id=user.id,
         run_date=today_local,
         status="draft",
+        publish_at=publish_at,
         topic_title=chosen.get("title") or "Industry Update",
         topic_url=chosen.get("url") or "",
         sources=sources_list,
@@ -311,10 +451,15 @@ def generate_draft_now(
     run.finished_at = datetime.datetime.now(datetime.timezone.utc)
     db.commit()
 
+    # Trigger approval request email
+    request_approval(db=db, post=post, recipient_email=user.email)
+    db.refresh(post)
+
     return PostDetail(
         id=post.id,
         status=post.status,
         run_date=post.run_date.isoformat(),
+        publish_at=post.publish_at.isoformat() if post.publish_at else None,
         topic_title=post.topic_title,
         topic_url=post.topic_url,
         sources=post.sources,

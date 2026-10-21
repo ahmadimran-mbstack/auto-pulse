@@ -6,11 +6,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+import re
 from app.api.routes.health import router as health_router
 from app.api.routes.me import router as me_router
 from app.api.routes.profile import router as profile_router
 from app.api.routes.connections import router as connections_router
 from app.api.routes.posts import router as posts_router
+from app.api.routes.public import router as public_router
 from app.core.config import settings
 
 # Configure server logging based on LOG_LEVEL
@@ -43,6 +45,11 @@ app.add_middleware(
 )
 
 
+# Helper to sanitize paths so approval tokens are never written to access logs
+def sanitize_log_path(path: str) -> str:
+    return re.sub(r"(/public/approvals/)[^/]+", r"\1[token]", path)
+
+
 # Request logging middleware
 # Logs one line per request with method, path, status, duration, and X-Request-ID
 # Never logs Authorization headers, tokens, or sensitive values
@@ -54,8 +61,9 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
 
         duration_ms = (time.perf_counter() - start_time) * 1000
+        safe_path = sanitize_log_path(request.url.path)
         logger.info(
-            f"method={request.method} path={request.url.path} "
+            f"method={request.method} path={safe_path} "
             f"status={response.status_code} duration={duration_ms:.2f}ms request_id={request_id}"
         )
 
@@ -150,4 +158,5 @@ app.include_router(me_router)
 app.include_router(profile_router)
 app.include_router(connections_router)
 app.include_router(posts_router)
+app.include_router(public_router)
 

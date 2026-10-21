@@ -57,6 +57,11 @@ class Post(Base):
     # Specs required to render the square image on demand
     image_spec: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False)
 
+    # Scheduled publication timestamp in UTC (also serves as approval deadline)
+    publish_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # Audit tracking for LLM model and prompt template used
     llm_model: Mapped[str] = mapped_column(Text, nullable=False)
     prompt_version: Mapped[str] = mapped_column(Text, nullable=False)
@@ -71,7 +76,7 @@ class Post(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('draft', 'awaiting_approval', 'approved', 'rejected', 'publishing', 'published', 'failed')",
+            "status IN ('draft', 'awaiting_approval', 'approved', 'rejected', 'publishing', 'published', 'failed', 'expired')",
             name="ck_posts_status",
         ),
         # Exactly one post per user per scheduled date

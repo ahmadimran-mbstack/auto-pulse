@@ -58,6 +58,29 @@ class Settings(BaseSettings):
     # Master switch for pipeline execution
     GENERATION_ENABLED: bool = True
 
+    # Day 5: Email delivery settings
+    EMAIL_API_KEY: Optional[str] = None
+    EMAIL_FROM: str = "AutoPulse <noreply@autopulse.app>"
+    APP_BASE_URL: str = "http://localhost:3000"
+
+    # SMTP configuration for sending approval emails
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USER: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("SMTP_USER", "SMTP_USERNAME"),
+    )
+    SMTP_PASSWORD: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("SMTP_PASSWORD", "SMTP_PASS"),
+    )
+    SMTP_USE_TLS: bool = True
+
+    # Day 5: LinkedIn publishing settings
+    LINKEDIN_API_VERSION: str = "202401"
+    LINKEDIN_VISIBILITY: str = "CONNECTIONS"
+    PUBLISH_ENABLED: bool = True
+
     # Configure pydantic-settings to read from backend/.env if it exists
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE) if ENV_FILE.exists() else None,
@@ -89,6 +112,15 @@ class Settings(BaseSettings):
         cleaned = value.strip().lower()
         if cleaned not in {"tavily", "exa"}:
             raise ValueError("SEARCH_PROVIDER must be either 'tavily' or 'exa'")
+        return cleaned
+
+    # Validate that LINKEDIN_VISIBILITY is either PUBLIC or CONNECTIONS
+    @field_validator("LINKEDIN_VISIBILITY")
+    @classmethod
+    def validate_linkedin_visibility(cls, value: str) -> str:
+        cleaned = value.strip().upper()
+        if cleaned not in {"PUBLIC", "CONNECTIONS"}:
+            raise ValueError("LINKEDIN_VISIBILITY must be either 'PUBLIC' or 'CONNECTIONS'")
         return cleaned
 
     # Validate provider keys when generation is enabled
