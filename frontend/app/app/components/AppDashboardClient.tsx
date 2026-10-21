@@ -10,6 +10,7 @@ import { AccountLinkingPanel } from "./AccountLinkingPanel";
 import { BrandPreviewCard } from "./BrandPreviewCard";
 import { LinkedInConnectionRow } from "./LinkedInConnectionRow";
 import { formatSchedule } from "@/lib/schedule-format";
+import { DraftsSection } from "./DraftsSection";
 
 interface AppDashboardClientProps {
   user: {
@@ -361,6 +362,9 @@ export function AppDashboardClient({ user, apiUrl }: AppDashboardClientProps) {
           </div>
         </div>
       </div>
+
+      {/* Your drafts Section */}
+      <DraftsSection timezone={profile.timezone} />
 
       {/* Development-only API Check Panel */}
       {process.env.NODE_ENV !== "production" && (
