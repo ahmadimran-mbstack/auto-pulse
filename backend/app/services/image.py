@@ -10,11 +10,12 @@ FONTS_DIR = BACKEND_DIR / "assets" / "fonts"
 DISPLAY_FONT_PATH = FONTS_DIR / "BricolageGrotesque-Bold.ttf"
 BODY_FONT_PATH = FONTS_DIR / "DMSans-Medium.ttf"
 
-# Startup validation to fail clearly if font assets are missing
-if not DISPLAY_FONT_PATH.exists():
-    raise FileNotFoundError(f"Missing required display font: {DISPLAY_FONT_PATH}")
-if not BODY_FONT_PATH.exists():
-    raise FileNotFoundError(f"Missing required body font: {BODY_FONT_PATH}")
+# Helper to verify font assets exist before rendering
+def ensure_fonts_exist():
+    if not DISPLAY_FONT_PATH.exists():
+        raise FileNotFoundError(f"Missing required display font: {DISPLAY_FONT_PATH}")
+    if not BODY_FONT_PATH.exists():
+        raise FileNotFoundError(f"Missing required body font: {BODY_FONT_PATH}")
 
 
 # Helper to convert hex color string to RGB tuple
@@ -97,6 +98,8 @@ def wrap_text(text_to_wrap: str, font: ImageFont.FreeTypeFont, max_width: int, d
 
 # Render branded square image from image_spec using Pillow
 def render_post_image(image_spec: Dict[str, Any]) -> bytes:
+    ensure_fonts_exist()
+
     # 1200 x 1200 pixels canvas
     width = 1200
     height = 1200

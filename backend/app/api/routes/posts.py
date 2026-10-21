@@ -41,8 +41,10 @@ def calculate_next_schedule(profile) -> ScheduleResponse:
             post_dt = datetime.datetime.combine(candidate_date, profile.post_time, tzinfo=user_tz)
             if post_dt > now:
                 draft_dt = post_dt - datetime.timedelta(minutes=lead_minutes)
+                # Ensure draft timestamp is not in the past
+                effective_draft_dt = max(now, draft_dt)
                 return ScheduleResponse(
-                    next_draft_at=draft_dt.isoformat(),
+                    next_draft_at=effective_draft_dt.isoformat(),
                     next_post_at=post_dt.isoformat(),
                 )
 
@@ -188,14 +190,29 @@ def generate_draft_now(
                 created_at=p.created_at.isoformat(),
             )
 
-    # Record or claim generation run
-    run = GenerationRun(
-        user_id=user.id,
-        run_date=today_local,
-        status="started",
-        search_provider=settings.SEARCH_PROVIDER,
-    )
-    db.add(run)
+    # Record or claim generation run safely avoiding duplicate key conflicts
+    run = db.query(GenerationRun).filter(
+        GenerationRun.user_id == user.id,
+        GenerationRun.run_date == today_local,
+    ).first()
+
+    if run:
+        run.status = "started"
+        run.attempts += 1
+        run.started_at = datetime.datetime.now(datetime.timezone.utc)
+        run.finished_at = None
+        run.error_code = None
+        run.error_detail = None
+        run.search_provider = settings.SEARCH_PROVIDER
+    else:
+        run = GenerationRun(
+            user_id=user.id,
+            run_date=today_local,
+            status="started",
+            search_provider=settings.SEARCH_PROVIDER,
+        )
+        db.add(run)
+
     db.commit()
     db.refresh(run)
 
