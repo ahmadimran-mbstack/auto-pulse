@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     SMTP_USE_TLS: bool = True
 
     # Day 5: LinkedIn publishing settings
-    LINKEDIN_API_VERSION: str = "202401"
+    LINKEDIN_API_VERSION: str = "202601"
     LINKEDIN_VISIBILITY: str = "CONNECTIONS"
     PUBLISH_ENABLED: bool = True
 
@@ -133,6 +133,9 @@ class Settings(BaseSettings):
                 raise ValueError("EXA_API_KEY is required when SEARCH_PROVIDER is 'exa'")
             if not self.LLM_API_KEY:
                 raise ValueError("LLM_API_KEY is required when GENERATION_ENABLED is true")
+        # Align default EMAIL_FROM with authenticated SMTP_USER so SPF/DKIM checks succeed
+        if "autopulse.app" in self.EMAIL_FROM and self.SMTP_USER and "@" in self.SMTP_USER:
+            self.EMAIL_FROM = f"AutoPulse <{self.SMTP_USER}>"
         return self
 
     # Direct (unpooled) connection string for Alembic migrations.
