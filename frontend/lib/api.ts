@@ -379,3 +379,25 @@ export async function fetchPostImageBlob(id: string): Promise<Blob> {
   return await response.blob();
 }
 
+// Submits a user decision (approved or rejected) for a draft post
+export async function submitPostDecision(
+  id: string,
+  decision: "approved" | "rejected"
+): Promise<{ status: string; decision: string }> {
+  return apiCall<{ status: string; decision: string }>(`/posts/${id}/decision`, {
+    method: "POST",
+    body: JSON.stringify({ decision }),
+  });
+}
+
+// Retries publishing a failed post with optional confirmation for unknown outcomes
+export async function retryPostPublication(
+  id: string,
+  confirmNotPosted: boolean = false
+): Promise<{ status: string }> {
+  return apiCall<{ status: string }>(`/posts/${id}/publications/linkedin/retry`, {
+    method: "POST",
+    body: JSON.stringify({ confirm_not_posted: confirmNotPosted }),
+  });
+}
+

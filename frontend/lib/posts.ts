@@ -7,6 +7,20 @@ export interface StatusChipConfig {
   hasCheckIcon?: boolean;
 }
 
+// Action type indicating which UI action to present on publication failure
+export type PublicationAction =
+  | "reconnect"
+  | "confirm_retry"
+  | "retry"
+  | "auto_retry"
+  | "none";
+
+export interface PublicationErrorInfo {
+  message: string;
+  action: PublicationAction;
+  isWarning?: boolean;
+}
+
 // Maps post statuses to human-friendly labels and styling tokens
 export function getStatusChipConfig(status: PostStatus): StatusChipConfig {
   switch (status) {
@@ -46,10 +60,55 @@ export function getStatusChipConfig(status: PostStatus): StatusChipConfig {
         label: "Publishing",
         className: "bg-paper text-muted border-line",
       };
+    case "expired":
+      return {
+        label: "Expired",
+        className: "bg-paper text-muted border-line",
+      };
     default:
       return {
         label: "Draft",
         className: "bg-draft-bg text-draft-text border-[#F5E5BA]",
+      };
+  }
+}
+
+// Maps publication failure error codes to plain words and corresponding user actions
+export function getPublicationErrorInfo(errorCode: string | null | undefined): PublicationErrorInfo {
+  switch (errorCode) {
+    case "token_invalid":
+    case "connection_inactive":
+      return {
+        message: "Your LinkedIn connection needs to be renewed. Posting is paused until you reconnect.",
+        action: "reconnect",
+      };
+    case "outcome_unknown":
+      return {
+        message: "We could not confirm whether this was posted. Check your LinkedIn profile before trying again.",
+        action: "confirm_retry",
+        isWarning: true,
+      };
+    case "window_missed":
+      return {
+        message: "The posting time passed before this could be published.",
+        action: "none",
+      };
+    case "rejected_by_linkedin":
+    case "permission_denied":
+      return {
+        message: "LinkedIn did not accept this post.",
+        action: "retry",
+      };
+    case "rate_limited":
+    case "step_failed":
+      return {
+        message: "We will try again shortly.",
+        action: "auto_retry",
+      };
+    default:
+      return {
+        message: "Something went wrong while publishing.",
+        action: "retry",
       };
   }
 }
@@ -78,6 +137,47 @@ export function formatRunDate(dateStr: string, locale: string = "en-US"): string
     });
   } catch {
     return dateStr;
+  }
+}
+
+// Formats an ISO expiration date in the target timezone into plain words like 'Saturday at 4:05 PM'
+export function formatDecisionDeadline(
+  isoStr: string | null | undefined,
+  timezone?: string | null
+): string {
+  if (!isoStr) return "";
+  try {
+    const dateObj = new Date(isoStr);
+    if (isNaN(dateObj.getTime())) return "";
+
+    const options: Intl.DateTimeFormatOptions = {
+      weekday: "long",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    };
+    if (timezone) {
+      options.timeZone = timezone;
+    }
+
+    const formatter = new Intl.DateTimeFormat("en-US", options);
+    const parts = formatter.formatToParts(dateObj);
+
+    let weekday = "";
+    let hour = "";
+    let minute = "";
+    let dayPeriod = "";
+
+    for (const part of parts) {
+      if (part.type === "weekday") weekday = part.value;
+      if (part.type === "hour") hour = part.value;
+      if (part.type === "minute") minute = part.value;
+      if (part.type === "dayPeriod") dayPeriod = part.value;
+    }
+
+    return `${weekday} at ${hour}:${minute} ${dayPeriod}`.trim();
+  } catch {
+    return "";
   }
 }
 

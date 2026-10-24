@@ -3,6 +3,8 @@ import {
   getStatusChipConfig,
   formatRunDate,
   formatNextDraftTime,
+  formatDecisionDeadline,
+  getPublicationErrorInfo,
 } from "./posts";
 
 describe("post status chip configuration", () => {
@@ -14,6 +16,7 @@ describe("post status chip configuration", () => {
     expect(getStatusChipConfig("publishing").label).toBe("Publishing");
     expect(getStatusChipConfig("published").label).toBe("Published");
     expect(getStatusChipConfig("failed").label).toBe("Failed");
+    expect(getStatusChipConfig("expired").label).toBe("Expired");
   });
 
   it("assigns appropriate color classes according to design tokens", () => {
@@ -36,6 +39,58 @@ describe("post status chip configuration", () => {
     const publishedConfig = getStatusChipConfig("published");
     expect(publishedConfig.hasCheckIcon).toBe(true);
     expect(publishedConfig.className).toContain("text-ink");
+
+    const expiredConfig = getStatusChipConfig("expired");
+    expect(expiredConfig.className).toContain("bg-paper");
+    expect(expiredConfig.className).toContain("text-muted");
+  });
+});
+
+describe("publication error info mapping", () => {
+  it("maps connection renewal errors to reconnect action", () => {
+    const info1 = getPublicationErrorInfo("token_invalid");
+    expect(info1.action).toBe("reconnect");
+    expect(info1.message).toContain("connection needs to be renewed");
+
+    const info2 = getPublicationErrorInfo("connection_inactive");
+    expect(info2.action).toBe("reconnect");
+  });
+
+  it("maps outcome_unknown to confirm_retry with warning style", () => {
+    const info = getPublicationErrorInfo("outcome_unknown");
+    expect(info.action).toBe("confirm_retry");
+    expect(info.isWarning).toBe(true);
+    expect(info.message).toContain("could not confirm");
+  });
+
+  it("maps window_missed to passive notice without retry", () => {
+    const info = getPublicationErrorInfo("window_missed");
+    expect(info.action).toBe("none");
+    expect(info.message).toContain("time passed");
+  });
+
+  it("maps rejected and permission denied to retry action", () => {
+    const info1 = getPublicationErrorInfo("rejected_by_linkedin");
+    expect(info1.action).toBe("retry");
+    expect(info1.message).toContain("did not accept");
+
+    const info2 = getPublicationErrorInfo("permission_denied");
+    expect(info2.action).toBe("retry");
+  });
+
+  it("maps rate limited and step failed to auto retry notice", () => {
+    const info1 = getPublicationErrorInfo("rate_limited");
+    expect(info1.action).toBe("auto_retry");
+    expect(info1.message).toContain("try again shortly");
+
+    const info2 = getPublicationErrorInfo("step_failed");
+    expect(info2.action).toBe("auto_retry");
+  });
+
+  it("maps unknown codes to safe generic failure with retry", () => {
+    const info = getPublicationErrorInfo("unexpected_code");
+    expect(info.action).toBe("retry");
+    expect(info.message).toBe("Something went wrong while publishing.");
   });
 });
 
@@ -51,13 +106,29 @@ describe("run date formatting", () => {
   });
 });
 
+describe("decision deadline formatting", () => {
+  it("formats ISO timestamps with timezone into plain words", () => {
+    // 2026-10-24 11:00:00 UTC is Saturday at 11:00 AM UTC
+    const formattedUtc = formatDecisionDeadline("2026-10-24T11:00:00Z", "UTC");
+    expect(formattedUtc).toBe("Saturday at 11:00 AM");
+
+    // 2026-10-24 11:00:00 UTC is Saturday at 4:00 PM in Asia/Karachi (UTC+5)
+    const formattedKarachi = formatDecisionDeadline("2026-10-24T11:00:00Z", "Asia/Karachi");
+    expect(formattedKarachi).toBe("Saturday at 4:00 PM");
+  });
+
+  it("returns empty string for missing or invalid dates", () => {
+    expect(formatDecisionDeadline(null)).toBe("");
+    expect(formatDecisionDeadline(undefined)).toBe("");
+    expect(formatDecisionDeadline("not-a-date")).toBe("");
+  });
+});
+
 describe("next draft time formatting", () => {
   it("formats ISO timestamps with timezone into plain words", () => {
-    // 2026-10-28 06:00:00 UTC is Wednesday 6:00 AM UTC
     const formattedUtc = formatNextDraftTime("2026-10-28T06:00:00Z", "UTC");
     expect(formattedUtc).toBe("Wed 28 Oct, 6:00 AM");
 
-    // 2026-10-28 01:00:00 UTC is Wednesday 6:00 AM in Asia/Karachi (UTC+5)
     const formattedKarachi = formatNextDraftTime("2026-10-28T01:00:00Z", "Asia/Karachi");
     expect(formattedKarachi).toBe("Wed 28 Oct, 6:00 AM");
   });
