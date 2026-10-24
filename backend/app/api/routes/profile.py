@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import User, current_user
-from app.db.session import get_db
+from app.db.session import get_db, get_readonly_db
 from app.repositories import profile as profile_repo
 from app.schemas.profile import (
     OnboardingStep1Request,
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/profile", tags=["profile"])
 @router.get("", response_model=ProfileResponse)
 def get_caller_profile(
     user: User = Depends(current_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_readonly_db),
 ) -> ProfileResponse:
     profile = profile_repo.get_or_create_profile(
         db=db,

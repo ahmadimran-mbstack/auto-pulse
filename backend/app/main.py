@@ -13,6 +13,7 @@ from app.api.routes.profile import router as profile_router
 from app.api.routes.connections import router as connections_router
 from app.api.routes.posts import router as posts_router
 from app.api.routes.public import router as public_router
+from app.api.routes.dashboard import router as dashboard_router
 from app.core.config import settings
 
 # Configure server logging based on LOG_LEVEL
@@ -33,6 +34,12 @@ app = FastAPI(
     openapi_url=None if is_production else "/openapi.json",
 )
 
+from starlette.middleware.gzip import GZipMiddleware
+from app.core.timing import request_metrics
+
+# Enable GZip compression for responses over 500 bytes
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
 # CORS middleware configuration
 # Allows origins configured in FRONTEND_URL and local dev URLs
 app.add_middleware(
@@ -41,7 +48,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
-    expose_headers=["X-Request-ID"],
+    expose_headers=["X-Request-ID", "Server-Timing"],
 )
 
 
@@ -51,23 +58,37 @@ def sanitize_log_path(path: str) -> str:
 
 
 # Request logging middleware
-# Logs one line per request with method, path, status, duration, and X-Request-ID
-# Never logs Authorization headers, tokens, or sensitive values
+# Logs one line per request with total ms, auth ms, database ms, and query count
+# Adds a Server-Timing header with timing breakdown for performance inspection
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
         start_time = time.perf_counter()
 
-        response = await call_next(request)
+        # Initialize fresh per-request metrics for timing and query count
+        metrics = {"auth_ms": 0.0, "db_ms": 0.0, "queries": 0}
+        token = request_metrics.set(metrics)
 
-        duration_ms = (time.perf_counter() - start_time) * 1000
+        try:
+            response = await call_next(request)
+        finally:
+            total_ms = (time.perf_counter() - start_time) * 1000
+            auth_ms = metrics.get("auth_ms", 0.0)
+            db_ms = metrics.get("db_ms", 0.0)
+            query_count = metrics.get("queries", 0)
+            request_metrics.reset(token)
+
         safe_path = sanitize_log_path(request.url.path)
         logger.info(
             f"method={request.method} path={safe_path} "
-            f"status={response.status_code} duration={duration_ms:.2f}ms request_id={request_id}"
+            f"status={response.status_code} total={total_ms:.2f}ms auth={auth_ms:.2f}ms "
+            f"db={db_ms:.2f}ms queries={query_count} request_id={request_id}"
         )
 
         response.headers["X-Request-ID"] = request_id
+        response.headers["Server-Timing"] = (
+            f'total;dur={total_ms:.2f}, auth;dur={auth_ms:.2f}, db;dur={db_ms:.2f}, queries;dur={query_count};desc="{query_count}"'
+        )
         return response
 
 
@@ -159,4 +180,5 @@ app.include_router(profile_router)
 app.include_router(connections_router)
 app.include_router(posts_router)
 app.include_router(public_router)
+app.include_router(dashboard_router)
 

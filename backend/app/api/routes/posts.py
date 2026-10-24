@@ -1,9 +1,10 @@
+import base64
 import datetime
 from typing import Any, Dict, List, Optional
 import uuid
 import zoneinfo
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import text
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status as http_status
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core.auth import User, current_user
@@ -16,6 +17,7 @@ from app.repositories import post as post_repo
 from app.repositories import profile as profile_repo
 from app.schemas.post import (
     DecisionRequest,
+    PaginatedPostsResponse,
     PostApprovalInfo,
     PostDetail,
     PostListItem,
@@ -24,7 +26,7 @@ from app.schemas.post import (
     ScheduleResponse,
 )
 from app.services.approval import decide_approval, request_approval
-from app.services.image import render_post_image
+from app.services.image import build_image_etag, render_post_image
 from app.services.pipeline import build_graph, create_chat_model
 from app.services.prompts import PROMPT_VERSION
 from app.services.search import get_search_adapter
@@ -78,25 +80,58 @@ def calculate_next_schedule(profile) -> ScheduleResponse:
     return ScheduleResponse(next_draft_at=None, next_post_at=None)
 
 
-# GET /posts: list caller's posts, newest first
-@router.get("", response_model=List[PostListItem])
+# GET /posts: list caller's posts with keyset cursor pagination and optional status filter
+@router.get("", response_model=PaginatedPostsResponse)
 def list_posts(
-    limit: int = Query(default=10, ge=1, le=50),
+    limit: int = Query(default=20, ge=1, le=50),
+    cursor: Optional[str] = Query(default=None),
+    status: Optional[str] = Query(default=None),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
-) -> List[PostListItem]:
-    posts = post_repo.get_caller_posts(db=db, user_id=user.id, limit=limit)
-    return [
-        PostListItem(
-            id=p.id,
-            status=p.status,
-            run_date=p.run_date.isoformat(),
-            topic_title=p.topic_title,
-            caption_preview=p.caption[:140],
-            created_at=p.created_at.isoformat(),
-        )
-        for p in posts
-    ]
+) -> PaginatedPostsResponse:
+    cursor_dt = None
+    cursor_id = None
+    if cursor:
+        try:
+            raw = base64.urlsafe_b64decode(cursor.encode("ascii")).decode("utf-8")
+            dt_str, id_str = raw.split("|", 1)
+            cursor_dt = datetime.datetime.fromisoformat(dt_str)
+            cursor_id = uuid.UUID(id_str)
+        except Exception:
+            raise HTTPException(
+                status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"code": "invalid_cursor", "message": "Invalid pagination cursor"},
+            )
+
+    posts, has_more = post_repo.get_caller_posts(
+        db=db,
+        user_id=user.id,
+        limit=limit,
+        cursor_dt=cursor_dt,
+        cursor_id=cursor_id,
+        status=status,
+    )
+
+    next_cursor = None
+    if has_more and posts:
+        last_item = posts[-1]
+        next_raw = f"{last_item.created_at.isoformat()}|{str(last_item.id)}"
+        next_cursor = base64.urlsafe_b64encode(next_raw.encode("utf-8")).decode("ascii")
+
+    return PaginatedPostsResponse(
+        items=[
+            PostListItem(
+                id=p.id,
+                status=p.status,
+                run_date=p.run_date.isoformat(),
+                topic_title=p.topic_title,
+                caption_preview=p.caption[:140],
+                created_at=p.created_at.isoformat(),
+            )
+            for p in posts
+        ],
+        next_cursor=next_cursor,
+    )
 
 
 # GET /posts/schedule: caller's next draft and post time
@@ -116,15 +151,40 @@ def get_post(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> PostDetail:
-    p = post_repo.get_caller_post(db=db, user_id=user.id, post_id=post_id)
-    if not p:
+    # Query post, approval, and publications in a single database round trip
+    stmt = (
+        select(Post, Approval, PostPublication)
+        .outerjoin(Approval, Approval.post_id == Post.id)
+        .outerjoin(PostPublication, PostPublication.post_id == Post.id)
+        .where(Post.id == post_id, Post.user_id == user.id)
+    )
+    rows = db.execute(stmt).all()
+    if not rows:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "not_found", "message": "Post not found"},
         )
 
-    # Check for approval info
-    approval = db.query(Approval).filter(Approval.post_id == p.id).first()
+    p = rows[0][0]
+    approval = rows[0][1]
+
+    # Collect unique publications from joined rows
+    seen_pub_ids = set()
+    publication_infos = []
+    for r in rows:
+        pub = r[2]
+        if pub is not None and pub.id not in seen_pub_ids:
+            seen_pub_ids.add(pub.id)
+            publication_infos.append(
+                PostPublicationInfo(
+                    platform=pub.platform,
+                    status=pub.status,
+                    external_url=f"https://www.linkedin.com/feed/update/{pub.external_id}/" if pub.external_id else None,
+                    error_code=pub.error_code,
+                    published_at=pub.published_at.isoformat() if pub.published_at else None,
+                )
+            )
+
     approval_info = None
     if approval:
         now_utc = datetime.datetime.now(datetime.timezone.utc)
@@ -140,19 +200,6 @@ def get_post(
             expires_at=approval.expires_at.isoformat(),
             decided_at=approval.decided_at.isoformat() if approval.decided_at else None,
         )
-
-    # Check for platform publications
-    pubs = db.query(PostPublication).filter(PostPublication.post_id == p.id).all()
-    publication_infos = [
-        PostPublicationInfo(
-            platform=pub.platform,
-            status=pub.status,
-            external_url=f"https://www.linkedin.com/feed/update/{pub.external_id}/" if pub.external_id else None,
-            error_code=pub.error_code,
-            published_at=pub.published_at.isoformat() if pub.published_at else None,
-        )
-        for pub in pubs
-    ]
 
     return PostDetail(
         id=p.id,
@@ -182,7 +229,7 @@ def make_post_decision(
     p = post_repo.get_caller_post(db=db, user_id=user.id, post_id=post_id)
     if not p:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail={"code": "not_found", "message": "Post not found"},
         )
     return decide_approval(
@@ -206,7 +253,7 @@ def retry_linkedin_publication(
     p = post_repo.get_caller_post(db=db, user_id=user.id, post_id=post_id)
     if not p:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail={"code": "not_found", "message": "Post not found"},
         )
 
@@ -218,13 +265,13 @@ def retry_linkedin_publication(
 
     if not pub or pub.status != "failed":
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             detail={"code": "not_retryable", "message": "Publication is not in failed status"},
         )
 
     if pub.error_code == "outcome_unknown" and not payload.confirm_not_posted:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=http_status.HTTP_400_BAD_REQUEST,
             detail={"code": "confirmation_required", "message": "Confirmation that post was not published is required"},
         )
 
@@ -245,26 +292,42 @@ def retry_linkedin_publication(
     return {"status": "ok", "message": "Publication retry queued"}
 
 
-# GET /posts/{id}/image.png: render branded PNG image
+# GET /posts/{id}/image.png: render branded PNG image with width scaling and ETag caching
 @router.get("/{post_id}/image.png")
 def get_post_image(
     post_id: uuid.UUID,
+    request: Request,
+    w: int = Query(default=1200),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
+    if w not in {240, 480, 1200}:
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "invalid_width", "message": "Width must be 240, 480, or 1200"},
+        )
+
     p = post_repo.get_caller_post(db=db, user_id=user.id, post_id=post_id)
     if not p:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail={"code": "not_found", "message": "Post not found"},
         )
 
+    etag = build_image_etag(p.image_spec, w)
+    if_none_match = request.headers.get("if-none-match")
+    if if_none_match and if_none_match.strip() == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers={"ETag": etag, "Cache-Control": "private, max-age=3600"},
+        )
+
     try:
-        png_data = render_post_image(p.image_spec)
+        png_data = render_post_image(p.image_spec, width_target=w)
         return Response(
             content=png_data,
             media_type="image/png",
-            headers={"Cache-Control": "private, max-age=3600"},
+            headers={"ETag": etag, "Cache-Control": "private, max-age=3600"},
         )
     except Exception as exc:
         raise HTTPException(

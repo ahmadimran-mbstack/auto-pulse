@@ -1,6 +1,6 @@
 import datetime
 import hashlib
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -9,7 +9,7 @@ from app.models.post import Post
 from app.models.profile import Profile
 from app.schemas.post import DecisionRequest, PublicApprovalDetail
 from app.services.approval import decide_approval
-from app.services.image import render_post_image
+from app.services.image import build_image_etag, render_post_image
 
 # DAY 6: rate limit these routes
 router = APIRouter(prefix="/public/approvals", tags=["public-approvals"])
@@ -77,18 +77,41 @@ def get_public_approval(
     )
 
 
-# GET /public/approvals/{token}/image.png: dynamically renders the post image
+# GET /public/approvals/{token}/image.png: dynamically renders the post image with width validation and ETag caching
 @router.get("/{token}/image.png", dependencies=[Depends(set_public_security_headers)])
 def get_public_approval_image(
     token: str,
+    request: Request,
+    w: int = Query(default=1200),
     db: Session = Depends(get_db),
 ) -> Response:
+    if w not in {240, 480, 1200}:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "invalid_width", "message": "Width must be 240, 480, or 1200"},
+        )
+
     _, post, _ = get_approval_and_post_by_token(db, token)
-    png_bytes = render_post_image(post.image_spec)
+    etag = build_image_etag(post.image_spec, w)
+
+    if_none_match = request.headers.get("if-none-match")
+    if if_none_match and if_none_match.strip() == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers={
+                "ETag": etag,
+                "Cache-Control": "no-store",
+                "Referrer-Policy": "no-referrer",
+                "X-Robots-Tag": "noindex",
+            },
+        )
+
+    png_bytes = render_post_image(post.image_spec, width_target=w)
     return Response(
         content=png_bytes,
         media_type="image/png",
         headers={
+            "ETag": etag,
             "Cache-Control": "no-store",
             "Referrer-Policy": "no-referrer",
             "X-Robots-Tag": "noindex",

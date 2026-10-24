@@ -93,7 +93,7 @@ def create_test_token(
 def db_test_schema(monkeypatch, ed25519_keys):
     # Mock JWKS fetch so token validation succeeds during API calls
     _, jwks = ed25519_keys
-    monkeypatch.setattr(auth, "_fetch_jwks", lambda: jwks)
+    monkeypatch.setattr(auth, "_fetch_jwks", lambda *args, **kwargs: jwks)
 
     # Read DATABASE_URL_DIRECT from environment or .env without ever logging or printing it
     env_vals = dotenv_values(ENV_FILE) if ENV_FILE.exists() else {}

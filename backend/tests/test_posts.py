@@ -40,7 +40,7 @@ def _seed_post(db, user_id: str, run_date: datetime.date, topic_title: str = "Te
     return post
 
 
-# Test case: GET /posts returns list of caller's posts and isolates across users
+# Test case: GET /posts returns paginated items and isolates across users
 def test_list_posts_user_isolation(client, db_test_schema, ed25519_keys):
     private_key, _ = ed25519_keys
     headers_u1 = _auth_headers(private_key, sub="user-alice", name="Alice")
@@ -49,7 +49,7 @@ def test_list_posts_user_isolation(client, db_test_schema, ed25519_keys):
     # Initially empty for Alice
     res_empty = client.get("/posts", headers=headers_u1)
     assert res_empty.status_code == 200
-    assert res_empty.json() == []
+    assert res_empty.json() == {"items": [], "next_cursor": None}
 
     # Seed one post for Alice and one for Bob
     today = datetime.date.today()
@@ -65,17 +65,65 @@ def test_list_posts_user_isolation(client, db_test_schema, ed25519_keys):
     res_u1 = client.get("/posts", headers=headers_u1)
     assert res_u1.status_code == 200
     data_u1 = res_u1.json()
-    assert len(data_u1) == 1
-    assert data_u1[0]["id"] == str(p1.id)
-    assert data_u1[0]["topic_title"] == "Alice Topic"
+    assert len(data_u1["items"]) == 1
+    assert data_u1["items"][0]["id"] == str(p1.id)
+    assert data_u1["items"][0]["topic_title"] == "Alice Topic"
+    assert data_u1["next_cursor"] is None
 
     # Bob only sees his own post
     res_u2 = client.get("/posts", headers=headers_u2)
     assert res_u2.status_code == 200
     data_u2 = res_u2.json()
-    assert len(data_u2) == 1
-    assert data_u2[0]["id"] == str(p2.id)
-    assert data_u2[0]["topic_title"] == "Bob Topic"
+    assert len(data_u2["items"]) == 1
+    assert data_u2["items"][0]["id"] == str(p2.id)
+    assert data_u2["items"][0]["topic_title"] == "Bob Topic"
+    assert data_u2["next_cursor"] is None
+
+
+# Test case: GET /posts keyset pagination and status filtering
+def test_list_posts_cursor_pagination_and_status_filter(client, db_test_schema, ed25519_keys):
+    private_key, _ = ed25519_keys
+    headers = _auth_headers(private_key, sub="user-pager", name="Pager User")
+
+    today = datetime.date.today()
+    SessionLocal = db_test_schema["SessionLocal"]
+    schema_name = db_test_schema["schema_name"]
+
+    with SessionLocal() as db:
+        db.execute(text(f'SET search_path TO "{schema_name}"'))
+        post1 = _seed_post(db, "user-pager", today - datetime.timedelta(days=2), "Post 1")
+        post2 = _seed_post(db, "user-pager", today - datetime.timedelta(days=1), "Post 2")
+        post3 = _seed_post(db, "user-pager", today, "Post 3")
+
+        # Mark post2 as published
+        db.query(Post).filter(Post.id == post2.id).update({"status": "published"})
+        db.commit()
+
+    # Page 1 with limit=2
+    r_page1 = client.get("/posts?limit=2", headers=headers)
+    assert r_page1.status_code == 200
+    data1 = r_page1.json()
+    assert len(data1["items"]) == 2
+    assert data1["next_cursor"] is not None
+
+    # Page 2 using next_cursor
+    r_page2 = client.get(f"/posts?limit=2&cursor={data1['next_cursor']}", headers=headers)
+    assert r_page2.status_code == 200
+    data2 = r_page2.json()
+    assert len(data2["items"]) == 1
+    assert data2["next_cursor"] is None
+
+    # Filter by status=published
+    r_pub = client.get("/posts?status=published", headers=headers)
+    assert r_pub.status_code == 200
+    pub_data = r_pub.json()
+    assert len(pub_data["items"]) == 1
+    assert pub_data["items"][0]["id"] == str(post2.id)
+
+    # Invalid cursor returns 422
+    r_inv = client.get("/posts?cursor=not-a-valid-cursor", headers=headers)
+    assert r_inv.status_code == 422
+    assert r_inv.json()["error"]["code"] == "invalid_cursor"
 
 
 # Test case: GET /posts/schedule returns nulls before onboarding, valid times after

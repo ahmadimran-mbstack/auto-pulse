@@ -7,16 +7,31 @@ from sqlalchemy.orm import Session
 from app.models.post import GenerationRun, Post
 
 
-# Retrieve list of posts owned by user, newest first
-def get_caller_posts(db: Session, user_id: str, limit: int = 10) -> List[Post]:
+# Retrieve paginated list of posts owned by user using keyset pagination on (created_at, id)
+def get_caller_posts(
+    db: Session,
+    user_id: str,
+    limit: int = 20,
+    cursor_dt: Optional[datetime.datetime] = None,
+    cursor_id: Optional[uuid.UUID] = None,
+    status: Optional[str] = None,
+) -> Tuple[List[Post], bool]:
     safe_limit = max(1, min(limit, 50))
-    stmt = (
-        select(Post)
-        .where(Post.user_id == user_id)
-        .order_by(desc(Post.created_at))
-        .limit(safe_limit)
-    )
-    return list(db.scalars(stmt).all())
+    stmt = select(Post).where(Post.user_id == user_id)
+
+    if status:
+        stmt = stmt.where(Post.status == status)
+
+    if cursor_dt is not None and cursor_id is not None:
+        stmt = stmt.where(
+            (Post.created_at < cursor_dt)
+            | ((Post.created_at == cursor_dt) & (Post.id < cursor_id))
+        )
+
+    stmt = stmt.order_by(desc(Post.created_at), desc(Post.id)).limit(safe_limit + 1)
+    rows = list(db.scalars(stmt).all())
+    has_more = len(rows) > safe_limit
+    return rows[:safe_limit], has_more
 
 
 # Retrieve a single post strictly isolated by user ID

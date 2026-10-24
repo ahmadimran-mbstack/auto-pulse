@@ -12,6 +12,11 @@ class PostListItem(BaseModel):
     created_at: str
 
 
+class PaginatedPostsResponse(BaseModel):
+    items: List[PostListItem]
+    next_cursor: Optional[str] = None
+
+
 class PostApprovalInfo(BaseModel):
     state: str
     expires_at: str

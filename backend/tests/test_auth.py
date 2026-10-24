@@ -45,7 +45,7 @@ def test_health_check(client):
 # Test case: valid token returns 200 with right id, email, and name
 def test_valid_token_returns_user_profile(client, monkeypatch, ed25519_keys):
     private_key, jwks = ed25519_keys
-    monkeypatch.setattr(auth, "_fetch_jwks", lambda: jwks)
+    monkeypatch.setattr(auth, "_fetch_jwks", lambda *args, **kwargs: jwks)
 
     token = create_test_token(
         private_key,
@@ -92,7 +92,7 @@ def test_garbage_token_returns_401(client):
 # Test case: token signed with a different private key returns 401
 def test_token_signed_with_different_key_returns_401(client, monkeypatch, ed25519_keys):
     _, jwks = ed25519_keys
-    monkeypatch.setattr(auth, "_fetch_jwks", lambda: jwks)
+    monkeypatch.setattr(auth, "_fetch_jwks", lambda *args, **kwargs: jwks)
 
     # Generate a different key pair not present in the JWKS
     different_private_key = ed25519.Ed25519PrivateKey.generate()
@@ -107,7 +107,7 @@ def test_token_signed_with_different_key_returns_401(client, monkeypatch, ed2551
 # Test case: expired token returns 401
 def test_expired_token_returns_401(client, monkeypatch, ed25519_keys):
     private_key, jwks = ed25519_keys
-    monkeypatch.setattr(auth, "_fetch_jwks", lambda: jwks)
+    monkeypatch.setattr(auth, "_fetch_jwks", lambda *args, **kwargs: jwks)
 
     # Expired 60 seconds ago
     token = create_test_token(private_key, exp_delta=-60, iat_delta=-120)
@@ -121,7 +121,7 @@ def test_expired_token_returns_401(client, monkeypatch, ed25519_keys):
 # Test case: token with wrong issuer returns 401
 def test_wrong_issuer_returns_401(client, monkeypatch, ed25519_keys):
     private_key, jwks = ed25519_keys
-    monkeypatch.setattr(auth, "_fetch_jwks", lambda: jwks)
+    monkeypatch.setattr(auth, "_fetch_jwks", lambda *args, **kwargs: jwks)
 
     token = create_test_token(private_key, iss="https://attacker.example.com")
 

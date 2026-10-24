@@ -53,16 +53,21 @@ def get_profile(db: Session, user_id: str) -> Optional[Profile]:
     return db.scalars(stmt).first()
 
 
-# Ensures a profile row exists using INSERT ... ON CONFLICT DO NOTHING
-# This prevents race conditions when two browser tabs open at the same time
+# Ensures a profile row exists by reading first and inserting only if missing
+# This eliminates a redundant INSERT query on every profile read
 def get_or_create_profile(
     db: Session,
     user_id: str,
     display_name: Optional[str] = None,
 ) -> Profile:
+    # 1. Read first to save a database round trip for existing profiles
+    profile = get_profile(db, user_id=user_id)
+    if profile is not None:
+        return profile
+
     clean_name = display_name[:80] if display_name else None
 
-    # Insert a blank row if one does not already exist
+    # 2. Insert a blank row only when missing, handling concurrent onboarding attempts
     insert_stmt = (
         pg_insert(Profile)
         .values(
@@ -74,7 +79,7 @@ def get_or_create_profile(
     db.execute(insert_stmt)
     db.flush()
 
-    # Query the existing or newly created row
+    # Query the newly created row
     profile = get_profile(db, user_id=user_id)
     if profile is None:
         raise RuntimeError(f"Failed to find or create profile for user {user_id}")

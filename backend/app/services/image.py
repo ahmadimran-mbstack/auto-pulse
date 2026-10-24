@@ -4,17 +4,68 @@ import re
 from typing import Any, Dict, List, Tuple
 from PIL import Image, ImageDraw, ImageFont
 
+import hashlib
+import json
+
 # Path to font assets
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 FONTS_DIR = BACKEND_DIR / "assets" / "fonts"
 DISPLAY_FONT_PATH = FONTS_DIR / "BricolageGrotesque-Bold.ttf"
 BODY_FONT_PATH = FONTS_DIR / "DMSans-Medium.ttf"
 
+# Load font bytes into memory once at startup to avoid repeated disk reads
+_DISPLAY_FONT_BYTES: bytes = b""
+_BODY_FONT_BYTES: bytes = b""
+
+if DISPLAY_FONT_PATH.exists():
+    with open(DISPLAY_FONT_PATH, "rb") as f:
+        _DISPLAY_FONT_BYTES = f.read()
+
+if BODY_FONT_PATH.exists():
+    with open(BODY_FONT_PATH, "rb") as f:
+        _BODY_FONT_BYTES = f.read()
+
+# Font object cache mapping (font_type, size) to loaded ImageFont instance
+_FONT_CACHE: Dict[Tuple[str, int], ImageFont.FreeTypeFont] = {}
+
+
+def get_display_font(size: int) -> ImageFont.FreeTypeFont:
+    key = ("display", size)
+    font = _FONT_CACHE.get(key)
+    if font is None:
+        font = ImageFont.truetype(io.BytesIO(_DISPLAY_FONT_BYTES), size)
+        _FONT_CACHE[key] = font
+    return font
+
+
+def get_body_font(size: int) -> ImageFont.FreeTypeFont:
+    key = ("body", size)
+    font = _FONT_CACHE.get(key)
+    if font is None:
+        font = ImageFont.truetype(io.BytesIO(_BODY_FONT_BYTES), size)
+        _FONT_CACHE[key] = font
+    return font
+
+
+# Preload commonly used font sizes at startup
+if _DISPLAY_FONT_BYTES and _BODY_FONT_BYTES:
+    for sz in range(36, 82, 2):
+        get_display_font(sz)
+    get_body_font(32)
+
+
+# Build a deterministic ETag from canonical JSON of image_spec and requested width
+def build_image_etag(image_spec: Dict[str, Any], width: int) -> str:
+    canonical_json = json.dumps(image_spec, sort_keys=True, separators=(",", ":"))
+    spec_hash = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()[:16]
+    return f'"{spec_hash}-{width}"'
+
+
 # Helper to verify font assets exist before rendering
 def ensure_fonts_exist():
-    if not DISPLAY_FONT_PATH.exists():
+    if not _DISPLAY_FONT_BYTES:
         raise FileNotFoundError(f"Missing required display font: {DISPLAY_FONT_PATH}")
-    if not BODY_FONT_PATH.exists():
+    if not _BODY_FONT_BYTES:
         raise FileNotFoundError(f"Missing required body font: {BODY_FONT_PATH}")
 
 
@@ -96,11 +147,11 @@ def wrap_text(text_to_wrap: str, font: ImageFont.FreeTypeFont, max_width: int, d
     return lines
 
 
-# Render branded square image from image_spec using Pillow
-def render_post_image(image_spec: Dict[str, Any]) -> bytes:
+# Render branded square image from image_spec using preloaded fonts and optional width resizing
+def render_post_image(image_spec: Dict[str, Any], width_target: int = 1200) -> bytes:
     ensure_fonts_exist()
 
-    # 1200 x 1200 pixels canvas
+    # 1200 x 1200 pixels base canvas
     width = 1200
     height = 1200
     margin = 96
@@ -129,10 +180,10 @@ def render_post_image(image_spec: Dict[str, Any]) -> bytes:
     headline_size = 80
     min_size = 36
     chosen_lines: List[str] = []
-    chosen_font = ImageFont.truetype(str(DISPLAY_FONT_PATH), headline_size)
+    chosen_font = get_display_font(headline_size)
 
     while headline_size >= min_size:
-        test_font = ImageFont.truetype(str(DISPLAY_FONT_PATH), headline_size)
+        test_font = get_display_font(headline_size)
         lines = wrap_text(headline, test_font, max_content_width, draw)
         if len(lines) <= 7:
             # Check individual line widths
@@ -149,7 +200,7 @@ def render_post_image(image_spec: Dict[str, Any]) -> bytes:
         headline_size -= 2
 
     if not chosen_lines:
-        chosen_font = ImageFont.truetype(str(DISPLAY_FONT_PATH), min_size)
+        chosen_font = get_display_font(min_size)
         chosen_lines = wrap_text(headline, chosen_font, max_content_width, draw)
 
     # Compute line height and total headline height
@@ -161,7 +212,6 @@ def render_post_image(image_spec: Dict[str, Any]) -> bytes:
     # Middle third placement: vertically centered around y=550 to 650
     # Middle third is y=400 to y=800
     headline_top_y = 600 - (total_text_h // 2)
-    # Ensure it stays within reasonable bounds
     headline_top_y = max(380, min(520, headline_top_y))
 
     # Draw accent bar (120 x 10) above headline
@@ -177,14 +227,17 @@ def render_post_image(image_spec: Dict[str, Any]) -> bytes:
         curr_y += single_line_h + line_spacing
 
     # Bottom left brand section: thin rule and brand name
-    brand_font = ImageFont.truetype(str(BODY_FONT_PATH), 32)
+    brand_font = get_body_font(32)
     rule_y = height - margin - 60
-    # Subtle rule with opacity or muted tone
     rule_rgb = text_rgb
     draw.line([(margin, rule_y), (margin + 240, rule_y)], fill=rule_rgb, width=2)
 
     brand_y = rule_y + 16
     draw.text((margin, brand_y), brand_name, font=brand_font, fill=text_rgb)
+
+    # Resize to requested target width if not default 1200
+    if width_target != 1200:
+        img = img.resize((width_target, width_target), Image.Resampling.LANCZOS)
 
     # Export PNG bytes
     buf = io.BytesIO()

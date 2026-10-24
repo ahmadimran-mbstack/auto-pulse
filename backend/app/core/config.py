@@ -81,6 +81,12 @@ class Settings(BaseSettings):
     LINKEDIN_VISIBILITY: str = "CONNECTIONS"
     PUBLISH_ENABLED: bool = True
 
+    # Day 6: Redis and caching settings
+    REDIS_URL: Optional[str] = None
+    REDIS_ENABLED: bool = False
+    CACHE_READS_ENABLED: bool = False
+    TRUSTED_PROXY_COUNT: int = 0
+
     # Configure pydantic-settings to read from backend/.env if it exists
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE) if ENV_FILE.exists() else None,
