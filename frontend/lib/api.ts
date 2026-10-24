@@ -9,6 +9,8 @@ import type {
   Step4Payload,
 } from "@/types/profile";
 import type {
+  GetPostsParams,
+  PaginatedPosts,
   PostDetail,
   PostListItem,
   PostSchedule,
@@ -34,12 +36,40 @@ let cachedToken: string | null = null;
 let cachedTokenExpiresAt = 0;
 let inFlightTokenPromise: Promise<string | null> | null = null;
 
+// Clears the in-memory cached token on sign out or invalidation
+export function clearCachedToken(): void {
+  cachedToken = null;
+  cachedTokenExpiresAt = 0;
+  inFlightTokenPromise = null;
+}
+
+// Intercept client-side sign out to clear cached token
+if (typeof authClient !== "undefined" && typeof authClient.signOut === "function") {
+  const originalSignOut = (authClient as { signOut?: (...args: unknown[]) => unknown }).signOut?.bind(authClient);
+  if (originalSignOut) {
+    (authClient as { signOut: (...args: unknown[]) => unknown }).signOut = async (...args: unknown[]) => {
+      clearCachedToken();
+      return originalSignOut(...args);
+    };
+  }
+}
+
 // Reads token expiration from JWT payload without an external library
 function readTokenExpiry(token: string): number {
   try {
     const parts = token.split(".");
     if (parts.length >= 2) {
-      const payload = JSON.parse(atob(parts[1]));
+      let base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      while (base64.length % 4) {
+        base64 += "=";
+      }
+      const jsonStr = decodeURIComponent(
+        atob(base64)
+          .split("")
+          .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+          .join("")
+      );
+      const payload = JSON.parse(jsonStr);
       if (typeof payload.exp === "number") {
         return payload.exp * 1000;
       }
@@ -51,9 +81,10 @@ function readTokenExpiry(token: string): number {
 }
 
 // Retrieves a fresh token using the Neon Auth client or valid in-memory cache
-async function getFreshToken(): Promise<string | null> {
-  // Use cached token if it is still valid for at least another 30 seconds
-  if (cachedToken && Date.now() < cachedTokenExpiresAt - 30_000) {
+// Reuses token until 60 seconds before expiration; shares in-flight requests
+async function getFreshToken(forceRefresh: boolean = false): Promise<string | null> {
+  // Use cached token if valid and not forcing refresh (reused until 60s before expiration)
+  if (!forceRefresh && cachedToken && Date.now() < cachedTokenExpiresAt - 60_000) {
     return cachedToken;
   }
 
@@ -115,12 +146,14 @@ async function getFreshToken(): Promise<string | null> {
 // Single core API caller function used for all backend communication
 export async function apiCall<T>(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  isRetry: boolean = false
 ): Promise<T> {
-  const token = await getFreshToken();
+  const token = await getFreshToken(isRetry);
 
   // If no token exists, the user session is expired
   if (!token) {
+    clearCachedToken();
     try {
       await authClient.signOut();
     } catch {
@@ -158,10 +191,13 @@ export async function apiCall<T>(
     });
   }
 
-  // Handle 401 Unauthorized: sign out user and redirect to sign in
+  // Handle 401 Unauthorized: clear cached token and retry once
   if (response.status === 401) {
-    cachedToken = null;
-    cachedTokenExpiresAt = 0;
+    clearCachedToken();
+    if (!isRetry) {
+      return apiCall<T>(path, options, true);
+    }
+
     try {
       await authClient.signOut();
     } catch {
@@ -289,10 +325,32 @@ export async function disconnectLinkedInConnection(): Promise<void> {
 }
 
 // Typed helpers for post drafts, generation, and schedules
-export async function getPosts(limit: number = 10): Promise<PostListItem[]> {
-  return apiCall<PostListItem[]>(`/posts?limit=${limit}`, {
+export async function getPosts(
+  paramsOrLimit: number | GetPostsParams = 10
+): Promise<PaginatedPosts> {
+  const query = new URLSearchParams();
+  if (typeof paramsOrLimit === "number") {
+    query.set("limit", String(paramsOrLimit));
+  } else if (paramsOrLimit) {
+    if (paramsOrLimit.limit) query.set("limit", String(paramsOrLimit.limit));
+    if (paramsOrLimit.cursor) query.set("cursor", paramsOrLimit.cursor);
+    if (paramsOrLimit.status) query.set("status", paramsOrLimit.status);
+  }
+  const queryString = query.toString();
+  const url = queryString ? `/posts?${queryString}` : "/posts";
+
+  const res = await apiCall<PaginatedPosts | PostListItem[]>(url, {
     method: "GET",
   });
+
+  // Backward compatibility: handle both { items, next_cursor } and legacy array
+  if (Array.isArray(res)) {
+    return { items: res, next_cursor: null };
+  }
+  return {
+    items: res?.items || [],
+    next_cursor: res?.next_cursor ?? null,
+  };
 }
 
 export async function getPost(id: string): Promise<PostDetail> {
@@ -314,10 +372,11 @@ export async function generateDraft(replace: boolean = true): Promise<PostDetail
 }
 
 // Fetches the post branded image as a raw Blob using fresh Bearer authentication
-export async function fetchPostImageBlob(id: string): Promise<Blob> {
-  const token = await getFreshToken();
+export async function fetchPostImageBlob(id: string, isRetry: boolean = false): Promise<Blob> {
+  const token = await getFreshToken(isRetry);
 
   if (!token) {
+    clearCachedToken();
     try {
       await authClient.signOut();
     } catch {
@@ -350,8 +409,10 @@ export async function fetchPostImageBlob(id: string): Promise<Blob> {
   }
 
   if (response.status === 401) {
-    cachedToken = null;
-    cachedTokenExpiresAt = 0;
+    clearCachedToken();
+    if (!isRetry) {
+      return fetchPostImageBlob(id, true);
+    }
     try {
       await authClient.signOut();
     } catch {

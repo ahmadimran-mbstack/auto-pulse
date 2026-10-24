@@ -3,8 +3,10 @@
 import { useEffect, useState, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { getProfile } from "@/lib/api";
+import { getProfile, getConnections, getPosts, getPostSchedule } from "@/lib/api";
 import type { Profile } from "@/types/profile";
+import type { SocialConnection } from "@/types/connections";
+import type { PostListItem, PostSchedule } from "@/types/posts";
 import { ApiCheckPanel } from "./ApiCheckPanel";
 import { AccountLinkingPanel } from "./AccountLinkingPanel";
 import { BrandPreviewCard } from "./BrandPreviewCard";
@@ -23,6 +25,9 @@ interface AppDashboardClientProps {
 export function AppDashboardClient({ user, apiUrl }: AppDashboardClientProps) {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [initialConnection, setInitialConnection] = useState<SocialConnection | null>(null);
+  const [initialPosts, setInitialPosts] = useState<PostListItem[] | null>(null);
+  const [initialSchedule, setInitialSchedule] = useState<PostSchedule | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successNotice, setSuccessNotice] = useState<string | null>(null);
@@ -49,21 +54,42 @@ export function AppDashboardClient({ user, apiUrl }: AppDashboardClientProps) {
     }
   }, []);
 
+  // Load all overview page data concurrently with Promise.all
   useEffect(() => {
     let isMounted = true;
 
-    async function checkProfile() {
+    async function loadDashboardData() {
       try {
-        const fetchedProfile = await getProfile();
+        const [profileRes, connectionsRes, postsRes, scheduleRes] = await Promise.all([
+          getProfile(),
+          getConnections().catch((err) => {
+            console.warn("Failed to load connections:", err);
+            return [] as SocialConnection[];
+          }),
+          getPosts(5).catch((err) => {
+            console.warn("Failed to load posts:", err);
+            return { items: [] as PostListItem[], next_cursor: null };
+          }),
+          getPostSchedule().catch((err) => {
+            console.warn("Failed to load schedule:", err);
+            return { next_draft_at: null, next_post_at: null } as PostSchedule;
+          }),
+        ]);
+
         if (!isMounted) return;
 
         // If onboarding is incomplete, redirect to resume onboarding flow
-        if (!fetchedProfile.onboarding_complete) {
+        if (!profileRes.onboarding_complete) {
           router.replace("/app/onboarding");
           return;
         }
 
-        setProfile(fetchedProfile);
+        const linkedin = connectionsRes.find((c) => c.provider === "linkedin") || null;
+
+        setProfile(profileRes);
+        setInitialConnection(linkedin);
+        setInitialPosts(postsRes.items);
+        setInitialSchedule(scheduleRes);
       } catch (err: unknown) {
         if (!isMounted) return;
         const msg = err instanceof Error ? err.message : "Failed to load profile";
@@ -73,7 +99,7 @@ export function AppDashboardClient({ user, apiUrl }: AppDashboardClientProps) {
       }
     }
 
-    checkProfile();
+    loadDashboardData();
 
     return () => {
       isMounted = false;
@@ -171,7 +197,7 @@ export function AppDashboardClient({ user, apiUrl }: AppDashboardClientProps) {
       )}
 
       {/* LinkedIn Connection Status Row */}
-      <LinkedInConnectionRow />
+      <LinkedInConnectionRow initialConnection={initialConnection} />
 
       {/* Your Setup Section */}
       <div className="space-y-6">
@@ -364,7 +390,11 @@ export function AppDashboardClient({ user, apiUrl }: AppDashboardClientProps) {
       </div>
 
       {/* Your drafts Section */}
-      <DraftsSection timezone={profile.timezone} />
+      <DraftsSection
+        timezone={profile.timezone}
+        initialPosts={initialPosts}
+        initialSchedule={initialSchedule}
+      />
 
       {/* Development-only API Check Panel */}
       {process.env.NODE_ENV !== "production" && (

@@ -9,13 +9,21 @@ import type { PostListItem, PostSchedule } from "@/types/posts";
 
 interface DraftsSectionProps {
   timezone?: string | null;
+  initialPosts?: PostListItem[] | null;
+  initialSchedule?: PostSchedule | null;
 }
 
-export function DraftsSection({ timezone }: DraftsSectionProps) {
+export function DraftsSection({
+  timezone,
+  initialPosts,
+  initialSchedule,
+}: DraftsSectionProps) {
   const router = useRouter();
-  const [posts, setPosts] = useState<PostListItem[] | null>(null);
-  const [schedule, setSchedule] = useState<PostSchedule | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [posts, setPosts] = useState<PostListItem[] | null>(initialPosts ?? null);
+  const [schedule, setSchedule] = useState<PostSchedule | null>(initialSchedule ?? null);
+  const [loading, setLoading] = useState(
+    initialPosts === undefined && initialSchedule === undefined
+  );
   const [error, setError] = useState<string | null>(null);
 
   // Development draft generation state
@@ -24,6 +32,14 @@ export function DraftsSection({ timezone }: DraftsSectionProps) {
 
   // Loads drafts and upcoming schedule on mount
   useEffect(() => {
+    // If preloaded in parallel by parent, use the initial data
+    if (initialPosts !== undefined && initialSchedule !== undefined) {
+      setPosts(initialPosts);
+      setSchedule(initialSchedule);
+      setLoading(false);
+      return;
+    }
+
     let isMounted = true;
 
     async function loadData() {
@@ -35,7 +51,7 @@ export function DraftsSection({ timezone }: DraftsSectionProps) {
         if (!isMounted) return;
 
         if (postsRes.status === "fulfilled") {
-          setPosts(postsRes.value);
+          setPosts(postsRes.value.items);
         }
         if (scheduleRes.status === "fulfilled") {
           setSchedule(scheduleRes.value);
@@ -60,7 +76,7 @@ export function DraftsSection({ timezone }: DraftsSectionProps) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [initialPosts, initialSchedule]);
 
   // User-initiated reload on error
   async function handleRetry() {
@@ -73,7 +89,7 @@ export function DraftsSection({ timezone }: DraftsSectionProps) {
       ]);
 
       if (postsRes.status === "fulfilled") {
-        setPosts(postsRes.value);
+        setPosts(postsRes.value.items);
       }
       if (scheduleRes.status === "fulfilled") {
         setSchedule(scheduleRes.value);

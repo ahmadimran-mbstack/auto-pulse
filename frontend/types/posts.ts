@@ -25,6 +25,17 @@ export interface PostListItem {
   created_at: string;
 }
 
+export interface PaginatedPosts {
+  items: PostListItem[];
+  next_cursor: string | null;
+}
+
+export interface GetPostsParams {
+  limit?: number;
+  cursor?: string | null;
+  status?: string | null;
+}
+
 export interface PostPublicationItem {
   platform: string;
   status: "pending" | "publishing" | "published" | "failed";

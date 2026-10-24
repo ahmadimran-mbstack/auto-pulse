@@ -18,13 +18,17 @@ import type {
 
 interface LinkedInConnectionRowProps {
   onConnectionChange?: () => void;
+  initialConnection?: SocialConnection | null;
 }
 
 export function LinkedInConnectionRow({
   onConnectionChange,
+  initialConnection,
 }: LinkedInConnectionRowProps) {
-  const [connection, setConnection] = useState<SocialConnection | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [connection, setConnection] = useState<SocialConnection | null>(
+    initialConnection !== undefined ? initialConnection : null
+  );
+  const [loading, setLoading] = useState(initialConnection === undefined);
   const [error, setError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [isDisconnectOpen, setIsDisconnectOpen] = useState(false);
@@ -55,6 +59,13 @@ export function LinkedInConnectionRow({
   };
 
   useEffect(() => {
+    // If preloaded in parallel by parent, use the initial data
+    if (initialConnection !== undefined) {
+      setConnection(initialConnection);
+      setLoading(false);
+      return;
+    }
+
     let isMounted = true;
     async function load() {
       try {
@@ -77,7 +88,7 @@ export function LinkedInConnectionRow({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [initialConnection]);
 
   // Initiate connection flow and navigate to authorization URL
   const handleStartConnection = async () => {
