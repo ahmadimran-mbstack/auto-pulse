@@ -36,12 +36,17 @@ def create_or_rotate_approval(db: Session, post: Post) -> Tuple[Approval, str]:
     raw_token = secrets.token_urlsafe(32)
     token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
-    existing = db.query(Approval).filter(Approval.post_id == post.id).first()
-    if existing:
-        # Rotate token because the raw token is not stored and cannot be retrieved
-        existing.token_hash = token_hash
+    # Rotate token on retry using UPDATE ... WHERE sent_at IS NULL
+    stmt = text(
+        "UPDATE approvals "
+        "SET token_hash = :token_hash "
+        "WHERE post_id = :post_id AND sent_at IS NULL "
+        "RETURNING id"
+    )
+    res = db.execute(stmt, {"token_hash": token_hash, "post_id": post.id}).fetchone()
+    if res:
         db.commit()
-        db.refresh(existing)
+        existing = db.query(Approval).filter(Approval.id == res.id).first()
         return existing, raw_token
 
     # Create fresh approval record

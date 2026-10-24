@@ -8,7 +8,11 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
-# Low-level helper to dispatch an email via SMTP
+import json
+from pathlib import Path
+import subprocess
+
+# Low-level helper to dispatch an email via nodemailer SMTP with smtplib fallback
 def send_smtp_message(msg: EmailMessage) -> None:
     host = settings.SMTP_HOST
     port = settings.SMTP_PORT
@@ -20,6 +24,63 @@ def send_smtp_message(msg: EmailMessage) -> None:
         logger.warning("SMTP_HOST is not set; skipping email dispatch")
         return
 
+    # First attempt dispatch via nodemailer SMTP helper script
+    script_path = Path(__file__).resolve().parent.parent.parent / "scripts" / "send_mail.js"
+    if script_path.exists():
+        try:
+            body_text = ""
+            body_html = ""
+            if msg.is_multipart():
+                for part in msg.walk():
+                    content_type = part.get_content_type()
+                    payload = part.get_payload(decode=True)
+                    if payload:
+                        decoded = payload.decode(part.get_content_charset() or "utf-8", errors="replace")
+                        if content_type == "text/plain":
+                            body_text = decoded
+                        elif content_type == "text/html":
+                            body_html = decoded
+            else:
+                body_text = msg.get_content()
+
+            headers = {}
+            for h in ("Resend-Idempotency-Key", "Idempotency-Key"):
+                if h in msg:
+                    headers[h] = msg[h]
+
+            payload_data = {
+                "from": msg["From"],
+                "to": msg["To"],
+                "subject": msg["Subject"],
+                "text": body_text,
+                "html": body_html,
+                "headers": headers,
+                "smtp": {
+                    "host": host,
+                    "port": port,
+                    "user": user,
+                    "pass": password,
+                    "use_tls": use_tls,
+                },
+            }
+
+            result = subprocess.run(
+                ["node", str(script_path)],
+                input=json.dumps(payload_data),
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=20,
+            )
+            if result.returncode == 0:
+                logger.info("Email dispatched successfully via nodemailer SMTP")
+                return
+            else:
+                logger.warning(f"nodemailer SMTP helper exited with code {result.returncode}, falling back to smtplib")
+        except Exception as exc:
+            logger.warning(f"nodemailer SMTP helper error ({exc}), falling back to smtplib")
+
+    # Standard smtplib fallback
     server = None
     try:
         # Connect with standard SMTP and upgrade via STARTTLS if supported
