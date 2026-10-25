@@ -4,7 +4,12 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AuthStatusLegend } from "../components/AuthStatusLegend";
+import { Activity, AlertCircle, CheckCircle2 } from "lucide-react";
 
 interface OtpAuthClient {
   emailOtp: {
@@ -51,7 +56,6 @@ function VerifyOtpForm() {
       : null
   );
   const [countdown, setCountdown] = useState(initialEmail ? 60 : 0);
-
 
   // Countdown timer for resending OTP
   useEffect(() => {
@@ -164,15 +168,15 @@ function VerifyOtpForm() {
   };
 
   return (
-    <div className="w-full max-w-[400px] text-left">
-      <h1 className="text-3xl font-geist font-normal tracking-tighter mb-2">
+    <div className="w-full max-w-sm text-left">
+      <h1 className="text-title font-display text-foreground mb-2">
         {step === "send"
           ? otpType === "sign-in"
             ? "Sign in with one-time code"
             : "Verify your email"
           : "Enter verification code"}
       </h1>
-      <p className="text-sm text-muted mb-6">
+      <p className="text-body text-muted-foreground mb-6">
         {step === "send"
           ? "We will send a 6-digit passcode to your email inbox."
           : `Enter the 6-digit code sent to ${email || "your email"}.`}
@@ -180,56 +184,55 @@ function VerifyOtpForm() {
 
       {/* Mode Selector only shown when manually sending */}
       {step === "send" && (
-        <div className="flex border border-line rounded-[8px] p-1 bg-paper mb-5">
-          <button
+        <div className="flex border border-border rounded-md p-1 bg-secondary/50 mb-5">
+          <Button
             type="button"
+            variant={otpType === "sign-in" ? "secondary" : "ghost"}
+            size="sm"
             onClick={() => setOtpType("sign-in")}
-            className={`flex-1 py-1.5 text-xs font-medium rounded-[6px] transition-colors cursor-pointer ${
-              otpType === "sign-in"
-                ? "bg-surface text-ink shadow-xs"
-                : "text-muted hover:text-ink"
-            }`}
+            className="flex-1 font-medium"
           >
             Sign in
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant={otpType === "email-verification" ? "secondary" : "ghost"}
+            size="sm"
             onClick={() => setOtpType("email-verification")}
-            className={`flex-1 py-1.5 text-xs font-medium rounded-[6px] transition-colors cursor-pointer ${
-              otpType === "email-verification"
-                ? "bg-surface text-ink shadow-xs"
-                : "text-muted hover:text-ink"
-            }`}
+            className="flex-1 font-medium"
           >
             Verify email
-          </button>
+          </Button>
         </div>
       )}
 
       {/* Success Notification */}
       {successMessage && (
-        <div className="p-3.5 mb-5 rounded-[8px] bg-signal-soft border border-[#93D7CE] text-sm text-ink leading-relaxed">
-          {successMessage}
-        </div>
+        <Alert className="mb-5 border-signal-line bg-signal-soft">
+          <CheckCircle2 className="size-4 text-primary shrink-0" />
+          <AlertDescription className="text-meta text-foreground">
+            {successMessage}
+          </AlertDescription>
+        </Alert>
       )}
 
       {/* Error Notification */}
       {error && (
-        <div className="p-3.5 mb-5 rounded-[8px] bg-rejected-bg text-rejected-text text-sm leading-relaxed border border-rose-200">
-          {error}
-        </div>
+        <Alert variant="destructive" className="mb-5">
+          <AlertCircle className="size-4 shrink-0" />
+          <AlertDescription className="text-meta">
+            {error}
+          </AlertDescription>
+        </Alert>
       )}
 
       {step === "send" ? (
-        <form onSubmit={handleSendOtp} className="space-y-5">
-          <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-ink mb-1.5"
-            >
+        <form onSubmit={handleSendOtp} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="email">
               Email address
-            </label>
-            <input
+            </Label>
+            <Input
               id="email"
               name="email"
               type="email"
@@ -238,40 +241,36 @@ function VerifyOtpForm() {
               required
               autoComplete="email"
               placeholder="you@company.com"
-              className="w-full px-3.5 py-2.5 rounded-[8px] border border-line bg-surface text-ink text-sm placeholder:text-muted/60 focus:border-signal focus:ring-2 focus:ring-signal/15 transition-all outline-hidden"
             />
           </div>
 
-          <button
+          <Button
             type="submit"
             disabled={isPending || !email.trim()}
-            className="w-full py-2.5 px-4 rounded-[8px] bg-signal text-surface text-sm font-medium hover:bg-signal-hover disabled:opacity-60 transition-all cursor-pointer disabled:cursor-not-allowed shadow-xs active:translate-y-[1px]"
+            className="w-full"
           >
             {isPending ? "Sending code..." : "Send verification code"}
-          </button>
+          </Button>
         </form>
       ) : (
-        <form onSubmit={handleVerifyOtp} className="space-y-5">
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label
-                htmlFor="otp"
-                className="block text-sm font-medium text-ink"
-              >
+        <form onSubmit={handleVerifyOtp} className="space-y-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="otp">
                 6-digit code
-              </label>
+              </Label>
               <button
                 type="button"
                 onClick={() => {
                   setStep("send");
                   setOtp("");
                 }}
-                className="text-xs text-signal hover:underline cursor-pointer"
+                className="text-caption text-primary hover:underline cursor-pointer"
               >
                 Change email
               </button>
             </div>
-            <input
+            <Input
               id="otp"
               name="otp"
               type="text"
@@ -283,32 +282,32 @@ function VerifyOtpForm() {
               required
               autoFocus
               placeholder="123456"
-              className="w-full px-3.5 py-3 rounded-[8px] border border-line bg-surface text-ink text-center text-xl font-mono tracking-widest placeholder:tracking-normal placeholder:text-muted/60 focus:border-signal focus:ring-2 focus:ring-signal/15 transition-all outline-hidden"
+              className="text-center text-lead font-mono tracking-widest tabular-nums"
             />
           </div>
 
-          <button
+          <Button
             type="submit"
             disabled={isPending || otp.length < 6}
-            className="w-full py-2.5 px-4 rounded-[8px] bg-signal text-surface text-sm font-medium hover:bg-signal-hover disabled:opacity-60 transition-all cursor-pointer disabled:cursor-not-allowed shadow-xs active:translate-y-[1px]"
+            className="w-full"
           >
             {isPending
               ? "Verifying code..."
               : otpType === "sign-in"
               ? "Verify and sign in"
               : "Verify email"}
-          </button>
+          </Button>
 
-          <div className="pt-2 flex items-center justify-between text-xs text-muted">
+          <div className="pt-2 flex items-center justify-between text-caption text-muted-foreground">
             <span>Did not receive code?</span>
             {countdown > 0 ? (
-              <span>Resend in {countdown}s</span>
+              <span className="tabular-nums">Resend in {countdown}s</span>
             ) : (
               <button
                 type="button"
                 onClick={() => handleSendOtp()}
                 disabled={isPending}
-                className="text-signal font-medium hover:underline cursor-pointer disabled:opacity-50"
+                className="text-primary font-medium hover:underline cursor-pointer disabled:opacity-50"
               >
                 Resend code
               </button>
@@ -317,12 +316,12 @@ function VerifyOtpForm() {
         </form>
       )}
 
-      <div className="mt-8 pt-6 border-t border-line text-sm text-muted space-y-2">
+      <div className="mt-8 pt-6 border-t border-border text-body text-muted-foreground space-y-2">
         <div>
           <span>Prefer standard password login? </span>
           <Link
             href="/auth/sign-in"
-            className="text-signal font-medium hover:underline"
+            className="text-primary font-medium hover:underline"
           >
             Sign in with password
           </Link>
@@ -331,7 +330,7 @@ function VerifyOtpForm() {
           <span>New to AutoPulse? </span>
           <Link
             href="/auth/sign-up"
-            className="text-signal font-medium hover:underline"
+            className="text-primary font-medium hover:underline"
           >
             Create your account
           </Link>
@@ -343,36 +342,26 @@ function VerifyOtpForm() {
 
 export default function VerifyOtpPage() {
   return (
-    <div className="min-h-screen flex flex-col bg-paper text-ink selection:bg-signal-soft selection:text-signal">
+    <div className="min-h-screen flex flex-col bg-background text-foreground">
       {/* Minimal Top Header */}
-      <header className="px-6 py-6 max-w-[1160px] w-full mx-auto">
+      <header className="px-6 py-6 page-container w-full mx-auto">
         <Link href="/" className="inline-flex items-center gap-2 group">
-          <div className="w-7 h-7 rounded-[6px] bg-surface border border-line flex items-center justify-center text-signal group-hover:border-signal/40 transition-colors">
-            <svg
-              className="w-4 h-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.4"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M3 12h5l3-7 4 14 3-7h3" />
-            </svg>
+          <div className="size-7 rounded-md bg-card border border-border flex items-center justify-center text-primary group-hover:border-primary/40 transition-colors">
+            <Activity className="size-4" strokeWidth={2} />
           </div>
-          <span className="font-geist font-normal tracking-tighter text-xl text-ink">
+          <span className="font-display font-semibold text-h3 text-foreground">
             AutoPulse
           </span>
         </Link>
       </header>
 
       {/* Main Two-Column Layout */}
-      <main className="flex-1 max-w-[1160px] w-full mx-auto px-6 py-10 flex items-center">
+      <main className="flex-1 page-container w-full mx-auto px-6 py-10 flex items-center">
         <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           {/* Left Column wrapped in Suspense for useSearchParams */}
           <Suspense
             fallback={
-              <div className="w-full max-w-[400px] text-left text-sm text-muted">
+              <div className="w-full max-w-sm text-left text-body text-muted-foreground">
                 Loading verification form...
               </div>
             }

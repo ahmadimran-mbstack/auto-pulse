@@ -2,19 +2,20 @@
 
 import { useState } from "react";
 import { authClient } from "@/lib/auth/client";
+import { Button } from "@/components/ui/button";
 
 interface GoogleSignInButtonProps {
   text?: string;
 }
 
+// Google OAuth social authentication button
+// Uses the standard outline button with a monochrome Google mark
 export function GoogleSignInButton({
   text = "Continue with Google",
 }: GoogleSignInButtonProps) {
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Trigger Google OAuth sign-in via Neon Auth SDK
-  // Reference: https://neon.com/docs/auth/quick-start/nextjs-api-only
   const handleGoogleSignIn = async () => {
     setIsPending(true);
     setError(null);
@@ -38,36 +39,27 @@ export function GoogleSignInButton({
 
   return (
     <div className="w-full">
-      <button
+      <Button
         type="button"
+        variant="outline"
+        size="lg"
         onClick={handleGoogleSignIn}
         disabled={isPending}
-        className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-[8px] border border-line bg-surface text-ink text-sm font-medium hover:bg-paper hover:border-signal/40 disabled:opacity-60 transition-all cursor-pointer disabled:cursor-not-allowed shadow-xs active:translate-y-[1px]"
+        className="w-full justify-center gap-3 font-medium"
       >
-        {/* Google G logo SVG */}
-        <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-          <path
-            fill="#4285F4"
-            d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
-          />
-          <path
-            fill="#34A853"
-            d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
-          />
-          <path
-            fill="#FBBC05"
-            d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
-          />
-          <path
-            fill="#EA4335"
-            d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-          />
+        <svg
+          className="size-4 shrink-0"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z" />
         </svg>
         <span>{isPending ? "Connecting to Google..." : text}</span>
-      </button>
+      </Button>
 
       {error && (
-        <p className="mt-2 text-xs text-rejected-text text-left">{error}</p>
+        <p className="mt-2 text-caption text-destructive text-left">{error}</p>
       )}
     </div>
   );

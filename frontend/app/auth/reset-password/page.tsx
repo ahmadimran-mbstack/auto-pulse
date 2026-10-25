@@ -4,7 +4,12 @@ import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AuthStatusLegend } from "../components/AuthStatusLegend";
+import { Activity, AlertCircle, CheckCircle2 } from "lucide-react";
 
 interface LegacyResetClient {
   resetPassword?: (options: {
@@ -160,60 +165,44 @@ function ResetPasswordForm() {
   };
 
   return (
-    <div className="w-full max-w-[400px] text-left">
-      <h1 className="text-3xl font-geist font-normal tracking-tighter mb-2">
+    <div className="w-full max-w-sm text-left">
+      <h1 className="text-title font-display text-foreground mb-2">
         Set new password
       </h1>
-      <p className="text-sm text-muted mb-6">
+      <p className="text-body text-muted-foreground mb-6">
         {token
           ? "Choose a secure password for your AutoPulse account."
           : `Enter the 6-digit code sent to ${email || "your email"} and your new password.`}
       </p>
 
       {isSuccess ? (
-        <div className="space-y-5">
-          <div className="p-4 rounded-[10px] bg-signal-soft border border-[#93D7CE] text-sm text-ink space-y-2">
-            <div className="flex items-center gap-2 text-signal font-medium">
-              <svg
-                className="w-4 h-4 shrink-0"
-                viewBox="0 0 16 16"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M3 8.5L6.5 12L13 4"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              <span>Password updated</span>
-            </div>
-            <p className="text-xs text-muted leading-relaxed">
+        <div className="space-y-4">
+          <Alert className="border-signal-line bg-signal-soft">
+            <CheckCircle2 className="size-4 text-primary shrink-0" />
+            <AlertTitle className="text-meta font-medium text-foreground">
+              Password updated
+            </AlertTitle>
+            <AlertDescription className="text-caption text-muted-foreground leading-relaxed">
               Your password has been changed successfully. You can now sign in with your new credentials.
-            </p>
-          </div>
+            </AlertDescription>
+          </Alert>
 
-          <button
+          <Button
             type="button"
             onClick={() => router.push("/auth/sign-in")}
-            className="w-full py-2.5 px-4 rounded-[8px] bg-signal text-surface text-sm font-medium hover:bg-signal-hover transition-colors cursor-pointer text-center shadow-xs"
+            className="w-full"
           >
             Sign in with new password
-          </button>
+          </Button>
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Email address field */}
-          <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-ink mb-1.5"
-            >
+          <div className="space-y-1.5">
+            <Label htmlFor="email">
               Account email
-            </label>
-            <input
+            </Label>
+            <Input
               id="email"
               name="email"
               type="email"
@@ -221,32 +210,28 @@ function ResetPasswordForm() {
               onChange={(e) => setEmail(e.target.value)}
               required
               placeholder="you@company.com"
-              className="w-full px-3.5 py-2.5 rounded-[8px] border border-line bg-surface text-ink text-sm placeholder:text-muted/60 focus:border-signal focus:ring-2 focus:ring-signal/15 transition-all outline-hidden"
             />
           </div>
 
           {/* Verification Code field (when not using URL token) */}
           {!token && (
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label
-                  htmlFor="otp"
-                  className="block text-sm font-medium text-ink"
-                >
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="otp">
                   6-digit reset code
-                </label>
+                </Label>
                 <button
                   type="button"
                   onClick={handleResendCode}
                   disabled={resendCooldown > 0}
-                  className="text-xs text-signal hover:underline disabled:text-muted disabled:no-underline cursor-pointer disabled:cursor-not-allowed"
+                  className="text-caption text-primary hover:underline disabled:text-muted-foreground disabled:no-underline cursor-pointer disabled:cursor-not-allowed"
                 >
                   {resendCooldown > 0
                     ? `Resend in ${resendCooldown}s`
                     : "Resend code"}
                 </button>
               </div>
-              <input
+              <Input
                 id="otp"
                 name="otp"
                 type="text"
@@ -255,29 +240,26 @@ function ResetPasswordForm() {
                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
                 required
                 placeholder="123456"
-                className="w-full px-3.5 py-2.5 rounded-[8px] border border-line bg-surface text-ink font-mono text-center tracking-widest text-lg placeholder:text-muted/40 focus:border-signal focus:ring-2 focus:ring-signal/15 transition-all outline-hidden"
+                className="font-mono text-center tracking-widest text-lead tabular-nums"
               />
             </div>
           )}
 
           {/* New password field */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label
-                htmlFor="newPassword"
-                className="block text-sm font-medium text-ink"
-              >
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="newPassword">
                 New password
-              </label>
+              </Label>
               <button
                 type="button"
                 onClick={() => setShowPassword((prev) => !prev)}
-                className="text-xs text-muted hover:text-ink cursor-pointer"
+                className="text-caption text-muted-foreground hover:text-foreground cursor-pointer"
               >
                 {showPassword ? "Hide" : "Show"}
               </button>
             </div>
-            <input
+            <Input
               id="newPassword"
               name="newPassword"
               type={showPassword ? "text" : "password"}
@@ -286,19 +268,15 @@ function ResetPasswordForm() {
               required
               minLength={8}
               placeholder="Minimum 8 characters"
-              className="w-full px-3.5 py-2.5 rounded-[8px] border border-line bg-surface text-ink text-sm placeholder:text-muted/60 focus:border-signal focus:ring-2 focus:ring-signal/15 transition-all outline-hidden"
             />
           </div>
 
           {/* Confirm password field */}
-          <div>
-            <label
-              htmlFor="confirmPassword"
-              className="block text-sm font-medium text-ink mb-1.5"
-            >
+          <div className="space-y-1.5">
+            <Label htmlFor="confirmPassword">
               Confirm new password
-            </label>
-            <input
+            </Label>
+            <Input
               id="confirmPassword"
               name="confirmPassword"
               type={showPassword ? "text" : "password"}
@@ -307,37 +285,41 @@ function ResetPasswordForm() {
               required
               minLength={8}
               placeholder="Re-enter your new password"
-              className="w-full px-3.5 py-2.5 rounded-[8px] border border-line bg-surface text-ink text-sm placeholder:text-muted/60 focus:border-signal focus:ring-2 focus:ring-signal/15 transition-all outline-hidden"
             />
           </div>
 
           {resendNotice && (
-            <div className="p-3 rounded-[8px] bg-signal-soft border border-[#93D7CE] text-xs text-ink">
-              {resendNotice}
-            </div>
+            <Alert className="border-signal-line bg-signal-soft">
+              <AlertDescription className="text-caption text-foreground">
+                {resendNotice}
+              </AlertDescription>
+            </Alert>
           )}
 
           {error && (
-            <div className="p-3 rounded-[8px] bg-rejected-bg text-rejected-text text-sm leading-relaxed border border-rose-200">
-              {error}
-            </div>
+            <Alert variant="destructive">
+              <AlertCircle className="size-4 shrink-0" />
+              <AlertDescription className="text-meta">
+                {error}
+              </AlertDescription>
+            </Alert>
           )}
 
-          <button
+          <Button
             type="submit"
             disabled={isPending || !newPassword || !confirmPassword || (!token && !otp)}
-            className="w-full py-2.5 px-4 rounded-[8px] bg-signal text-surface text-sm font-medium hover:bg-signal-hover disabled:opacity-60 transition-all cursor-pointer disabled:cursor-not-allowed shadow-xs active:translate-y-[1px]"
+            className="w-full"
           >
             {isPending ? "Updating password..." : "Update password"}
-          </button>
+          </Button>
         </form>
       )}
 
-      <div className="mt-8 pt-6 border-t border-line text-sm text-muted">
+      <div className="mt-8 pt-6 border-t border-border text-body text-muted-foreground">
         <span>Remember your password? </span>
         <Link
           href="/auth/sign-in"
-          className="text-signal font-medium hover:underline"
+          className="text-primary font-medium hover:underline"
         >
           Sign in
         </Link>
@@ -348,36 +330,26 @@ function ResetPasswordForm() {
 
 export default function ResetPasswordPage() {
   return (
-    <div className="min-h-screen flex flex-col bg-paper text-ink selection:bg-signal-soft selection:text-signal">
+    <div className="min-h-screen flex flex-col bg-background text-foreground">
       {/* Minimal Top Header */}
-      <header className="px-6 py-6 max-w-[1160px] w-full mx-auto">
+      <header className="px-6 py-6 page-container w-full mx-auto">
         <Link href="/" className="inline-flex items-center gap-2 group">
-          <div className="w-7 h-7 rounded-[6px] bg-surface border border-line flex items-center justify-center text-signal group-hover:border-signal/40 transition-colors">
-            <svg
-              className="w-4 h-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.4"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M3 12h5l3-7 4 14 3-7h3" />
-            </svg>
+          <div className="size-7 rounded-md bg-card border border-border flex items-center justify-center text-primary group-hover:border-primary/40 transition-colors">
+            <Activity className="size-4" strokeWidth={2} />
           </div>
-          <span className="font-geist font-normal tracking-tighter text-xl text-ink">
+          <span className="font-display font-semibold text-h3 text-foreground">
             AutoPulse
           </span>
         </Link>
       </header>
 
       {/* Main Two-Column Layout */}
-      <main className="flex-1 max-w-[1160px] w-full mx-auto px-6 py-10 flex items-center">
+      <main className="flex-1 page-container w-full mx-auto px-6 py-10 flex items-center">
         <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           {/* Left Column wrapped in Suspense for useSearchParams */}
           <Suspense
             fallback={
-              <div className="w-full max-w-[400px] text-left text-sm text-muted">
+              <div className="w-full max-w-sm text-left text-body text-muted-foreground">
                 Loading password reset...
               </div>
             }

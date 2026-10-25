@@ -3,7 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AuthStatusLegend } from "../components/AuthStatusLegend";
+import { Activity, AlertCircle } from "lucide-react";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
@@ -55,50 +60,37 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-paper text-ink selection:bg-signal-soft selection:text-signal">
+    <div className="min-h-screen flex flex-col bg-background text-foreground">
       {/* Minimal Top Header */}
-      <header className="px-6 py-6 max-w-[1160px] w-full mx-auto">
+      <header className="px-6 py-6 page-container w-full mx-auto">
         <Link href="/" className="inline-flex items-center gap-2 group">
-          <div className="w-7 h-7 rounded-[6px] bg-surface border border-line flex items-center justify-center text-signal group-hover:border-signal/40 transition-colors">
-            <svg
-              className="w-4 h-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.4"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M3 12h5l3-7 4 14 3-7h3" />
-            </svg>
+          <div className="size-7 rounded-md bg-card border border-border flex items-center justify-center text-primary group-hover:border-primary/40 transition-colors">
+            <Activity className="size-4" strokeWidth={2} />
           </div>
-          <span className="font-geist font-normal tracking-tighter text-xl text-ink">
+          <span className="font-display font-semibold text-h3 text-foreground">
             AutoPulse
           </span>
         </Link>
       </header>
 
       {/* Main Two-Column Layout */}
-      <main className="flex-1 max-w-[1160px] w-full mx-auto px-6 py-10 flex items-center">
+      <main className="flex-1 page-container w-full mx-auto px-6 py-10 flex items-center">
         <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-          {/* Left Column: Forgot password form (max 400px) */}
-          <div className="w-full max-w-[400px] text-left">
-            <h1 className="text-3xl font-geist font-normal tracking-tighter mb-2">
+          {/* Left Column: Forgot password form */}
+          <div className="w-full max-w-sm text-left">
+            <h1 className="text-title font-display text-foreground mb-2">
               Reset your password
             </h1>
-            <p className="text-sm text-muted mb-6">
+            <p className="text-body text-muted-foreground mb-6">
               Enter your account email and we will send you a verification code to reset your password.
             </p>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div>
-                <label
-                  htmlFor="email"
-                  className="block text-sm font-medium text-ink mb-1.5"
-                >
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="email">
                   Email address
-                </label>
-                <input
+                </Label>
+                <Input
                   id="email"
                   name="email"
                   type="email"
@@ -107,49 +99,51 @@ export default function ForgotPasswordPage() {
                   required
                   autoComplete="email"
                   placeholder="you@company.com"
-                  className="w-full px-3.5 py-2.5 rounded-[8px] border border-line bg-surface text-ink text-sm placeholder:text-muted/60 focus:border-signal focus:ring-2 focus:ring-signal/15 transition-all outline-hidden"
                 />
               </div>
 
               {error && (
-                <div className="p-3 rounded-[8px] bg-rejected-bg text-rejected-text text-sm leading-relaxed border border-rose-200">
-                  {error}
-                </div>
+                <Alert variant="destructive">
+                  <AlertCircle className="size-4 shrink-0" />
+                  <AlertDescription className="text-meta">
+                    {error}
+                  </AlertDescription>
+                </Alert>
               )}
 
-              <button
+              <Button
                 type="submit"
                 disabled={isPending || !email.trim()}
-                className="w-full py-2.5 px-4 rounded-[8px] bg-signal text-surface text-sm font-medium hover:bg-signal-hover disabled:opacity-60 transition-all cursor-pointer disabled:cursor-not-allowed shadow-xs active:translate-y-[1px]"
+                className="w-full"
               >
                 {isPending ? "Sending code..." : "Send reset code"}
-              </button>
+              </Button>
 
               <div className="pt-2 text-center space-y-2">
                 <div>
                   <Link
                     href={`/auth/reset-password${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ""}`}
-                    className="text-xs text-muted hover:text-ink inline-block"
+                    className="text-caption text-muted-foreground hover:text-foreground inline-block"
                   >
-                    Already have a reset code? <span className="text-signal underline">Enter code</span>
+                    Already have a reset code? <span className="text-primary underline">Enter code</span>
                   </Link>
                 </div>
                 <div>
                   <Link
                     href="/auth/sign-in"
-                    className="text-xs text-muted hover:text-ink inline-block"
+                    className="text-caption text-muted-foreground hover:text-foreground inline-block"
                   >
-                    Remember your password? <span className="text-signal underline">Sign in</span>
+                    Remember your password? <span className="text-primary underline">Sign in</span>
                   </Link>
                 </div>
               </div>
             </form>
 
-            <div className="mt-8 pt-6 border-t border-line text-sm text-muted">
+            <div className="mt-8 pt-6 border-t border-border text-body text-muted-foreground">
               <span>Do not have an account? </span>
               <Link
                 href="/auth/sign-up"
-                className="text-signal font-medium hover:underline"
+                className="text-primary font-medium hover:underline"
               >
                 Create your account
               </Link>

@@ -9,8 +9,14 @@ import {
   isPasswordValid,
   generateSecurePassword,
 } from "@/lib/auth/password";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
 import { AuthStatusLegend } from "../components/AuthStatusLegend";
 import { GoogleSignInButton } from "../components/GoogleSignInButton";
+import { Activity, AlertCircle, Check, Circle } from "lucide-react";
 
 interface OtpClient {
   emailOtp: {
@@ -144,85 +150,67 @@ function SignUpForm() {
   };
 
   return (
-    <div className="w-full max-w-[420px] text-left">
-      <h1 className="text-3xl font-geist font-normal tracking-tighter text-ink mb-2">
+    <div className="w-full max-w-sm text-left">
+      <h1 className="text-title font-display text-foreground mb-2">
         Create your account
       </h1>
-      <p className="text-sm text-muted mb-6">
+      <p className="text-body text-muted-foreground mb-6">
         Start generating and reviewing daily LinkedIn content.
       </p>
 
       {/* Prominent warning when account with email already exists */}
       {existingAccountEmail && (
-        <div
-          role="alert"
-          className="mb-5 p-4 rounded-[10px] border border-signal bg-signal-soft text-ink text-sm leading-relaxed space-y-2.5 shadow-xs"
-        >
-          <div className="flex items-center gap-2 font-medium text-signal">
-            <svg className="w-4 h-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
-              <path
-                fillRule="evenodd"
-                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                clipRule="evenodd"
-              />
-            </svg>
-            <span className="font-semibold">Account already exists</span>
-          </div>
-          <p className="text-xs text-muted leading-relaxed">
-            An account is already registered with <strong className="text-ink">{existingAccountEmail}</strong>. Please sign in to access your workspace.
-          </p>
-          <div className="pt-1 flex flex-col sm:flex-row gap-2">
-            <Link
-              href={`/auth/sign-in?email=${encodeURIComponent(existingAccountEmail)}`}
-              className="px-4 py-2 rounded-[8px] bg-signal text-surface text-xs font-medium hover:bg-signal-hover transition-colors text-center shadow-xs"
-            >
-              Sign in to your account
-            </Link>
-            <button
-              type="button"
-              onClick={() => {
-                setExistingAccountEmail(null);
-                setEmail("");
-              }}
-              className="px-3 py-2 rounded-[8px] border border-line bg-surface text-ink text-xs font-medium hover:bg-paper transition-colors text-center cursor-pointer"
-            >
-              Use another email
-            </button>
-          </div>
-        </div>
+        <Alert className="mb-5 border-primary bg-signal-soft">
+          <AlertCircle className="size-4 text-primary shrink-0" />
+          <AlertTitle className="text-meta font-semibold text-primary">
+            Account already exists
+          </AlertTitle>
+          <AlertDescription className="text-caption text-foreground space-y-3">
+            <p>
+              An account is already registered with <strong>{existingAccountEmail}</strong>. Please sign in to access your workspace.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2 pt-1">
+              <Button size="sm" asChild>
+                <Link href={`/auth/sign-in?email=${encodeURIComponent(existingAccountEmail)}`}>
+                  Sign in to your account
+                </Link>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setExistingAccountEmail(null);
+                  setEmail("");
+                }}
+              >
+                Use another email
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
       )}
 
       {/* Account exists warning if user tried OAuth with existing email */}
       {urlError === "account_not_linked" ? (
-        <div
-          role="alert"
-          className="mb-5 p-4 rounded-[10px] border border-amber-500/30 bg-amber-500/10 text-ink text-sm leading-relaxed"
-        >
-          <div className="flex items-center gap-2 font-medium text-amber-700 dark:text-amber-300 mb-1">
-            <svg className="w-4 h-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
-              <path
-                fillRule="evenodd"
-                d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z"
-                clipRule="evenodd"
-              />
-            </svg>
-            <span>Account already exists</span>
-          </div>
-          <p className="text-xs text-muted leading-relaxed">
+        <Alert variant="destructive" className="mb-5">
+          <AlertCircle className="size-4 shrink-0" />
+          <AlertTitle>Account already exists</AlertTitle>
+          <AlertDescription className="text-caption leading-relaxed">
             An account with this email already exists. Please{" "}
-            <Link href="/auth/sign-in" className="text-signal underline font-medium">
+            <Link href="/auth/sign-in" className="text-primary underline font-medium">
               sign in with your password
             </Link>{" "}
             instead.
-          </p>
-        </div>
+          </AlertDescription>
+        </Alert>
       ) : urlError ? (
-        <div
-          role="alert"
-          className="mb-5 p-3.5 rounded-[10px] bg-rejected-bg text-rejected-text text-sm leading-relaxed border border-rose-200"
-        >
-          Authentication error ({urlError}). Please continue with email and password below.
-        </div>
+        <Alert variant="destructive" className="mb-5">
+          <AlertCircle className="size-4 shrink-0" />
+          <AlertDescription className="text-meta">
+            Authentication error ({urlError}). Please continue with email and password below.
+          </AlertDescription>
+        </Alert>
       ) : null}
 
       {/* Google Social Sign In */}
@@ -232,20 +220,17 @@ function SignUpForm() {
 
       {/* Visual separator */}
       <div className="flex items-center gap-3 mb-5">
-        <div className="flex-1 h-px bg-line" />
-        <span className="text-xs text-muted">or continue with email</span>
-        <div className="flex-1 h-px bg-line" />
+        <Separator className="flex-1" />
+        <span className="text-caption text-muted-foreground">or continue with email</span>
+        <Separator className="flex-1" />
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label
-            htmlFor="name"
-            className="block text-sm font-medium text-ink mb-1.5"
-          >
+        <div className="space-y-1.5">
+          <Label htmlFor="name">
             Full name
-          </label>
-          <input
+          </Label>
+          <Input
             id="name"
             name="name"
             type="text"
@@ -254,18 +239,14 @@ function SignUpForm() {
             placeholder="Jane Doe"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="w-full px-3.5 py-2.5 rounded-[8px] border border-line bg-surface text-ink text-sm placeholder:text-muted/60 focus:border-signal focus:ring-2 focus:ring-signal/15 transition-all outline-hidden"
           />
         </div>
 
-        <div>
-          <label
-            htmlFor="email"
-            className="block text-sm font-medium text-ink mb-1.5"
-          >
+        <div className="space-y-1.5">
+          <Label htmlFor="email">
             Email address
-          </label>
-          <input
+          </Label>
+          <Input
             id="email"
             name="email"
             type="email"
@@ -274,37 +255,33 @@ function SignUpForm() {
             placeholder="you@company.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-3.5 py-2.5 rounded-[8px] border border-line bg-surface text-ink text-sm placeholder:text-muted/60 focus:border-signal focus:ring-2 focus:ring-signal/15 transition-all outline-hidden"
           />
         </div>
 
-        <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-ink"
-            >
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="password">
               Password
-            </label>
+            </Label>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={handleGeneratePassword}
-                className="text-xs text-signal hover:underline font-medium cursor-pointer"
+                className="text-caption text-primary hover:underline font-medium cursor-pointer"
               >
                 Generate secure password
               </button>
-              <span className="text-xs text-line">|</span>
+              <span className="text-caption text-border">|</span>
               <button
                 type="button"
                 onClick={() => setShowPassword((prev) => !prev)}
-                className="text-xs text-muted hover:text-ink cursor-pointer"
+                className="text-caption text-muted-foreground hover:text-foreground cursor-pointer"
               >
                 {showPassword ? "Hide" : "Show"}
               </button>
             </div>
           </div>
-          <input
+          <Input
             id="password"
             name="password"
             type={showPassword ? "text" : "password"}
@@ -313,103 +290,71 @@ function SignUpForm() {
             placeholder="Create a strong password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-3.5 py-2.5 rounded-[8px] border border-line bg-surface text-ink text-sm placeholder:text-muted/60 focus:border-signal focus:ring-2 focus:ring-signal/15 transition-all outline-hidden font-mono text-[13px]"
+            className="font-mono text-meta"
           />
 
           {copiedNotice && (
-            <p className="mt-1 text-xs text-signal font-medium">
+            <p className="mt-1 text-caption text-primary font-medium">
               Generated password copied to clipboard!
             </p>
           )}
 
           {/* Password complexity requirements checklist */}
-          <div className="mt-3 p-3 rounded-[8px] bg-paper border border-line space-y-1.5">
-            <p className="text-[11px] font-semibold text-muted uppercase tracking-wider mb-2 font-mono">
-              Password Requirements
+          <div className="mt-3 p-3 rounded-md bg-secondary/50 border border-border space-y-2">
+            <p className="text-caption font-medium text-muted-foreground">
+              Password requirements
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-caption">
               <div
                 className={`flex items-center gap-1.5 transition-colors ${
-                  criteria.minLength ? "text-signal font-medium" : "text-muted"
+                  criteria.minLength ? "text-primary font-medium" : "text-muted-foreground"
                 }`}
               >
-                <svg
-                  className={`w-3.5 h-3.5 shrink-0 ${
-                    criteria.minLength ? "text-signal" : "text-muted/40"
-                  }`}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
+                {criteria.minLength ? (
+                  <Check className="size-3.5 text-primary shrink-0" strokeWidth={2} />
+                ) : (
+                  <Circle className="size-3.5 text-muted-foreground/40 shrink-0" />
+                )}
                 <span>At least 8 characters</span>
               </div>
 
               <div
                 className={`flex items-center gap-1.5 transition-colors ${
-                  criteria.hasUppercase ? "text-signal font-medium" : "text-muted"
+                  criteria.hasUppercase ? "text-primary font-medium" : "text-muted-foreground"
                 }`}
               >
-                <svg
-                  className={`w-3.5 h-3.5 shrink-0 ${
-                    criteria.hasUppercase ? "text-signal" : "text-muted/40"
-                  }`}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
+                {criteria.hasUppercase ? (
+                  <Check className="size-3.5 text-primary shrink-0" strokeWidth={2} />
+                ) : (
+                  <Circle className="size-3.5 text-muted-foreground/40 shrink-0" />
+                )}
                 <span>One uppercase letter</span>
               </div>
 
               <div
                 className={`flex items-center gap-1.5 transition-colors ${
-                  criteria.hasNumber ? "text-signal font-medium" : "text-muted"
+                  criteria.hasNumber ? "text-primary font-medium" : "text-muted-foreground"
                 }`}
               >
-                <svg
-                  className={`w-3.5 h-3.5 shrink-0 ${
-                    criteria.hasNumber ? "text-signal" : "text-muted/40"
-                  }`}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
+                {criteria.hasNumber ? (
+                  <Check className="size-3.5 text-primary shrink-0" strokeWidth={2} />
+                ) : (
+                  <Circle className="size-3.5 text-muted-foreground/40 shrink-0" />
+                )}
                 <span>One number (0-9)</span>
               </div>
 
               <div
                 className={`flex items-center gap-1.5 transition-colors ${
-                  criteria.hasSpecial ? "text-signal font-medium" : "text-muted"
+                  criteria.hasSpecial ? "text-primary font-medium" : "text-muted-foreground"
                 }`}
               >
-                <svg
-                  className={`w-3.5 h-3.5 shrink-0 ${
-                    criteria.hasSpecial ? "text-signal" : "text-muted/40"
-                  }`}
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
+                {criteria.hasSpecial ? (
+                  <Check className="size-3.5 text-primary shrink-0" strokeWidth={2} />
+                ) : (
+                  <Circle className="size-3.5 text-muted-foreground/40 shrink-0" />
+                )}
                 <span>One special symbol</span>
               </div>
             </div>
@@ -421,26 +366,27 @@ function SignUpForm() {
           <div
             ref={errorRef}
             tabIndex={-1}
-            className="p-3.5 rounded-[8px] bg-rejected-bg text-rejected-text text-sm leading-relaxed border border-rose-200 outline-hidden"
+            role="alert"
+            className="p-3 rounded-md bg-status-danger-bg text-status-danger-fg text-body border border-destructive/20 outline-none"
           >
             {error}
           </div>
         )}
 
-        <button
+        <Button
           type="submit"
           disabled={!canSubmit}
-          className="w-full mt-2 py-2.5 px-4 rounded-[8px] bg-signal text-surface text-sm font-medium hover:bg-signal-hover disabled:opacity-50 transition-all cursor-pointer disabled:cursor-not-allowed shadow-xs active:translate-y-[1px]"
+          className="w-full mt-2"
         >
           {isPending ? "Creating account and sending code..." : "Create Account"}
-        </button>
+        </Button>
       </form>
 
-      <div className="mt-8 pt-6 border-t border-line text-sm text-muted">
+      <div className="mt-8 pt-6 border-t border-border text-body text-muted-foreground">
         <span>Already have an account? </span>
         <Link
           href="/auth/sign-in"
-          className="text-signal font-medium hover:underline"
+          className="text-primary font-medium hover:underline"
         >
           Sign in
         </Link>
@@ -451,36 +397,26 @@ function SignUpForm() {
 
 export default function SignUpPage() {
   return (
-    <div className="min-h-screen flex flex-col bg-paper text-ink selection:bg-signal-soft selection:text-signal">
+    <div className="min-h-screen flex flex-col bg-background text-foreground">
       {/* Minimal Top Header */}
-      <header className="px-6 py-6 max-w-[1160px] w-full mx-auto">
+      <header className="px-6 py-6 page-container w-full mx-auto">
         <Link href="/" className="inline-flex items-center gap-2 group">
-          <div className="w-7 h-7 rounded-[6px] bg-surface border border-line flex items-center justify-center text-signal group-hover:border-signal/40 transition-colors">
-            <svg
-              className="w-4 h-4"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.4"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M3 12h5l3-7 4 14 3-7h3" />
-            </svg>
+          <div className="size-7 rounded-md bg-card border border-border flex items-center justify-center text-primary group-hover:border-primary/40 transition-colors">
+            <Activity className="size-4" strokeWidth={2} />
           </div>
-          <span className="font-geist font-normal tracking-tighter text-xl text-ink">
+          <span className="font-display font-semibold text-h3 text-foreground">
             AutoPulse
           </span>
         </Link>
       </header>
 
       {/* Main Two-Column Layout */}
-      <main className="flex-1 max-w-[1160px] w-full mx-auto px-6 py-10 flex items-center">
+      <main className="flex-1 page-container w-full mx-auto px-6 py-10 flex items-center">
         <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           {/* Left Column: Sign-up form wrapped in Suspense for useSearchParams */}
           <Suspense
             fallback={
-              <div className="w-full max-w-[420px] text-left text-sm text-muted">
+              <div className="w-full max-w-sm text-left text-body text-muted-foreground">
                 Loading sign up form...
               </div>
             }
