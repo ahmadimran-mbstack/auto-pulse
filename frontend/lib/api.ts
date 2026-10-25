@@ -1,99 +1,50 @@
-import { authClient } from "@/lib/auth/client";
-import { env } from "@/lib/env";
+import { authClient } from "./auth/client";
+import { env } from "./env";
+import { tokenCache } from "./token-cache";
+import type { DashboardData } from "../types/dashboard";
 import type {
   ApiError,
   Profile,
+  PatchProfilePayload,
   Step1Payload,
   Step2Payload,
   Step3Payload,
   Step4Payload,
-} from "@/types/profile";
+} from "../types/profile";
 import type {
   GetPostsParams,
   PaginatedPosts,
   PostDetail,
   PostListItem,
   PostSchedule,
-} from "@/types/posts";
+} from "../types/posts";
 
-// Error class carrying HTTP status code and optional per-field validation errors
+// Error class carrying HTTP status code, optional per-field validation errors, and retry-after header
 export class ApiClientError extends Error {
   status: number;
   code: string;
   fields?: Record<string, string>;
+  retryAfter?: string | null;
 
-  constructor(status: number, error: ApiError) {
+  constructor(status: number, error: ApiError, retryAfter?: string | null) {
     super(error.message);
     this.name = "ApiClientError";
     this.status = status;
     this.code = error.code;
     this.fields = error.fields;
+    this.retryAfter = retryAfter ?? null;
   }
 }
-
-// In-memory cache for the auth token to make consecutive API requests fast
-let cachedToken: string | null = null;
-let cachedTokenExpiresAt = 0;
-let inFlightTokenPromise: Promise<string | null> | null = null;
 
 // Clears the in-memory cached token on sign out or invalidation
 export function clearCachedToken(): void {
-  cachedToken = null;
-  cachedTokenExpiresAt = 0;
-  inFlightTokenPromise = null;
+  tokenCache.clear();
 }
 
-// Intercept client-side sign out to clear cached token
-if (typeof authClient !== "undefined" && typeof authClient.signOut === "function") {
-  const originalSignOut = (authClient as { signOut?: (...args: unknown[]) => unknown }).signOut?.bind(authClient);
-  if (originalSignOut) {
-    (authClient as { signOut: (...args: unknown[]) => unknown }).signOut = async (...args: unknown[]) => {
-      clearCachedToken();
-      return originalSignOut(...args);
-    };
-  }
-}
-
-// Reads token expiration from JWT payload without an external library
-function readTokenExpiry(token: string): number {
-  try {
-    const parts = token.split(".");
-    if (parts.length >= 2) {
-      let base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-      while (base64.length % 4) {
-        base64 += "=";
-      }
-      const jsonStr = decodeURIComponent(
-        atob(base64)
-          .split("")
-          .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-          .join("")
-      );
-      const payload = JSON.parse(jsonStr);
-      if (typeof payload.exp === "number") {
-        return payload.exp * 1000;
-      }
-    }
-  } catch {
-    // If decoding fails, default to a safe 60 second lifetime
-  }
-  return Date.now() + 60 * 1000;
-}
-
-// Retrieves a fresh token using the Neon Auth client or valid in-memory cache
+// Retrieves a fresh token using tokenCache manager
 // Reuses token until 60 seconds before expiration; shares in-flight requests
 async function getFreshToken(forceRefresh: boolean = false): Promise<string | null> {
-  // Use cached token if valid and not forcing refresh (reused until 60s before expiration)
-  if (!forceRefresh && cachedToken && Date.now() < cachedTokenExpiresAt - 60_000) {
-    return cachedToken;
-  }
-
-  // Reuse ongoing token fetch to avoid duplicate concurrent calls
-  if (inFlightTokenPromise) {
-    return inFlightTokenPromise;
-  }
-
-  inFlightTokenPromise = (async () => {
+  return tokenCache.getToken(async () => {
     // Method 1: authClient.token() as recommended in Neon Auth JWT guide
     try {
       const clientWithToken = authClient as unknown as {
@@ -102,9 +53,7 @@ async function getFreshToken(forceRefresh: boolean = false): Promise<string | nu
       if (typeof clientWithToken.token === "function") {
         const tokenRes = await clientWithToken.token();
         if (tokenRes?.data?.token) {
-          cachedToken = tokenRes.data.token;
-          cachedTokenExpiresAt = readTokenExpiry(cachedToken);
-          return cachedToken;
+          return tokenRes.data.token;
         }
       }
     } catch (err) {
@@ -125,22 +74,14 @@ async function getFreshToken(forceRefresh: boolean = false): Promise<string | nu
         },
       });
       if (headerToken) {
-        cachedToken = headerToken;
-        cachedTokenExpiresAt = readTokenExpiry(cachedToken);
-        return cachedToken;
+        return headerToken;
       }
     } catch (err) {
       console.warn("authClient.getSession() fallback error:", err);
     }
 
-    cachedToken = null;
-    cachedTokenExpiresAt = 0;
     return null;
-  })().finally(() => {
-    inFlightTokenPromise = null;
-  });
-
-  return inFlightTokenPromise;
+  }, forceRefresh);
 }
 
 // Single core API caller function used for all backend communication
@@ -214,6 +155,21 @@ export async function apiCall<T>(
     });
   }
 
+  // Handle 429 Rate Limited with Retry-After header support
+  if (response.status === 429) {
+    const retryAfter = response.headers.get("Retry-After");
+    const json = await response.json().catch(() => ({}));
+    const errorObj = json?.error || {};
+    throw new ApiClientError(
+      429,
+      {
+        code: errorObj.code || "rate_limited",
+        message: errorObj.message || "Too many requests. Please try again in a moment.",
+      },
+      retryAfter
+    );
+  }
+
   // Handle 503 Service Unavailable
   if (response.status === 503) {
     throw new ApiClientError(503, {
@@ -251,9 +207,28 @@ export async function apiCall<T>(
   return (await response.json()) as T;
 }
 
+// Typed convenience helper for dashboard overview route
+export async function getDashboard(): Promise<DashboardData> {
+  return apiCall<DashboardData>("/dashboard", { method: "GET" });
+}
+
 // Typed convenience helpers for profile and onboarding routes
 export async function getProfile(): Promise<Profile> {
   return apiCall<Profile>("/profile", { method: "GET" });
+}
+
+export async function patchProfile(payload: PatchProfilePayload): Promise<Profile> {
+  return apiCall<Profile>("/profile", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteAccount(confirm: "DELETE" = "DELETE"): Promise<void> {
+  return apiCall<void>("/account", {
+    method: "DELETE",
+    body: JSON.stringify({ confirm }),
+  });
 }
 
 export async function saveStep1(payload: Step1Payload): Promise<Profile> {
@@ -372,7 +347,11 @@ export async function generateDraft(replace: boolean = true): Promise<PostDetail
 }
 
 // Fetches the post branded image as a raw Blob using fresh Bearer authentication
-export async function fetchPostImageBlob(id: string, isRetry: boolean = false): Promise<Blob> {
+export async function fetchPostImageBlob(
+  id: string,
+  width: 240 | 480 | 1200 = 480,
+  isRetry: boolean = false
+): Promise<Blob> {
   const token = await getFreshToken(isRetry);
 
   if (!token) {
@@ -392,7 +371,7 @@ export async function fetchPostImageBlob(id: string, isRetry: boolean = false): 
     });
   }
 
-  const url = `${env.apiUrl}/posts/${id}/image.png`;
+  const url = `${env.apiUrl}/posts/${id}/image.png?w=${width}`;
   let response: Response;
   try {
     response = await fetch(url, {
@@ -411,7 +390,7 @@ export async function fetchPostImageBlob(id: string, isRetry: boolean = false): 
   if (response.status === 401) {
     clearCachedToken();
     if (!isRetry) {
-      return fetchPostImageBlob(id, true);
+      return fetchPostImageBlob(id, width, true);
     }
     try {
       await authClient.signOut();
@@ -461,4 +440,3 @@ export async function retryPostPublication(
     body: JSON.stringify({ confirm_not_posted: confirmNotPosted }),
   });
 }
-

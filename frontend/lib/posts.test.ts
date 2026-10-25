@@ -21,28 +21,28 @@ describe("post status chip configuration", () => {
 
   it("assigns appropriate color classes according to design tokens", () => {
     const draftConfig = getStatusChipConfig("draft");
-    expect(draftConfig.className).toContain("bg-draft-bg");
-    expect(draftConfig.className).toContain("text-draft-text");
+    expect(draftConfig.className).toContain("bg-status-draft-bg");
+    expect(draftConfig.className).toContain("text-status-draft-fg");
 
     const approvedConfig = getStatusChipConfig("approved");
     expect(approvedConfig.className).toContain("bg-signal-soft");
-    expect(approvedConfig.className).toContain("text-signal");
+    expect(approvedConfig.className).toContain("text-primary");
 
     const rejectedConfig = getStatusChipConfig("rejected");
-    expect(rejectedConfig.className).toContain("bg-rejected-bg");
-    expect(rejectedConfig.className).toContain("text-rejected-text");
+    expect(rejectedConfig.className).toContain("bg-status-danger-bg");
+    expect(rejectedConfig.className).toContain("text-status-danger-fg");
 
     const failedConfig = getStatusChipConfig("failed");
-    expect(failedConfig.className).toContain("bg-rejected-bg");
-    expect(failedConfig.className).toContain("text-rejected-text");
+    expect(failedConfig.className).toContain("bg-status-danger-bg");
+    expect(failedConfig.className).toContain("text-status-danger-fg");
 
     const publishedConfig = getStatusChipConfig("published");
     expect(publishedConfig.hasCheckIcon).toBe(true);
-    expect(publishedConfig.className).toContain("text-ink");
+    expect(publishedConfig.className).toContain("text-foreground");
 
     const expiredConfig = getStatusChipConfig("expired");
-    expect(expiredConfig.className).toContain("bg-paper");
-    expect(expiredConfig.className).toContain("text-muted");
+    expect(expiredConfig.className).toContain("bg-muted");
+    expect(expiredConfig.className).toContain("text-muted-foreground");
   });
 });
 

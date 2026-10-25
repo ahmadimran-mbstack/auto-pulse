@@ -64,6 +64,11 @@ export interface Step4Payload {
   approval_method?: ApprovalMethod;
 }
 
+// Partial profile payload for PATCH /profile endpoint
+export type PatchProfilePayload = Partial<
+  Omit<Profile, "onboarding_step" | "onboarding_completed_at" | "created_at" | "updated_at">
+>;
+
 export interface ApiError {
   code: string;
   message: string;

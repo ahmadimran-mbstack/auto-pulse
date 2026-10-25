@@ -31,6 +31,48 @@ export function getConnectionDisplayState(
   return "connected";
 }
 
+export interface ConnectionUiInfo {
+  badgeLabel: string;
+  badgeVariant: "neutral" | "draft" | "approved" | "published" | "danger";
+  actionLabel: "Connect" | "Reconnect" | "Disconnect";
+  description: string;
+}
+
+// Maps connection state to UI display attributes
+export function getConnectionUiInfo(state: ConnectionDisplayState): ConnectionUiInfo {
+  switch (state) {
+    case "connected":
+      return {
+        badgeLabel: "Connected",
+        badgeVariant: "published",
+        actionLabel: "Disconnect",
+        description: "Your LinkedIn account is connected and ready to publish approved posts.",
+      };
+    case "expiring_soon":
+      return {
+        badgeLabel: "Expiring soon",
+        badgeVariant: "draft",
+        actionLabel: "Reconnect",
+        description: "Your LinkedIn connection will expire soon. Reconnect now to prevent posting delays.",
+      };
+    case "expired":
+      return {
+        badgeLabel: "Expired",
+        badgeVariant: "danger",
+        actionLabel: "Reconnect",
+        description: "Your LinkedIn connection has expired. Reconnect to resume publishing.",
+      };
+    case "not_connected":
+    default:
+      return {
+        badgeLabel: "Not connected",
+        badgeVariant: "neutral",
+        actionLabel: "Connect",
+        description: "Connect your LinkedIn profile to publish approved posts automatically.",
+      };
+  }
+}
+
 export interface ParsedCallbackParams {
   code: string | null;
   state: string | null;

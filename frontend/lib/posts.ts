@@ -21,54 +21,78 @@ export interface PublicationErrorInfo {
   isWarning?: boolean;
 }
 
+export type PostsTabFilter =
+  | "all"
+  | "needs_approval"
+  | "scheduled"
+  | "published"
+  | "problems";
+
+// Maps UI tab filter identifiers to backend query status parameters
+export function mapTabToStatusFilter(tab: PostsTabFilter): string | undefined {
+  switch (tab) {
+    case "needs_approval":
+      return "awaiting_approval";
+    case "scheduled":
+      return "approved";
+    case "published":
+      return "published";
+    case "problems":
+      return "failed,rejected,expired";
+    case "all":
+    default:
+      return undefined;
+  }
+}
+
 // Maps post statuses to human-friendly labels and styling tokens
 export function getStatusChipConfig(status: PostStatus): StatusChipConfig {
   switch (status) {
     case "draft":
       return {
         label: "Draft",
-        className: "bg-draft-bg text-draft-text border-[#F5E5BA]",
+        className: "bg-status-draft-bg text-status-draft-fg border-transparent",
       };
     case "awaiting_approval":
       return {
         label: "Waiting for approval",
-        className: "bg-draft-bg text-draft-text border-[#F5E5BA]",
+        className: "bg-status-draft-bg text-status-draft-fg border-transparent",
       };
     case "approved":
       return {
         label: "Approved",
-        className: "bg-signal-soft text-signal border-signal-border",
+        className: "bg-signal-soft text-primary border-signal-line",
       };
     case "published":
       return {
         label: "Published",
-        className: "bg-paper text-ink border-line",
+        className: "bg-card text-foreground border-border",
         hasCheckIcon: true,
       };
     case "rejected":
       return {
         label: "Rejected",
-        className: "bg-rejected-bg text-rejected-text border-[#F5C2B9]",
+        className: "bg-status-danger-bg text-status-danger-fg border-transparent",
       };
     case "failed":
       return {
         label: "Failed",
-        className: "bg-rejected-bg text-rejected-text border-[#F5C2B9]",
+        className: "bg-status-danger-bg text-status-danger-fg border-transparent",
       };
     case "publishing":
       return {
         label: "Publishing",
-        className: "bg-paper text-muted border-line",
+        className: "bg-muted text-muted-foreground border-border",
       };
     case "expired":
       return {
         label: "Expired",
-        className: "bg-paper text-muted border-line",
+        className: "bg-muted text-muted-foreground border-border",
       };
     default:
       return {
         label: "Draft",
-        className: "bg-draft-bg text-draft-text border-[#F5E5BA]",
+        className: "bg-status-draft-bg text-status-draft-fg border-transparent",
       };
   }
 }
