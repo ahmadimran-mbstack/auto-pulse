@@ -4,6 +4,7 @@ import { Suspense, useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth/client";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,7 +37,7 @@ function SignInForm() {
   const urlError = searchParams.get("error");
   const urlMessage = searchParams.get("message");
 
-  // Move focus to error container when an error occurs
+  // Move focus to error container when an error occurs for accessibility
   useEffect(() => {
     if (error && errorRef.current) {
       errorRef.current.focus();
@@ -56,7 +57,7 @@ function SignInForm() {
     setIsPending(true);
 
     try {
-      // 1. Authenticate user credentials
+      // 1. Authenticate user credentials with Neon Auth
       const result = await authClient.signIn.email({
         email: cleanEmail,
         password,
@@ -99,7 +100,7 @@ function SignInForm() {
   };
 
   return (
-    <div className="w-full max-w-sm text-left">
+    <Card className="w-full max-w-[400px] p-6 sm:p-8 bg-card border-border text-left mx-auto lg:mx-0">
       <h1 className="text-title font-display text-foreground mb-2">
         Sign in
       </h1>
@@ -110,7 +111,7 @@ function SignInForm() {
       {/* Account linking error notification */}
       {urlError === "account_not_linked" ? (
         <Alert variant="destructive" className="mb-5">
-          <AlertCircle className="size-4 shrink-0" />
+          <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
           <AlertTitle>Account already exists</AlertTitle>
           <AlertDescription className="text-caption leading-relaxed">
             An account with this email was previously registered using email and password. Please sign in with your password below. Once signed in, you can link your Google account in Settings.
@@ -118,14 +119,14 @@ function SignInForm() {
         </Alert>
       ) : urlError === "access_denied" ? (
         <Alert variant="destructive" className="mb-5">
-          <AlertCircle className="size-4 shrink-0" />
+          <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
           <AlertDescription className="text-meta">
             Google sign in was cancelled or access was denied. Please try again.
           </AlertDescription>
         </Alert>
       ) : urlError ? (
         <Alert variant="destructive" className="mb-5">
-          <AlertCircle className="size-4 shrink-0" />
+          <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
           <AlertDescription className="text-meta">
             Authentication error ({urlError}). Please sign in with your email and password.
           </AlertDescription>
@@ -135,7 +136,7 @@ function SignInForm() {
       {/* Password reset success notification */}
       {urlMessage === "password_reset_success" && (
         <Alert className="mb-5 border-signal-line bg-signal-soft text-foreground">
-          <CheckCircle2 className="size-4 text-primary shrink-0" />
+          <CheckCircle2 className="size-4 text-primary shrink-0" aria-hidden="true" />
           <AlertDescription className="text-meta">
             Your password has been successfully reset. Please sign in with your new password.
           </AlertDescription>
@@ -204,7 +205,7 @@ function SignInForm() {
           />
         </div>
 
-        {/* Error display */}
+        {/* Error display with programmatic focus */}
         {error && (
           <div
             ref={errorRef}
@@ -221,11 +222,11 @@ function SignInForm() {
           disabled={isPending || !email.trim() || !password}
           className="w-full"
         >
-          {isPending ? "Checking credentials and sending code..." : "Sign In"}
+          {isPending ? "Signing in..." : "Sign in"}
         </Button>
       </form>
 
-      <div className="mt-8 pt-6 border-t border-border text-body text-muted-foreground">
+      <div className="mt-6 pt-5 border-t border-border text-meta text-muted-foreground text-left">
         <span>New here? </span>
         <Link
           href="/auth/sign-up"
@@ -234,7 +235,7 @@ function SignInForm() {
           Create your account
         </Link>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -245,29 +246,29 @@ export default function SignInPage() {
       <header className="px-6 py-6 page-container w-full mx-auto">
         <Link href="/" className="inline-flex items-center gap-2 group">
           <div className="size-7 rounded-md bg-card border border-border flex items-center justify-center text-primary group-hover:border-primary/40 transition-colors">
-            <Activity className="size-4" strokeWidth={2} />
+            <Activity className="size-4" strokeWidth={1.5} aria-hidden="true" />
           </div>
-          <span className="font-display font-semibold text-h3 text-foreground">
+          <span className="font-display font-semibold text-lg text-foreground">
             AutoPulse
           </span>
         </Link>
       </header>
 
       {/* Main Two-Column Layout */}
-      <main className="flex-1 page-container w-full mx-auto px-6 py-10 flex items-center">
-        <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-          {/* Left Column: Sign-in form wrapped in Suspense for useSearchParams */}
+      <main className="flex-1 page-container w-full mx-auto px-6 py-8 md:py-12 flex items-center">
+        <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+          {/* Left Column: Sign-in form (max 400px) */}
           <Suspense
             fallback={
-              <div className="w-full max-w-sm text-left text-body text-muted-foreground">
-                Loading sign in form...
-              </div>
+              <Card className="w-full max-w-[400px] p-6 sm:p-8 bg-card border-border text-left mx-auto lg:mx-0">
+                <p className="text-body text-muted-foreground">Loading sign in form...</p>
+              </Card>
             }
           >
             <SignInForm />
           </Suspense>
 
-          {/* Right Column: Status legend (desktop only) */}
+          {/* Right Column: Status legend (quiet panel on desktop only) */}
           <div className="hidden lg:flex justify-end">
             <AuthStatusLegend />
           </div>

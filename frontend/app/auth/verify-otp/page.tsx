@@ -1,9 +1,10 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth/client";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,6 +34,7 @@ interface OtpAuthClient {
 function VerifyOtpForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const errorRef = useRef<HTMLDivElement>(null);
 
   // Mode can be 'sign-in' or 'email-verification'
   const initialType =
@@ -44,7 +46,6 @@ function VerifyOtpForm() {
   const [otpType, setOtpType] = useState<"sign-in" | "email-verification">(initialType);
   const [email, setEmail] = useState(initialEmail);
   const [otp, setOtp] = useState("");
-  // If email was passed in URL from sign up or sign in, start directly on verify step
   const [step, setStep] = useState<"send" | "verify">(
     initialEmail ? "verify" : "send"
   );
@@ -56,6 +57,13 @@ function VerifyOtpForm() {
       : null
   );
   const [countdown, setCountdown] = useState(initialEmail ? 60 : 0);
+
+  // Focus error container when an error occurs
+  useEffect(() => {
+    if (error && errorRef.current) {
+      errorRef.current.focus();
+    }
+  }, [error]);
 
   // Countdown timer for resending OTP
   useEffect(() => {
@@ -150,7 +158,7 @@ function VerifyOtpForm() {
           document.cookie =
             "autopulse_otp_pending=; path=/; max-age=0; SameSite=Lax";
           setSuccessMessage(
-            "Email successfully verified! Redirecting to your dashboard..."
+            "Email successfully verified. Redirecting to your dashboard..."
           );
           setTimeout(() => {
             router.push("/app");
@@ -168,11 +176,11 @@ function VerifyOtpForm() {
   };
 
   return (
-    <div className="w-full max-w-sm text-left">
+    <Card className="w-full max-w-[400px] p-6 sm:p-8 bg-card border-border text-left mx-auto lg:mx-0">
       <h1 className="text-title font-display text-foreground mb-2">
         {step === "send"
           ? otpType === "sign-in"
-            ? "Sign in with one-time code"
+            ? "Sign in with code"
             : "Verify your email"
           : "Enter verification code"}
       </h1>
@@ -209,21 +217,23 @@ function VerifyOtpForm() {
       {/* Success Notification */}
       {successMessage && (
         <Alert className="mb-5 border-signal-line bg-signal-soft">
-          <CheckCircle2 className="size-4 text-primary shrink-0" />
+          <CheckCircle2 className="size-4 text-primary shrink-0" aria-hidden="true" />
           <AlertDescription className="text-meta text-foreground">
             {successMessage}
           </AlertDescription>
         </Alert>
       )}
 
-      {/* Error Notification */}
+      {/* Error Notification with programmatic focus */}
       {error && (
-        <Alert variant="destructive" className="mb-5">
-          <AlertCircle className="size-4 shrink-0" />
-          <AlertDescription className="text-meta">
-            {error}
-          </AlertDescription>
-        </Alert>
+        <div ref={errorRef} tabIndex={-1} className="outline-none mb-5">
+          <Alert variant="destructive">
+            <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+            <AlertDescription className="text-meta">
+              {error}
+            </AlertDescription>
+          </Alert>
+        </div>
       )}
 
       {step === "send" ? (
@@ -316,7 +326,7 @@ function VerifyOtpForm() {
         </form>
       )}
 
-      <div className="mt-8 pt-6 border-t border-border text-body text-muted-foreground space-y-2">
+      <div className="mt-6 pt-5 border-t border-border text-meta text-muted-foreground space-y-2 text-left">
         <div>
           <span>Prefer standard password login? </span>
           <Link
@@ -336,7 +346,7 @@ function VerifyOtpForm() {
           </Link>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -347,29 +357,29 @@ export default function VerifyOtpPage() {
       <header className="px-6 py-6 page-container w-full mx-auto">
         <Link href="/" className="inline-flex items-center gap-2 group">
           <div className="size-7 rounded-md bg-card border border-border flex items-center justify-center text-primary group-hover:border-primary/40 transition-colors">
-            <Activity className="size-4" strokeWidth={2} />
+            <Activity className="size-4" strokeWidth={1.5} aria-hidden="true" />
           </div>
-          <span className="font-display font-semibold text-h3 text-foreground">
+          <span className="font-display font-semibold text-lg text-foreground">
             AutoPulse
           </span>
         </Link>
       </header>
 
       {/* Main Two-Column Layout */}
-      <main className="flex-1 page-container w-full mx-auto px-6 py-10 flex items-center">
-        <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+      <main className="flex-1 page-container w-full mx-auto px-6 py-8 md:py-12 flex items-center">
+        <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
           {/* Left Column wrapped in Suspense for useSearchParams */}
           <Suspense
             fallback={
-              <div className="w-full max-w-sm text-left text-body text-muted-foreground">
-                Loading verification form...
-              </div>
+              <Card className="w-full max-w-[400px] p-6 sm:p-8 bg-card border-border text-left mx-auto lg:mx-0">
+                <p className="text-body text-muted-foreground">Loading verification form...</p>
+              </Card>
             }
           >
             <VerifyOtpForm />
           </Suspense>
 
-          {/* Right Column: Status legend (desktop only) */}
+          {/* Right Column: Status legend (quiet panel on desktop only) */}
           <div className="hidden lg:flex justify-end">
             <AuthStatusLegend />
           </div>

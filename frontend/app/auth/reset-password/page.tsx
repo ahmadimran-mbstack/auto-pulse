@@ -1,9 +1,10 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth/client";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +22,7 @@ interface LegacyResetClient {
 function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const errorRef = useRef<HTMLDivElement>(null);
 
   const initialEmail = searchParams.get("email") || "";
   const token = searchParams.get("token");
@@ -36,6 +38,13 @@ function ResetPasswordForm() {
   const [error, setError] = useState<string | null>(urlError || null);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [resendNotice, setResendNotice] = useState<string | null>(null);
+
+  // Focus error container when an error occurs
+  useEffect(() => {
+    if (error && errorRef.current) {
+      errorRef.current.focus();
+    }
+  }, [error]);
 
   // Resend cooldown timer
   useEffect(() => {
@@ -110,7 +119,7 @@ function ResetPasswordForm() {
     setIsPending(true);
 
     try {
-      // If a token was provided via link, use legacy token reset
+      // If a token was provided via link, use token reset
       if (token) {
         const client = authClient as unknown as LegacyResetClient;
         if (typeof client.resetPassword === "function") {
@@ -165,7 +174,7 @@ function ResetPasswordForm() {
   };
 
   return (
-    <div className="w-full max-w-sm text-left">
+    <Card className="w-full max-w-[400px] p-6 sm:p-8 bg-card border-border text-left mx-auto lg:mx-0">
       <h1 className="text-title font-display text-foreground mb-2">
         Set new password
       </h1>
@@ -178,7 +187,7 @@ function ResetPasswordForm() {
       {isSuccess ? (
         <div className="space-y-4">
           <Alert className="border-signal-line bg-signal-soft">
-            <CheckCircle2 className="size-4 text-primary shrink-0" />
+            <CheckCircle2 className="size-4 text-primary shrink-0" aria-hidden="true" />
             <AlertTitle className="text-meta font-medium text-foreground">
               Password updated
             </AlertTitle>
@@ -297,12 +306,14 @@ function ResetPasswordForm() {
           )}
 
           {error && (
-            <Alert variant="destructive">
-              <AlertCircle className="size-4 shrink-0" />
-              <AlertDescription className="text-meta">
-                {error}
-              </AlertDescription>
-            </Alert>
+            <div ref={errorRef} tabIndex={-1} className="outline-none">
+              <Alert variant="destructive">
+                <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+                <AlertDescription className="text-meta">
+                  {error}
+                </AlertDescription>
+              </Alert>
+            </div>
           )}
 
           <Button
@@ -315,7 +326,7 @@ function ResetPasswordForm() {
         </form>
       )}
 
-      <div className="mt-8 pt-6 border-t border-border text-body text-muted-foreground">
+      <div className="mt-6 pt-5 border-t border-border text-meta text-muted-foreground text-left">
         <span>Remember your password? </span>
         <Link
           href="/auth/sign-in"
@@ -324,7 +335,7 @@ function ResetPasswordForm() {
           Sign in
         </Link>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -335,29 +346,29 @@ export default function ResetPasswordPage() {
       <header className="px-6 py-6 page-container w-full mx-auto">
         <Link href="/" className="inline-flex items-center gap-2 group">
           <div className="size-7 rounded-md bg-card border border-border flex items-center justify-center text-primary group-hover:border-primary/40 transition-colors">
-            <Activity className="size-4" strokeWidth={2} />
+            <Activity className="size-4" strokeWidth={1.5} aria-hidden="true" />
           </div>
-          <span className="font-display font-semibold text-h3 text-foreground">
+          <span className="font-display font-semibold text-lg text-foreground">
             AutoPulse
           </span>
         </Link>
       </header>
 
       {/* Main Two-Column Layout */}
-      <main className="flex-1 page-container w-full mx-auto px-6 py-10 flex items-center">
-        <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+      <main className="flex-1 page-container w-full mx-auto px-6 py-8 md:py-12 flex items-center">
+        <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
           {/* Left Column wrapped in Suspense for useSearchParams */}
           <Suspense
             fallback={
-              <div className="w-full max-w-sm text-left text-body text-muted-foreground">
-                Loading password reset...
-              </div>
+              <Card className="w-full max-w-[400px] p-6 sm:p-8 bg-card border-border text-left mx-auto lg:mx-0">
+                <p className="text-body text-muted-foreground">Loading password reset...</p>
+              </Card>
             }
           >
             <ResetPasswordForm />
           </Suspense>
 
-          {/* Right Column: Status legend (desktop only) */}
+          {/* Right Column: Status legend (quiet panel on desktop only) */}
           <div className="hidden lg:flex justify-end">
             <AuthStatusLegend />
           </div>

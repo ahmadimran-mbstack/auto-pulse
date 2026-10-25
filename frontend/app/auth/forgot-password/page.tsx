@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,9 +13,17 @@ import { Activity, AlertCircle } from "lucide-react";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
+  const errorRef = useRef<HTMLDivElement>(null);
   const [email, setEmail] = useState("");
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Focus error container when an error occurs
+  useEffect(() => {
+    if (error && errorRef.current) {
+      errorRef.current.focus();
+    }
+  }, [error]);
 
   // Send password reset OTP code via Neon Auth Email OTP endpoint
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -65,19 +74,19 @@ export default function ForgotPasswordPage() {
       <header className="px-6 py-6 page-container w-full mx-auto">
         <Link href="/" className="inline-flex items-center gap-2 group">
           <div className="size-7 rounded-md bg-card border border-border flex items-center justify-center text-primary group-hover:border-primary/40 transition-colors">
-            <Activity className="size-4" strokeWidth={2} />
+            <Activity className="size-4" strokeWidth={1.5} aria-hidden="true" />
           </div>
-          <span className="font-display font-semibold text-h3 text-foreground">
+          <span className="font-display font-semibold text-lg text-foreground">
             AutoPulse
           </span>
         </Link>
       </header>
 
       {/* Main Two-Column Layout */}
-      <main className="flex-1 page-container w-full mx-auto px-6 py-10 flex items-center">
-        <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-          {/* Left Column: Forgot password form */}
-          <div className="w-full max-w-sm text-left">
+      <main className="flex-1 page-container w-full mx-auto px-6 py-8 md:py-12 flex items-center">
+        <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+          {/* Left Column: Forgot password form card (max 400px) */}
+          <Card className="w-full max-w-[400px] p-6 sm:p-8 bg-card border-border text-left mx-auto lg:mx-0">
             <h1 className="text-title font-display text-foreground mb-2">
               Reset your password
             </h1>
@@ -103,12 +112,14 @@ export default function ForgotPasswordPage() {
               </div>
 
               {error && (
-                <Alert variant="destructive">
-                  <AlertCircle className="size-4 shrink-0" />
-                  <AlertDescription className="text-meta">
-                    {error}
-                  </AlertDescription>
-                </Alert>
+                <div ref={errorRef} tabIndex={-1} className="outline-none">
+                  <Alert variant="destructive">
+                    <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+                    <AlertDescription className="text-meta">
+                      {error}
+                    </AlertDescription>
+                  </Alert>
+                </div>
               )}
 
               <Button
@@ -139,7 +150,7 @@ export default function ForgotPasswordPage() {
               </div>
             </form>
 
-            <div className="mt-8 pt-6 border-t border-border text-body text-muted-foreground">
+            <div className="mt-6 pt-5 border-t border-border text-meta text-muted-foreground text-left">
               <span>Do not have an account? </span>
               <Link
                 href="/auth/sign-up"
@@ -148,9 +159,9 @@ export default function ForgotPasswordPage() {
                 Create your account
               </Link>
             </div>
-          </div>
+          </Card>
 
-          {/* Right Column: Status legend (desktop only) */}
+          {/* Right Column: Status legend (quiet panel on desktop only) */}
           <div className="hidden lg:flex justify-end">
             <AuthStatusLegend />
           </div>
