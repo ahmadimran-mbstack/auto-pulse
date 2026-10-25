@@ -1,159 +1,243 @@
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Geist:ital,wght@0,100..900;1,100..900&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
 @import "tailwindcss";
 
-/* AutoPulse Design Tokens - CSS Variables */
+/*
+  Design Tokens for AutoPulse
+  Clean, calm and exact developer-tool aesthetic
+  Light mode only
+*/
 :root {
-  /* Core brand colors */
-  --color-paper: #F8FAFC;
-  --color-surface: #FFFFFF;
-  --color-ink: #0F172A;
-  --color-muted: #526071;
-  --color-line: #E2E8F0;
+  color-scheme: light;
 
-  /* Primary signal & state colors */
-  --color-signal: #0B7F70;
-  --color-signal-hover: #09685C;
-  --color-signal-soft: #E6F7F5;
-  --color-signal-border: #93D7CE;
+  /* Base canvas and text */
+  --background: #F6F7F9;
+  --foreground: #12141A;
 
-  /* Status badge colors */
-  --color-draft-text: #8A5A0B;
-  --color-draft-bg: #FDF6E2;
-  --color-approved-text: #0B7F70;
-  --color-approved-bg: #E6F7F5;
-  --color-rejected-text: #B4412E;
-  --color-rejected-bg: #FBE9E5;
+  /* Card and popover surfaces */
+  --card: #FFFFFF;
+  --card-foreground: #12141A;
+  --popover: #FFFFFF;
+  --popover-foreground: #12141A;
 
-  /* Radii */
-  --radius-control: 8px;
-  --radius-hero-panel: 16px;
-  --radius-pill: 9999px;
+  /* Primary brand and action colors */
+  --primary: #0B7F70;
+  --primary-foreground: #FFFFFF;
+  --primary-hover: #096A5D;
+  --primary-active: #07584D;
+
+  /* Neutral surfaces and text */
+  --secondary: #EEF0F4;
+  --secondary-foreground: #12141A;
+  --muted: #EEF0F4;
+  --muted-foreground: #5B6270;
+  --accent: #EEF0F4;
+  --accent-foreground: #12141A;
+
+  /* Destructive action color */
+  --destructive: #B4412E;
+  --destructive-foreground: #FFFFFF;
+
+  /* Borders and controls */
+  --border: #E2E5EB;
+  --input: #CBD0D9;
+  --ring: #0B7F70;
+
+  /* Sidebar tokens */
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #12141A;
+  --sidebar-primary: #0B7F70;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #EEF0F4;
+  --sidebar-accent-foreground: #12141A;
+  --sidebar-border: #E2E5EB;
+  --sidebar-ring: #0B7F70;
+  --sidebar-width: 232px;
+
+  /* Status and signal tokens */
+  --signal-soft: #E3F4F1;
+  --signal-line: #B9E2DB;
+  --status-draft-fg: #8A5A0B;
+  --status-draft-bg: #FBF1DC;
+  --status-danger-fg: #B4412E;
+  --status-danger-bg: #FBE9E5;
+
+  /* Radius: 8px for panels and dialogs (rounded-lg), 6px for controls (rounded-md) */
+  --radius: 0.5rem;
+
+  /* Floating elevation shadow for dialogs, popovers, dropdowns and toasts */
+  --elevation-shadow: 0 8px 24px rgba(18, 20, 26, 0.08);
 }
 
 @theme {
-  --color-paper: #F8FAFC;
-  --color-surface: #FFFFFF;
-  --color-ink: #0F172A;
-  --color-muted: #526071;
-  --color-line: #E2E8F0;
-  --color-signal: #0B7F70;
-  --color-signal-hover: #09685C;
-  --color-signal-soft: #E6F7F5;
-  --color-signal-border: #93D7CE;
-  --color-draft-text: #8A5A0B;
-  --color-draft-bg: #FDF6E2;
-  --color-approved-text: #0B7F70;
-  --color-approved-bg: #E6F7F5;
-  --color-rejected-text: #B4412E;
-  --color-rejected-bg: #FBE9E5;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
 
-  --font-geist: var(--font-geist), "Geist", sans-serif;
-  --font-manrope: var(--font-manrope), "Manrope", sans-serif;
-  --font-display: var(--font-geist), "Geist", sans-serif;
-  --font-body: var(--font-manrope), "Manrope", sans-serif;
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
 
-  --radius-control: 8px;
-  --radius-hero-panel: 16px;
-  --radius-pill: 9999px;
+  --color-signal-soft: var(--signal-soft);
+  --color-signal-line: var(--signal-line);
+  --color-status-draft-fg: var(--status-draft-fg);
+  --color-status-draft-bg: var(--status-draft-bg);
+  --color-status-danger-fg: var(--status-danger-fg);
+  --color-status-danger-bg: var(--status-danger-bg);
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --font-sans: var(--font-geist), "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: var(--font-manrope), "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-/* Base resets & typography rules */
+/* Base typography and body reset */
 html {
-  scroll-behavior: smooth;
+  color-scheme: light;
 }
 
 body {
-  background-color: var(--color-paper);
-  color: var(--color-ink);
-  font-family: var(--font-manrope), "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 16px;
-  line-height: 1.6;
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-dm-sans), "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 22px;
   text-align: left;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Headings use Geist with font-normal and tracking-tighter */
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  font-family: var(--font-geist), "Geist", sans-serif;
-  font-weight: 400;
-  letter-spacing: -0.05em;
-  line-height: 1.05;
-  color: var(--color-ink);
-  text-align: left;
+/* Display font class for page titles and larger headings */
+.font-display {
+  font-family: var(--font-bricolage), "Bricolage Grotesque", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
-/* Display H1 scale */
-.font-display-h1 {
-  font-family: var(--font-geist), "Geist", sans-serif;
-  font-size: clamp(2.5rem, 5.5vw, 4.25rem);
-  font-weight: 400;
-  letter-spacing: -0.05em;
-  line-height: 1.02;
+/* Explicit type scale classes */
+.text-caption {
+  font-size: 12px;
+  line-height: 16px;
 }
 
-/* Readable line length constraint for copy */
-.max-prose-copy {
-  max-width: 65ch;
+.text-table,
+.text-meta {
+  font-size: 13px;
+  line-height: 20px;
 }
 
-/* Accessible visible focus outline: 2px signal with offset */
+.text-body {
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.text-lead {
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.text-h3,
+h3 {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+}
+
+.text-h2,
+h2 {
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 600;
+}
+
+.text-title,
+h1 {
+  font-size: 32px;
+  line-height: 40px;
+  font-weight: 600;
+}
+
+/* Tabular figures for dates, numbers and counts */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Layout container constraints */
+.page-container {
+  max-width: 1120px;
+}
+
+.form-container {
+  max-width: 720px;
+}
+
+/* Visible accessible focus */
 :focus-visible {
-  outline: 2px solid var(--color-signal);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
-/* Elevated glass and card shadows */
-.hero-panel-shadow {
-  box-shadow: 0 20px 40px -15px rgba(15, 23, 42, 0.08), 0 1px 3px 0 rgba(15, 23, 42, 0.04);
+/* Only elevated floating surfaces get box-shadow */
+[data-slot="popover-content"],
+[data-slot="dropdown-menu-content"],
+[data-slot="dialog-content"],
+[data-slot="alert-dialog-content"],
+[data-slot="sheet-content"] {
+  box-shadow: 0 8px 24px rgba(18, 20, 26, 0.08) !important;
 }
 
-.card-subtle-shadow {
-  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.04), 0 2px 6px -1px rgba(15, 23, 42, 0.02);
+/* Motion: 120ms ease-out for hover and focus, 200ms for menus and dialogs */
+button,
+a,
+input,
+select,
+textarea {
+  transition: background-color 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out, outline-color 120ms ease-out;
 }
 
-.card-hover-lift {
-  transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+[data-slot="popover-content"],
+[data-slot="dropdown-menu-content"],
+[data-slot="dialog-content"],
+[data-slot="alert-dialog-content"],
+[data-slot="sheet-content"],
+[data-slot="drawer-content"] {
+  transition-duration: 200ms !important;
 }
 
-.card-hover-lift:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 30px -8px rgba(15, 23, 42, 0.08);
-  border-color: rgba(11, 127, 112, 0.3);
-}
-
-/* Subtle pulse dot animation */
-@keyframes pulseGlow {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.6;
-    transform: scale(1.15);
-  }
-}
-
-.animate-pulse-glow {
-  animation: pulseGlow 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-/* Respect user motion preference */
+/* Motion preference override */
 @media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-  .card-hover-lift,
-  .animate-pulse-glow {
-    transition: none !important;
-    animation: none !important;
-    transform: none !important;
+
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
