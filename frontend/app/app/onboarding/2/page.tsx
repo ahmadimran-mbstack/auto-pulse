@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getProfile, saveStep2, ApiClientError } from "@/lib/api";
 import { OnboardingShell, OnboardingSkeleton } from "../components/OnboardingShell";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import type { ToneChoice } from "@/types/profile";
 
 interface ToneOption {
@@ -177,12 +180,12 @@ export default function OnboardingStep2Page() {
       isSaving={isSaving}
       errorMessage={generalError}
     >
-      {/* Tone radio group */}
+      {/* Tone radio options */}
       <fieldset className="space-y-3 text-left">
-        <legend className="text-sm font-medium text-ink mb-1">
-          Writing tone <span className="text-signal">*</span>
+        <legend className="text-body font-medium text-foreground mb-1">
+          Writing tone <span className="text-primary">*</span>
         </legend>
-        <p id="tone-hint" className="text-xs text-muted mb-3">
+        <p id="tone-hint" className="text-caption text-muted-foreground mb-3">
           Choose the default voice that best matches your target audience.
         </p>
 
@@ -197,10 +200,10 @@ export default function OnboardingStep2Page() {
               <label
                 key={opt.value}
                 htmlFor={`tone-${opt.value}`}
-                className={`flex items-start gap-3.5 p-3.5 rounded-[10px] border cursor-pointer transition-all duration-150 ${
+                className={`flex items-start gap-3 p-3.5 rounded-md border cursor-pointer transition-colors ${
                   isSelected
-                    ? "border-signal bg-signal-soft/30 shadow-xs"
-                    : "border-line bg-surface hover:border-signal/40 hover:bg-paper"
+                    ? "border-primary bg-signal-soft/40"
+                    : "border-border bg-card hover:bg-secondary/40"
                 }`}
               >
                 <input
@@ -210,18 +213,18 @@ export default function OnboardingStep2Page() {
                   value={opt.value}
                   checked={isSelected}
                   onChange={() => setTone(opt.value)}
-                  className="mt-1 h-4 w-4 text-signal border-line focus:ring-signal focus:ring-2 cursor-pointer accent-[#0B7F70]"
+                  className="mt-1 size-4 text-primary border-border focus:ring-ring"
                 />
                 <div className="space-y-1 text-left flex-1">
-                  <div className="text-sm font-medium text-ink flex items-center justify-between">
+                  <div className="text-body font-medium text-foreground flex items-center justify-between">
                     <span>{opt.label}</span>
                     {isSelected && (
-                      <span className="text-[11px] font-mono font-medium text-signal bg-surface px-2 py-0.5 rounded-full border border-signal/20">
+                      <Badge variant="approved">
                         Selected
-                      </span>
+                      </Badge>
                     )}
                   </div>
-                  <p className="text-xs text-muted leading-relaxed font-sans italic">
+                  <p className="text-caption text-muted-foreground leading-relaxed italic">
                     {opt.example}
                   </p>
                 </div>
@@ -231,7 +234,7 @@ export default function OnboardingStep2Page() {
         </div>
 
         {fieldErrors.tone && (
-          <p role="alert" className="text-xs text-rejected-text pt-1">
+          <p role="alert" className="text-caption text-destructive pt-1">
             {fieldErrors.tone}
           </p>
         )}
@@ -240,21 +243,21 @@ export default function OnboardingStep2Page() {
       {/* Voice notes (optional) */}
       <div className="space-y-1.5 text-left pt-2">
         <div className="flex items-center justify-between">
-          <label htmlFor="voice_notes" className="block text-sm font-medium text-ink">
-            Notes about your voice <span className="text-muted font-normal">(optional)</span>
-          </label>
+          <Label htmlFor="voice_notes">
+            Notes about your voice <span className="text-muted-foreground font-normal">(optional)</span>
+          </Label>
           <span
-            className={`text-xs font-mono ${
-              voiceNotes.length > 500 ? "text-rejected-text" : "text-muted"
+            className={`text-caption font-mono tabular-nums ${
+              voiceNotes.length > 500 ? "text-destructive" : "text-muted-foreground"
             }`}
           >
             {voiceNotes.length} / 500 characters
           </span>
         </div>
-        <p id="voice_notes-hint" className="text-xs text-muted">
+        <p id="voice_notes-hint" className="text-caption text-muted-foreground">
           Anything we should always or never do.
         </p>
-        <textarea
+        <Textarea
           id="voice_notes"
           ref={voiceNotesRef}
           rows={3}
@@ -265,12 +268,10 @@ export default function OnboardingStep2Page() {
           aria-describedby={`voice_notes-hint ${
             fieldErrors.voice_notes ? "voice_notes-error" : ""
           }`.trim()}
-          className={`w-full p-3 rounded-[8px] border bg-surface text-sm text-ink placeholder:text-muted/60 transition-colors focus:outline-2 focus:outline-signal focus:outline-offset-2 resize-y ${
-            fieldErrors.voice_notes ? "border-rejected-text" : "border-line"
-          }`}
+          className={fieldErrors.voice_notes ? "border-destructive" : ""}
         />
         {fieldErrors.voice_notes && (
-          <p id="voice_notes-error" role="alert" className="text-xs text-rejected-text">
+          <p id="voice_notes-error" role="alert" className="text-caption text-destructive">
             {fieldErrors.voice_notes}
           </p>
         )}
@@ -279,21 +280,21 @@ export default function OnboardingStep2Page() {
       {/* Sample posts (optional) */}
       <div className="space-y-1.5 text-left pt-2">
         <div className="flex items-center justify-between">
-          <label htmlFor="sample_posts" className="block text-sm font-medium text-ink">
-            Sample posts <span className="text-muted font-normal">(optional)</span>
-          </label>
+          <Label htmlFor="sample_posts">
+            Sample posts <span className="text-muted-foreground font-normal">(optional)</span>
+          </Label>
           <span
-            className={`text-xs font-mono ${
-              samplePosts.length > 3000 ? "text-rejected-text" : "text-muted"
+            className={`text-caption font-mono tabular-nums ${
+              samplePosts.length > 3000 ? "text-destructive" : "text-muted-foreground"
             }`}
           >
             {samplePosts.length} / 3000 characters
           </span>
         </div>
-        <p id="sample_posts-hint" className="text-xs text-muted">
+        <p id="sample_posts-hint" className="text-caption text-muted-foreground">
           Paste one to three of your past posts so we can match your style.
         </p>
-        <textarea
+        <Textarea
           id="sample_posts"
           ref={samplePostsRef}
           rows={6}
@@ -304,12 +305,10 @@ export default function OnboardingStep2Page() {
           aria-describedby={`sample_posts-hint ${
             fieldErrors.sample_posts ? "sample_posts-error" : ""
           }`.trim()}
-          className={`w-full p-3 rounded-[8px] border bg-surface text-sm text-ink placeholder:text-muted/60 transition-colors focus:outline-2 focus:outline-signal focus:outline-offset-2 resize-y ${
-            fieldErrors.sample_posts ? "border-rejected-text" : "border-line"
-          }`}
+          className={fieldErrors.sample_posts ? "border-destructive" : ""}
         />
         {fieldErrors.sample_posts && (
-          <p id="sample_posts-error" role="alert" className="text-xs text-rejected-text">
+          <p id="sample_posts-error" role="alert" className="text-caption text-destructive">
             {fieldErrors.sample_posts}
           </p>
         )}

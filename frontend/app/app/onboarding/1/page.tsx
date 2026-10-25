@@ -4,7 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getProfile, saveStep1, ApiClientError } from "@/lib/api";
 import { OnboardingShell, OnboardingSkeleton } from "../components/OnboardingShell";
-import { TagInput } from "../components/TagInput";
+import { TagInput } from "@/components/app/TagInput";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 
 export default function OnboardingStep1Page() {
   const router = useRouter();
@@ -163,10 +166,10 @@ export default function OnboardingStep1Page() {
     >
       {/* Role or title */}
       <div className="space-y-1.5 text-left">
-        <label htmlFor="role_title" className="block text-sm font-medium text-ink">
-          Role or title <span className="text-muted font-normal">(optional)</span>
-        </label>
-        <input
+        <Label htmlFor="role_title">
+          Role or title <span className="text-muted-foreground font-normal">(optional)</span>
+        </Label>
+        <Input
           id="role_title"
           ref={roleTitleRef}
           type="text"
@@ -175,12 +178,10 @@ export default function OnboardingStep1Page() {
           onChange={(e) => setRoleTitle(e.target.value)}
           placeholder="For example, VP of Engineering or Head of Growth"
           aria-describedby={fieldErrors.role_title ? "role_title-error" : undefined}
-          className={`w-full h-10 px-3 rounded-[8px] border bg-surface text-sm text-ink placeholder:text-muted/60 transition-colors focus:outline-2 focus:outline-signal focus:outline-offset-2 ${
-            fieldErrors.role_title ? "border-rejected-text" : "border-line"
-          }`}
+          className={fieldErrors.role_title ? "border-destructive" : ""}
         />
         {fieldErrors.role_title && (
-          <p id="role_title-error" role="alert" className="text-xs text-rejected-text">
+          <p id="role_title-error" role="alert" className="text-caption text-destructive">
             {fieldErrors.role_title}
           </p>
         )}
@@ -188,10 +189,10 @@ export default function OnboardingStep1Page() {
 
       {/* Industry */}
       <div className="space-y-1.5 text-left">
-        <label htmlFor="industry" className="block text-sm font-medium text-ink">
-          Industry <span className="text-muted font-normal">(optional)</span>
-        </label>
-        <input
+        <Label htmlFor="industry">
+          Industry <span className="text-muted-foreground font-normal">(optional)</span>
+        </Label>
+        <Input
           id="industry"
           ref={industryRef}
           type="text"
@@ -200,12 +201,10 @@ export default function OnboardingStep1Page() {
           onChange={(e) => setIndustry(e.target.value)}
           placeholder="For example, Enterprise SaaS, FinTech, or AI"
           aria-describedby={fieldErrors.industry ? "industry-error" : undefined}
-          className={`w-full h-10 px-3 rounded-[8px] border bg-surface text-sm text-ink placeholder:text-muted/60 transition-colors focus:outline-2 focus:outline-signal focus:outline-offset-2 ${
-            fieldErrors.industry ? "border-rejected-text" : "border-line"
-          }`}
+          className={fieldErrors.industry ? "border-destructive" : ""}
         />
         {fieldErrors.industry && (
-          <p id="industry-error" role="alert" className="text-xs text-rejected-text">
+          <p id="industry-error" role="alert" className="text-caption text-destructive">
             {fieldErrors.industry}
           </p>
         )}
@@ -214,21 +213,21 @@ export default function OnboardingStep1Page() {
       {/* Niche description (required) */}
       <div className="space-y-1.5 text-left">
         <div className="flex items-center justify-between">
-          <label htmlFor="niche_description" className="block text-sm font-medium text-ink">
-            Niche description <span className="text-signal">*</span>
-          </label>
+          <Label htmlFor="niche_description">
+            Niche description <span className="text-primary">*</span>
+          </Label>
           <span
-            className={`text-xs font-mono ${
-              nicheDescription.length > 500 ? "text-rejected-text" : "text-muted"
+            className={`text-caption font-mono tabular-nums ${
+              nicheDescription.length > 500 ? "text-destructive" : "text-muted-foreground"
             }`}
           >
             {nicheDescription.length} / 500 characters
           </span>
         </div>
-        <p id="niche_description-hint" className="text-xs text-muted">
+        <p id="niche_description-hint" className="text-caption text-muted-foreground">
           Two or three sentences about what you want to be known for.
         </p>
-        <textarea
+        <Textarea
           id="niche_description"
           ref={nicheRef}
           rows={4}
@@ -238,12 +237,10 @@ export default function OnboardingStep1Page() {
           aria-describedby={`niche_description-hint ${
             fieldErrors.niche_description ? "niche_description-error" : ""
           }`.trim()}
-          className={`w-full p-3 rounded-[8px] border bg-surface text-sm text-ink placeholder:text-muted/60 transition-colors focus:outline-2 focus:outline-signal focus:outline-offset-2 resize-y ${
-            fieldErrors.niche_description ? "border-rejected-text" : "border-line"
-          }`}
+          className={fieldErrors.niche_description ? "border-destructive" : ""}
         />
         {fieldErrors.niche_description && (
-          <p id="niche_description-error" role="alert" className="text-xs text-rejected-text">
+          <p id="niche_description-error" role="alert" className="text-caption text-destructive">
             {fieldErrors.niche_description}
           </p>
         )}
@@ -251,13 +248,13 @@ export default function OnboardingStep1Page() {
 
       {/* Audience */}
       <div className="space-y-1.5 text-left">
-        <label htmlFor="audience" className="block text-sm font-medium text-ink">
-          Audience <span className="text-muted font-normal">(optional)</span>
-        </label>
-        <p id="audience-hint" className="text-xs text-muted">
+        <Label htmlFor="audience">
+          Audience <span className="text-muted-foreground font-normal">(optional)</span>
+        </Label>
+        <p id="audience-hint" className="text-caption text-muted-foreground">
           Who do you want to reach?
         </p>
-        <input
+        <Input
           id="audience"
           ref={audienceRef}
           type="text"
@@ -268,38 +265,50 @@ export default function OnboardingStep1Page() {
           aria-describedby={`audience-hint ${
             fieldErrors.audience ? "audience-error" : ""
           }`.trim()}
-          className={`w-full h-10 px-3 rounded-[8px] border bg-surface text-sm text-ink placeholder:text-muted/60 transition-colors focus:outline-2 focus:outline-signal focus:outline-offset-2 ${
-            fieldErrors.audience ? "border-rejected-text" : "border-line"
-          }`}
+          className={fieldErrors.audience ? "border-destructive" : ""}
         />
         {fieldErrors.audience && (
-          <p id="audience-error" role="alert" className="text-xs text-rejected-text">
+          <p id="audience-error" role="alert" className="text-caption text-destructive">
             {fieldErrors.audience}
           </p>
         )}
       </div>
 
       {/* Topics to cover */}
-      <TagInput
-        id="topics_include"
-        label="Topics to cover"
-        hint="Key concepts or themes to feature in your posts (up to 10)."
-        tags={topicsInclude}
-        onChange={setTopicsInclude}
-        error={fieldErrors.topics_include}
-        placeholder="Add topic (e.g. System Design) and press Enter"
-      />
+      <div className="space-y-1.5 text-left">
+        <Label htmlFor="topics_include">Topics to cover</Label>
+        <p className="text-caption text-muted-foreground">
+          Key concepts or themes to feature in your posts (up to 10).
+        </p>
+        <TagInput
+          tags={topicsInclude}
+          onChange={setTopicsInclude}
+          placeholder="Add topic (e.g. System Design) and press Enter"
+        />
+        {fieldErrors.topics_include && (
+          <p role="alert" className="text-caption text-destructive">
+            {fieldErrors.topics_include}
+          </p>
+        )}
+      </div>
 
       {/* Topics to avoid */}
-      <TagInput
-        id="topics_avoid"
-        label="Topics to avoid"
-        hint="Subjects or buzzwords you prefer not to discuss (up to 10)."
-        tags={topicsAvoid}
-        onChange={setTopicsAvoid}
-        error={fieldErrors.topics_avoid}
-        placeholder="Add topic (e.g. Unverified Rumors) and press Enter"
-      />
+      <div className="space-y-1.5 text-left">
+        <Label htmlFor="topics_avoid">Topics to avoid</Label>
+        <p className="text-caption text-muted-foreground">
+          Subjects or buzzwords you prefer not to discuss (up to 10).
+        </p>
+        <TagInput
+          tags={topicsAvoid}
+          onChange={setTopicsAvoid}
+          placeholder="Add topic (e.g. Unverified Rumors) and press Enter"
+        />
+        {fieldErrors.topics_avoid && (
+          <p role="alert" className="text-caption text-destructive">
+            {fieldErrors.topics_avoid}
+          </p>
+        )}
+      </div>
     </OnboardingShell>
   );
 }

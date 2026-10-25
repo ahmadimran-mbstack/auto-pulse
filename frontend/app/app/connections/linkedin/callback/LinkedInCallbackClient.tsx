@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { callbackLinkedInConnection, startLinkedInConnection } from "@/lib/api";
 import { parseCallbackParams } from "@/lib/connections-state";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { AlertCircle, Loader2, XCircle } from "lucide-react";
 
 type CallbackStatus =
   | "connecting"
@@ -90,16 +93,16 @@ export function LinkedInCallbackClient() {
   };
 
   return (
-    <div className="w-full max-w-[480px] mx-auto p-8 rounded-[16px] bg-surface border border-line text-left shadow-xs space-y-6">
+    <Card className="w-full max-w-md mx-auto p-8 text-left space-y-6">
       {/* 1. Loading State */}
       {status === "connecting" && (
         <div className="space-y-4 py-6 text-center" role="status" aria-live="polite">
-          <div className="w-10 h-10 mx-auto rounded-full border-2 border-line border-t-signal animate-spin" />
+          <Loader2 className="size-10 mx-auto animate-spin text-primary" strokeWidth={1.5} />
           <div className="space-y-1">
-            <h1 className="text-xl font-geist font-normal text-ink">
+            <h1 className="text-h3 font-display text-foreground">
               Connecting your LinkedIn account
             </h1>
-            <p className="text-xs text-muted leading-relaxed">
+            <p className="text-caption text-muted-foreground leading-relaxed">
               Verifying permissions and securely linking your profile to AutoPulse.
             </p>
           </div>
@@ -109,40 +112,30 @@ export function LinkedInCallbackClient() {
       {/* 2. Cancelled State */}
       {status === "cancelled" && (
         <div className="space-y-5" role="alert">
-          <div className="w-10 h-10 rounded-[10px] bg-paper border border-line flex items-center justify-center text-muted">
-            <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
-              <path
-                fillRule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z"
-                clipRule="evenodd"
-              />
-            </svg>
+          <div className="size-10 rounded-md bg-secondary flex items-center justify-center text-muted-foreground">
+            <XCircle className="size-5" strokeWidth={1.5} />
           </div>
 
           <div className="space-y-1.5">
-            <h1 className="text-xl font-geist font-normal text-ink">
+            <h1 className="text-h3 font-display text-foreground">
               LinkedIn connection was cancelled
             </h1>
-            <p className="text-xs text-muted leading-relaxed">
+            <p className="text-caption text-muted-foreground leading-relaxed">
               No changes were made to your AutoPulse account. You can reconnect whenever you are ready.
             </p>
           </div>
 
           <div className="pt-2 flex flex-col sm:flex-row gap-2.5">
-            <button
+            <Button
               type="button"
               onClick={handleTryAgain}
               disabled={isRestarting}
-              className="px-4 py-2.5 rounded-[8px] bg-signal text-surface text-xs font-medium hover:bg-signal-hover transition-colors text-center disabled:opacity-60 cursor-pointer shadow-xs focus:outline-none focus:ring-2 focus:ring-signal"
             >
               {isRestarting ? "Opening LinkedIn..." : "Try again"}
-            </button>
-            <Link
-              href="/app"
-              className="px-4 py-2.5 rounded-[8px] border border-line bg-surface text-ink text-xs font-medium hover:bg-paper transition-colors text-center cursor-pointer focus:outline-none focus:ring-2 focus:ring-line"
-            >
-              Back to dashboard
-            </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/app">Back to dashboard</Link>
+            </Button>
           </div>
         </div>
       )}
@@ -150,32 +143,23 @@ export function LinkedInCallbackClient() {
       {/* 3. Missing Parameters State */}
       {status === "missing_params" && (
         <div className="space-y-5" role="alert">
-          <div className="w-10 h-10 rounded-[10px] bg-paper border border-line flex items-center justify-center text-muted">
-            <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
-              <path
-                fillRule="evenodd"
-                d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                clipRule="evenodd"
-              />
-            </svg>
+          <div className="size-10 rounded-md bg-secondary flex items-center justify-center text-muted-foreground">
+            <AlertCircle className="size-5" strokeWidth={1.5} />
           </div>
 
           <div className="space-y-1.5">
-            <h1 className="text-xl font-geist font-normal text-ink">
+            <h1 className="text-h3 font-display text-foreground">
               Connection link not found
             </h1>
-            <p className="text-xs text-muted leading-relaxed">
+            <p className="text-caption text-muted-foreground leading-relaxed">
               This page is for finishing a LinkedIn connection. Go back to the dashboard to start.
             </p>
           </div>
 
           <div className="pt-2">
-            <Link
-              href="/app"
-              className="inline-block px-4 py-2.5 rounded-[8px] bg-signal text-surface text-xs font-medium hover:bg-signal-hover transition-colors text-center cursor-pointer shadow-xs focus:outline-none focus:ring-2 focus:ring-signal"
-            >
-              Back to dashboard
-            </Link>
+            <Button asChild>
+              <Link href="/app">Back to dashboard</Link>
+            </Button>
           </div>
         </div>
       )}
@@ -183,43 +167,33 @@ export function LinkedInCallbackClient() {
       {/* 4. Error State */}
       {status === "error" && (
         <div className="space-y-5" role="alert">
-          <div className="w-10 h-10 rounded-[10px] bg-rejected-bg border border-rose-200 flex items-center justify-center text-rejected-text">
-            <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
-              <path
-                fillRule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z"
-                clipRule="evenodd"
-              />
-            </svg>
+          <div className="size-10 rounded-md bg-status-danger-bg border border-destructive/20 flex items-center justify-center text-destructive">
+            <AlertCircle className="size-5" strokeWidth={1.5} />
           </div>
 
           <div className="space-y-1.5">
-            <h1 className="text-xl font-geist font-normal text-ink">
+            <h1 className="text-h3 font-display text-foreground">
               Connection unsuccessful
             </h1>
-            <p className="text-xs text-muted leading-relaxed">
+            <p className="text-caption text-muted-foreground leading-relaxed">
               {errorMessage || "An unexpected error occurred while connecting. Please try again."}
             </p>
           </div>
 
           <div className="pt-2 flex flex-col sm:flex-row gap-2.5">
-            <button
+            <Button
               type="button"
               onClick={handleTryAgain}
               disabled={isRestarting}
-              className="px-4 py-2.5 rounded-[8px] bg-signal text-surface text-xs font-medium hover:bg-signal-hover transition-colors text-center disabled:opacity-60 cursor-pointer shadow-xs focus:outline-none focus:ring-2 focus:ring-signal"
             >
               {isRestarting ? "Opening LinkedIn..." : "Try again"}
-            </button>
-            <Link
-              href="/app"
-              className="px-4 py-2.5 rounded-[8px] border border-line bg-surface text-ink text-xs font-medium hover:bg-paper transition-colors text-center cursor-pointer focus:outline-none focus:ring-2 focus:ring-line"
-            >
-              Back to dashboard
-            </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/app">Back to dashboard</Link>
+            </Button>
           </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 }

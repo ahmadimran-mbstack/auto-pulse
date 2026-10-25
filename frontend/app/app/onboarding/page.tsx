@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getProfile } from "@/lib/api";
 import { OnboardingSkeleton } from "./components/OnboardingShell";
+import { ErrorState } from "@/components/app/ErrorState";
+import { Card } from "@/components/ui/card";
 
 // Entry point for /app/onboarding that resumes at the user's next unfinished step
 export default function OnboardingIndexPage() {
@@ -43,18 +45,13 @@ export default function OnboardingIndexPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6 bg-paper text-ink">
-        <div className="p-6 rounded-[12px] bg-surface border border-line max-w-md w-full text-left space-y-4">
-          <h2 className="text-xl font-geist font-normal text-ink">Connection issue</h2>
-          <p className="text-sm text-muted">{error}</p>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 rounded-[8px] bg-signal text-surface text-sm font-medium hover:bg-signal-hover transition-colors cursor-pointer"
-          >
-            Try again
-          </button>
-        </div>
+      <div className="min-h-screen flex items-center justify-center p-6 bg-background text-foreground">
+        <Card className="p-6 max-w-md w-full">
+          <ErrorState
+            message={error}
+            onRetry={() => window.location.reload()}
+          />
+        </Card>
       </div>
     );
   }

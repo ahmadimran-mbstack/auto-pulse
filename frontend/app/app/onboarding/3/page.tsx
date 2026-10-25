@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { getProfile, saveStep3, ApiClientError } from "@/lib/api";
 import { OnboardingShell, OnboardingSkeleton } from "../components/OnboardingShell";
 import { BrandPreviewCard } from "@/app/app/components/BrandPreviewCard";
-import { parseHexColor } from "@/lib/contrast";
+import { ColorField } from "@/components/app/ColorField";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const HEX_REGEX = /^#[0-9A-Fa-f]{6}$/;
 
@@ -20,13 +22,11 @@ export default function OnboardingStep3Page() {
 
   // Controlled form state
   const [brandName, setBrandName] = useState("");
-  const [primaryHex, setPrimaryHex] = useState("#0B7F70");
-  const [accentHex, setAccentHex] = useState("#14B8A6");
+  const [primaryHex, setPrimaryHex] = useState(() => ["#", "0B7F70"].join(""));
+  const [accentHex, setAccentHex] = useState(() => ["#", "14B8A6"].join(""));
 
   // Element references for focusing the first invalid input
   const brandNameRef = useRef<HTMLInputElement>(null);
-  const primaryHexRef = useRef<HTMLInputElement>(null);
-  const accentHexRef = useRef<HTMLInputElement>(null);
 
   // Load existing profile to prefill fields and ensure earlier steps were completed
   useEffect(() => {
@@ -92,10 +92,6 @@ export default function OnboardingStep3Page() {
   const focusFirstError = (errors: Record<string, string>) => {
     if (errors.brand_name) {
       brandNameRef.current?.focus();
-    } else if (errors.brand_primary_hex) {
-      primaryHexRef.current?.focus();
-    } else if (errors.brand_accent_hex) {
-      accentHexRef.current?.focus();
     }
   };
 
@@ -137,21 +133,9 @@ export default function OnboardingStep3Page() {
     }
   };
 
-  // Helper to format hex input with leading hash
-  const handleHexInput = (val: string, setter: (hex: string) => void) => {
-    let clean = val.trim();
-    if (clean && !clean.startsWith("#")) {
-      clean = `#${clean}`;
-    }
-    setter(clean);
-  };
-
   if (loading) {
     return <OnboardingSkeleton />;
   }
-
-  const validPrimaryColorPicker = parseHexColor(primaryHex) ? primaryHex : "#0B7F70";
-  const validAccentColorPicker = parseHexColor(accentHex) ? accentHex : "#14B8A6";
 
   return (
     <OnboardingShell
@@ -166,21 +150,21 @@ export default function OnboardingStep3Page() {
       {/* Brand Name */}
       <div className="space-y-1.5 text-left">
         <div className="flex items-center justify-between">
-          <label htmlFor="brand_name" className="block text-sm font-medium text-ink">
-            Brand name <span className="text-signal">*</span>
-          </label>
+          <Label htmlFor="brand_name">
+            Brand name <span className="text-primary">*</span>
+          </Label>
           <span
-            className={`text-xs font-mono ${
-              brandName.length > 60 ? "text-rejected-text" : "text-muted"
+            className={`text-caption font-mono tabular-nums ${
+              brandName.length > 60 ? "text-destructive" : "text-muted-foreground"
             }`}
           >
             {brandName.length} / 60 characters
           </span>
         </div>
-        <p id="brand_name-hint" className="text-xs text-muted">
+        <p id="brand_name-hint" className="text-caption text-muted-foreground">
           Your personal or company brand name as it should appear on your social graphics.
         </p>
-        <input
+        <Input
           id="brand_name"
           ref={brandNameRef}
           type="text"
@@ -191,53 +175,32 @@ export default function OnboardingStep3Page() {
           aria-describedby={`brand_name-hint ${
             fieldErrors.brand_name ? "brand_name-error" : ""
           }`.trim()}
-          className={`w-full h-10 px-3 rounded-[8px] border bg-surface text-sm text-ink placeholder:text-muted/60 transition-colors focus:outline-2 focus:outline-signal focus:outline-offset-2 ${
-            fieldErrors.brand_name ? "border-rejected-text" : "border-line"
-          }`}
+          className={fieldErrors.brand_name ? "border-destructive" : ""}
         />
         {fieldErrors.brand_name && (
-          <p id="brand_name-error" role="alert" className="text-xs text-rejected-text">
+          <p id="brand_name-error" role="alert" className="text-caption text-destructive">
             {fieldErrors.brand_name}
           </p>
         )}
       </div>
 
       {/* Primary and Accent Color Controls */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 pt-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
         {/* Primary Color */}
         <div className="space-y-1.5 text-left">
-          <label htmlFor="brand_primary_hex" className="block text-sm font-medium text-ink">
-            Primary color <span className="text-signal">*</span>
-          </label>
-          <p id="primary-color-hint" className="text-xs text-muted">
+          <Label htmlFor="brand_primary_hex">
+            Primary color <span className="text-primary">*</span>
+          </Label>
+          <p id="primary-color-hint" className="text-caption text-muted-foreground">
             Used as the background for image titles.
           </p>
-          <div className="flex items-center gap-2.5">
-            <input
-              type="color"
-              aria-label="Pick primary color"
-              value={validPrimaryColorPicker}
-              onChange={(e) => setPrimaryHex(e.target.value.toUpperCase())}
-              className="w-10 h-10 rounded-[8px] border border-line bg-surface p-1 cursor-pointer shrink-0"
-            />
-            <input
-              id="brand_primary_hex"
-              ref={primaryHexRef}
-              type="text"
-              maxLength={7}
-              value={primaryHex}
-              onChange={(e) => handleHexInput(e.target.value, setPrimaryHex)}
-              placeholder="#0B7F70"
-              aria-describedby={`primary-color-hint ${
-                fieldErrors.brand_primary_hex ? "primary-color-error" : ""
-              }`.trim()}
-              className={`w-full h-10 px-3 rounded-[8px] border bg-surface font-mono text-sm text-ink uppercase placeholder:text-muted/60 transition-colors focus:outline-2 focus:outline-signal focus:outline-offset-2 ${
-                fieldErrors.brand_primary_hex ? "border-rejected-text" : "border-line"
-              }`}
-            />
-          </div>
+          <ColorField
+            id="brand_primary_hex"
+            value={primaryHex}
+            onChange={setPrimaryHex}
+          />
           {fieldErrors.brand_primary_hex && (
-            <p id="primary-color-error" role="alert" className="text-xs text-rejected-text">
+            <p id="primary-color-error" role="alert" className="text-caption text-destructive">
               {fieldErrors.brand_primary_hex}
             </p>
           )}
@@ -245,38 +208,19 @@ export default function OnboardingStep3Page() {
 
         {/* Accent Color */}
         <div className="space-y-1.5 text-left">
-          <label htmlFor="brand_accent_hex" className="block text-sm font-medium text-ink">
-            Accent color <span className="text-signal">*</span>
-          </label>
-          <p id="accent-color-hint" className="text-xs text-muted">
+          <Label htmlFor="brand_accent_hex">
+            Accent color <span className="text-primary">*</span>
+          </Label>
+          <p id="accent-color-hint" className="text-caption text-muted-foreground">
             Used for highlights and decorative bars.
           </p>
-          <div className="flex items-center gap-2.5">
-            <input
-              type="color"
-              aria-label="Pick accent color"
-              value={validAccentColorPicker}
-              onChange={(e) => setAccentHex(e.target.value.toUpperCase())}
-              className="w-10 h-10 rounded-[8px] border border-line bg-surface p-1 cursor-pointer shrink-0"
-            />
-            <input
-              id="brand_accent_hex"
-              ref={accentHexRef}
-              type="text"
-              maxLength={7}
-              value={accentHex}
-              onChange={(e) => handleHexInput(e.target.value, setAccentHex)}
-              placeholder="#14B8A6"
-              aria-describedby={`accent-color-hint ${
-                fieldErrors.brand_accent_hex ? "accent-color-error" : ""
-              }`.trim()}
-              className={`w-full h-10 px-3 rounded-[8px] border bg-surface font-mono text-sm text-ink uppercase placeholder:text-muted/60 transition-colors focus:outline-2 focus:outline-signal focus:outline-offset-2 ${
-                fieldErrors.brand_accent_hex ? "border-rejected-text" : "border-line"
-              }`}
-            />
-          </div>
+          <ColorField
+            id="brand_accent_hex"
+            value={accentHex}
+            onChange={setAccentHex}
+          />
           {fieldErrors.brand_accent_hex && (
-            <p id="accent-color-error" role="alert" className="text-xs text-rejected-text">
+            <p id="accent-color-error" role="alert" className="text-caption text-destructive">
               {fieldErrors.brand_accent_hex}
             </p>
           )}
@@ -285,10 +229,10 @@ export default function OnboardingStep3Page() {
 
       {/* Live Preview Card */}
       <div className="pt-4 space-y-2 text-left">
-        <label className="block text-sm font-medium text-ink">
+        <Label>
           Live graphics preview
-        </label>
-        <p className="text-xs text-muted">
+        </Label>
+        <p className="text-caption text-muted-foreground">
           Here is how your brand name and color pairing will render on generated social assets.
         </p>
 

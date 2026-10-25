@@ -1,28 +1,57 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import * as React from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import {
-  getPost,
-  fetchPostImageBlob,
-  submitPostDecision,
-  retryPostPublication,
-  ApiClientError,
-} from "@/lib/api";
+  ExternalLinkIcon,
+  Loader2Icon,
+  AlertCircleIcon,
+  CheckCircle2Icon,
+} from "lucide-react";
 import {
-  getStatusChipConfig,
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { PageHeader } from "@/components/app/PageHeader";
+import { StatusBadge } from "@/components/app/StatusBadge";
+import { PostPreview } from "@/app/components/PostPreview";
+import { PostDetailSkeleton } from "@/components/app/PostDetailSkeleton";
+import { ErrorState } from "@/components/app/ErrorState";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useUser } from "@/components/providers/user-provider";
+import {
+  usePostDetailQuery,
+  usePostImageQuery,
+  useSubmitDecisionMutation,
+  useRetryPublicationMutation,
+} from "@/lib/queries";
+import {
   formatRunDate,
   formatDecisionDeadline,
   getPublicationErrorInfo,
 } from "@/lib/posts";
-import { PostPreview } from "@/app/components/PostPreview";
-import type { PostDetail } from "@/types/posts";
 
 interface PostDetailClientProps {
   id: string;
 }
 
-// Extracts clean hostname from URL without leading www
+// Extracts clean hostname without leading www
 function extractHostname(urlStr: string): string {
   try {
     const parsed = new URL(urlStr);
@@ -33,567 +62,449 @@ function extractHostname(urlStr: string): string {
 }
 
 export function PostDetailClient({ id }: PostDetailClientProps) {
-  const [post, setPost] = useState<PostDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [is404, setIs404] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { user } = useUser();
 
-  // Blob image state
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [imageLoading, setImageLoading] = useState(true);
-  const [imageError, setImageError] = useState(false);
+  // Load post details and 480px branded image in parallel
+  const {
+    data: post,
+    isLoading: postLoading,
+    isError: postError,
+    error,
+    refetch,
+  } = usePostDetailQuery(user.id, id);
 
-  // Action states for decisions and retries
-  const [decisionSubmitting, setDecisionSubmitting] = useState<"approved" | "rejected" | null>(null);
-  const [decisionError, setDecisionError] = useState<string | null>(null);
-  const [confirmedNotPosted, setConfirmedNotPosted] = useState(false);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [retrySubmitting, setRetrySubmitting] = useState(false);
-  const [retryError, setRetryError] = useState<string | null>(null);
+  const {
+    data: imageBlob,
+    isLoading: imageLoading,
+    isError: imageError,
+  } = usePostImageQuery(user.id, id, 480);
 
-  // Reloads full post record from backend
-  const reloadPost = useCallback(async () => {
-    try {
-      const fetched = await getPost(id);
-      setPost(fetched);
-    } catch (err) {
-      console.error("Failed to reload post:", err);
-    }
-  }, [id]);
+  // Convert image blob to local object URL
+  const [imageUrl, setImageUrl] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!imageBlob) return;
 
-  // Fetch post details and post image concurrently for fast loading
-  useEffect(() => {
-    let isMounted = true;
-    let activeUrl: string | null = null;
-
-    async function loadData() {
-      setLoading(true);
-      setError(null);
-      setIs404(false);
-      setImageLoading(true);
-      setImageError(false);
-
-      // Start fetching the image in parallel
-      const imagePromise = fetchPostImageBlob(id)
-        .then((blob) => {
-          if (!isMounted) return;
-          activeUrl = URL.createObjectURL(blob);
-          setImageUrl(activeUrl);
-        })
-        .catch(() => {
-          if (!isMounted) return;
-          setImageError(true);
-        })
-        .finally(() => {
-          if (isMounted) setImageLoading(false);
-        });
-
-      try {
-        const fetched = await getPost(id);
-        if (!isMounted) return;
-        setPost(fetched);
-      } catch (err: unknown) {
-        if (!isMounted) return;
-        if (err instanceof ApiClientError && err.status === 404) {
-          setIs404(true);
-        } else {
-          const msg = err instanceof Error ? err.message : "Could not load post.";
-          setError(msg);
-        }
-      } finally {
-        if (isMounted) setLoading(false);
+    let active = true;
+    const url = URL.createObjectURL(imageBlob);
+    Promise.resolve().then(() => {
+      if (active) {
+        setImageUrl(url);
       }
-
-      await imagePromise;
-    }
-
-    loadData();
+    });
 
     return () => {
-      isMounted = false;
-      if (activeUrl) {
-        URL.revokeObjectURL(activeUrl);
-      }
+      active = false;
+      URL.revokeObjectURL(url);
     };
-  }, [id]);
+  }, [imageBlob]);
+
+  // Mutations
+  const decisionMutation = useSubmitDecisionMutation(user.id);
+  const retryMutation = useRetryPublicationMutation(user.id);
+
+  // Modal state for outcome_unknown retry confirmation
+  const [showConfirmModal, setShowConfirmModal] = React.useState(false);
+  const [confirmedNotPosted, setConfirmedNotPosted] = React.useState(false);
 
   // Poll post data every 10 seconds while status is "publishing"
-  useEffect(() => {
+  React.useEffect(() => {
     if (post?.status !== "publishing") return;
 
     const intervalId = setInterval(() => {
-      reloadPost();
-    }, 10000);
+      refetch();
+    }, 10_000);
 
     return () => {
       clearInterval(intervalId);
     };
-  }, [post?.status, reloadPost]);
+  }, [post?.status, refetch]);
 
-  // Handles approving or rejecting draft from dashboard
-  async function handleDecision(decision: "approved" | "rejected") {
-    setDecisionSubmitting(decision);
-    setDecisionError(null);
-    try {
-      await submitPostDecision(id, decision);
-      await reloadPost();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to save decision.";
-      setDecisionError(msg);
-    } finally {
-      setDecisionSubmitting(null);
-    }
+  if (postLoading) {
+    return <PostDetailSkeleton />;
   }
 
-  // Handles simple retry without confirmation (e.g. rate limit or step failure)
-  async function handleSimpleRetry() {
-    setRetrySubmitting(true);
-    setRetryError(null);
-    try {
-      await retryPostPublication(id, false);
-      await reloadPost();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to retry publication.";
-      setRetryError(msg);
-    } finally {
-      setRetrySubmitting(false);
-    }
+  if (postError || !post) {
+    return (
+      <div className="py-12 space-y-4 max-w-lg">
+        <ErrorState
+          message={
+            error instanceof Error ? error.message : "We could not load this post."
+          }
+          onRetry={() => refetch()}
+        />
+        <div>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/app/posts">Back to posts</Link>
+          </Button>
+        </div>
+      </div>
+    );
   }
 
-  // Executes confirmed retry for outcome_unknown
-  async function executeConfirmedRetry() {
-    setRetrySubmitting(true);
-    setRetryError(null);
+  // Handle post decision (approve or reject)
+  const handleDecision = async (decision: "approved" | "rejected") => {
     try {
-      await retryPostPublication(id, true);
+      await decisionMutation.mutateAsync({ id, decision });
+      toast.success(
+        decision === "approved"
+          ? "Draft approved for scheduled publishing."
+          : "Draft rejected."
+      );
+      await refetch();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to record decision."
+      );
+    }
+  };
+
+  // Handle simple retry
+  const handleSimpleRetry = async () => {
+    try {
+      await retryMutation.mutateAsync({ id, confirmNotPosted: false });
+      toast.success("Publication retry initiated.");
+      await refetch();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to retry publishing."
+      );
+    }
+  };
+
+  // Handle confirmed retry for outcome_unknown
+  const handleConfirmedRetry = async () => {
+    try {
+      await retryMutation.mutateAsync({ id, confirmNotPosted: true });
       setShowConfirmModal(false);
       setConfirmedNotPosted(false);
-      await reloadPost();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to retry publication.";
-      setRetryError(msg);
-    } finally {
-      setRetrySubmitting(false);
+      toast.success("Publication retry initiated.");
+      await refetch();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to retry publishing."
+      );
     }
-  }
+  };
 
-  // Loading skeleton
-  if (loading) {
-    return (
-      <div className="space-y-8 animate-pulse text-left py-6">
-        <div className="h-4 w-32 bg-line rounded" />
-        <div className="h-8 w-96 bg-line rounded" />
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-          <div className="lg:col-span-7 max-w-[560px] w-full space-y-4">
-            <div className="h-6 w-24 bg-line rounded-full" />
-            <div className="aspect-square w-full bg-line rounded-[12px]" />
-            <div className="h-28 bg-line rounded-[12px]" />
-          </div>
-          <div className="lg:col-span-5 w-full space-y-4">
-            <div className="h-48 bg-line rounded-[12px]" />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // 404 Not Found state
-  if (is404) {
-    return (
-      <div className="py-16 text-left space-y-4 max-w-[560px]">
-        <h1 className="text-2xl font-geist font-normal text-ink">
-          We can&apos;t find that post.
-        </h1>
-        <p className="text-sm text-muted">
-          This draft might have been removed or belongs to another workspace.
-        </p>
-        <div>
-          <Link
-            href="/app"
-            prefetch={true}
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-signal hover:underline"
-          >
-            Back to dashboard
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  // Generic error state
-  if (error || !post) {
-    return (
-      <div className="py-12 text-left space-y-4 max-w-[560px]">
-        <h1 className="text-xl font-geist font-normal text-rejected-text">
-          Something went wrong
-        </h1>
-        <p className="text-sm text-muted">{error || "Unable to display this draft."}</p>
-        <div className="flex items-center gap-4">
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="px-3.5 py-1.5 rounded-[6px] bg-surface text-ink border border-line text-xs font-medium hover:bg-paper cursor-pointer"
-          >
-            Try again
-          </button>
-          <Link href="/app" prefetch={true} className="text-xs text-signal hover:underline">
-            Back to dashboard
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  const chip = getStatusChipConfig(post.status);
-  const linkedInPublication = post.publications?.find((p) => p.platform === "linkedin") || post.publications?.[0];
+  const linkedInPublication =
+    post.publications?.find((p) => p.platform === "linkedin") ||
+    post.publications?.[0];
   const pubErrorInfo = getPublicationErrorInfo(linkedInPublication?.error_code);
   const formattedPublishAt = formatDecisionDeadline(post.publish_at);
-  const formattedDeadline = formatDecisionDeadline(post.publish_at || post.approval?.expires_at);
+  const formattedDeadline = formatDecisionDeadline(
+    post.publish_at || post.approval?.expires_at
+  );
 
   return (
-    <div className="space-y-8 text-left py-4">
-      {/* Back link to dashboard */}
-      <div>
-        <Link
-          href="/app"
-          prefetch={true}
-          className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-ink transition-colors cursor-pointer group"
-        >
-          <svg
-            className="w-3.5 h-3.5 text-muted group-hover:text-ink transition-colors"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M19 12H5M12 19l-7-7 7-7" />
-          </svg>
-          <span>Back to dashboard</span>
-        </Link>
-      </div>
+    <div className="space-y-6">
+      {/* Breadcrumb navigation */}
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink href="/app/posts">Posts</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage className="truncate max-w-xs sm:max-w-md">
+              {post.topic_title}
+            </BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
 
-      {/* Main Single Page Heading */}
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-geist font-normal tracking-tight text-ink">
-          {post.topic_title}
-        </h1>
-        <p className="text-xs text-muted mt-1">
-          Draft prepared for {formatRunDate(post.run_date)}
-        </p>
-      </div>
+      {/* Page Header */}
+      <PageHeader
+        title={post.topic_title}
+        description={`Draft prepared for ${formatRunDate(post.run_date)}`}
+        actions={<StatusBadge status={post.status} />}
+      />
 
-      {/* Two column presentation: Left media and caption, Right source intelligence */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
-        {/* Left Column (max 560px) */}
-        <div className="lg:col-span-7 max-w-[560px] w-full space-y-6">
-          {/* Status chip */}
-          <div>
-            <span
-              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium border ${chip.className}`}
-            >
-              {chip.hasCheckIcon && (
-                <svg
-                  className="w-3 h-3 text-ink shrink-0"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M3 8.5L6.5 12L13 4"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              )}
-              {chip.label}
-            </span>
+      {/* Status Alert Section positioned prominently */}
+      {post.status === "awaiting_approval" && (
+        <Alert className="border-primary/30 bg-signal-soft/40">
+          <AlertCircleIcon className="size-4 text-primary" />
+          <div className="flex-1">
+            <AlertTitle className="text-foreground">
+              Awaiting your approval
+            </AlertTitle>
+            <AlertDescription className="text-xs text-muted-foreground mt-0.5">
+              {formattedDeadline
+                ? `Please review and decide before ${formattedDeadline}.`
+                : "Please review and decide on this draft."}
+            </AlertDescription>
           </div>
-
-          {/* Status Action Block positioned above caption */}
-          {post.status === "awaiting_approval" && (
-            <div className="p-4 rounded-[10px] bg-surface border border-line space-y-3">
-              <div className="text-xs text-muted">
-                {formattedDeadline ? `Decide before ${formattedDeadline}.` : "Review and decide."}
-              </div>
-              {decisionError && (
-                <div role="alert" className="text-xs text-rejected-text font-medium">
-                  {decisionError}
-                </div>
-              )}
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => handleDecision("rejected")}
-                  disabled={decisionSubmitting !== null}
-                  className="px-4 py-2 rounded-[6px] border border-line bg-surface hover:bg-paper text-xs font-medium text-ink transition-colors disabled:opacity-50 cursor-pointer"
-                >
-                  {decisionSubmitting === "rejected" ? "Rejecting..." : "Reject"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDecision("approved")}
-                  disabled={decisionSubmitting !== null}
-                  className="px-5 py-2 rounded-[6px] bg-signal hover:bg-signal-hover text-surface text-xs font-semibold shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
-                >
-                  {decisionSubmitting === "approved" ? "Approving..." : "Approve"}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {post.status === "approved" && (
-            <div className="p-4 rounded-[10px] bg-signal-soft border border-signal-border text-xs text-signal font-medium">
-              Approved. It will be published around {formattedPublishAt || "the scheduled time"}.
-            </div>
-          )}
-
-          {post.status === "rejected" && (
-            <div className="p-4 rounded-[10px] bg-rejected-bg border border-[#F5C2B9] text-xs text-rejected-text font-medium">
-              Rejected. Nothing will be published for this draft.
-            </div>
-          )}
-
-          {post.status === "expired" && (
-            <div className="p-4 rounded-[10px] bg-surface border border-line text-xs text-muted font-medium">
-              This draft expired before a decision was made. Nothing was published.
-            </div>
-          )}
-
-          {post.status === "publishing" && (
-            <div className="p-4 rounded-[10px] bg-paper border border-line text-xs text-muted flex items-center gap-2.5">
-              <svg
-                className="w-3.5 h-3.5 animate-spin text-muted shrink-0"
-                viewBox="0 0 24 24"
-                fill="none"
-                aria-hidden="true"
-              >
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-              </svg>
-              <span>Publishing now.</span>
-            </div>
-          )}
-
-          {post.status === "published" && (
-            <div className="p-4 rounded-[10px] bg-paper border border-line text-xs space-y-2">
-              <div className="text-ink font-semibold">Live on LinkedIn.</div>
-              {linkedInPublication?.published_at && (
-                <div className="text-muted">
-                  Published {formatDecisionDeadline(linkedInPublication.published_at)}.
-                </div>
-              )}
-              {linkedInPublication?.external_url && (
-                <div className="pt-1">
-                  <a
-                    href={linkedInPublication.external_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-signal hover:underline inline-flex items-center gap-1 font-medium"
-                  >
-                    <span>View on LinkedIn</span>
-                    <svg
-                      className="w-3.5 h-3.5"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      aria-hidden="true"
-                    >
-                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                      <polyline points="15 3 21 3 21 9" />
-                      <line x1="10" y1="14" x2="21" y2="3" />
-                    </svg>
-                  </a>
-                </div>
-              )}
-            </div>
-          )}
-
-          {post.status === "failed" && (
-            <div
-              className={`p-4 rounded-[10px] border text-xs space-y-3 ${
-                pubErrorInfo.isWarning
-                  ? "bg-draft-bg border-[#F5E5BA] text-draft-text"
-                  : "bg-rejected-bg border-[#F5C2B9] text-rejected-text"
-              }`}
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleDecision("rejected")}
+              disabled={decisionMutation.isPending}
             >
-              <p className="font-medium">{pubErrorInfo.message}</p>
+              {decisionMutation.isPending &&
+              decisionMutation.variables?.decision === "rejected" ? (
+                <Loader2Icon className="size-3.5 animate-spin mr-1" />
+              ) : null}
+              <span>Reject</span>
+            </Button>
+            <Button
+              size="sm"
+              variant="default"
+              onClick={() => handleDecision("approved")}
+              disabled={decisionMutation.isPending}
+            >
+              {decisionMutation.isPending &&
+              decisionMutation.variables?.decision === "approved" ? (
+                <Loader2Icon className="size-3.5 animate-spin mr-1" />
+              ) : null}
+              <span>Approve</span>
+            </Button>
+          </div>
+        </Alert>
+      )}
 
-              {retryError && (
-                <div role="alert" className="text-xs text-rejected-text font-medium">
-                  {retryError}
-                </div>
-              )}
+      {post.status === "approved" && (
+        <Alert className="border-signal-line bg-signal-soft text-foreground">
+          <CheckCircle2Icon className="size-4 text-primary" />
+          <div className="flex-1">
+            <AlertTitle className="text-primary font-medium">
+              Approved
+            </AlertTitle>
+            <AlertDescription className="text-xs text-muted-foreground">
+              This post will be published around {formattedPublishAt || "the scheduled time"}.
+            </AlertDescription>
+          </div>
+        </Alert>
+      )}
 
-              {pubErrorInfo.action === "reconnect" && (
-                <div>
-                  <Link
-                    href="/app"
-                    className="inline-flex items-center gap-1 font-semibold text-ink underline hover:text-signal"
-                  >
-                    Reconnect LinkedIn
-                  </Link>
-                </div>
-              )}
+      {post.status === "publishing" && (
+        <Alert className="border-border bg-muted/60">
+          <Loader2Icon className="size-4 animate-spin text-primary" />
+          <div className="flex-1">
+            <AlertTitle>Publishing in progress</AlertTitle>
+            <AlertDescription className="text-xs text-muted-foreground">
+              Delivering post to LinkedIn. This page will update automatically when complete.
+            </AlertDescription>
+          </div>
+        </Alert>
+      )}
 
-              {pubErrorInfo.action === "confirm_retry" && (
-                <div className="space-y-3 pt-2 border-t border-line/40">
-                  <label className="flex items-center gap-2 cursor-pointer text-xs font-normal">
-                    <input
-                      type="checkbox"
-                      checked={confirmedNotPosted}
-                      onChange={(e) => setConfirmedNotPosted(e.target.checked)}
-                      className="rounded border-line"
-                    />
-                    <span>I checked and it is not on LinkedIn</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmModal(true)}
-                    disabled={!confirmedNotPosted || retrySubmitting}
-                    className="px-4 py-2 rounded-[6px] bg-surface text-ink border border-line font-medium hover:bg-paper disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                  >
-                    {retrySubmitting ? "Retrying..." : "Post again"}
-                  </button>
-                </div>
-              )}
-
-              {pubErrorInfo.action === "retry" && (
-                <div>
-                  <button
-                    type="button"
-                    onClick={handleSimpleRetry}
-                    disabled={retrySubmitting}
-                    className="px-4 py-2 rounded-[6px] bg-surface text-ink border border-line font-medium hover:bg-paper disabled:opacity-50 cursor-pointer"
-                  >
-                    {retrySubmitting ? "Retrying..." : "Try again"}
-                  </button>
-                </div>
-              )}
-            </div>
+      {post.status === "published" && (
+        <Alert className="border-border bg-card">
+          <CheckCircle2Icon className="size-4 text-primary" />
+          <div className="flex-1">
+            <AlertTitle>Published to LinkedIn</AlertTitle>
+            <AlertDescription className="text-xs text-muted-foreground">
+              Successfully delivered to your profile.
+            </AlertDescription>
+          </div>
+          {linkedInPublication?.external_url && (
+            <Button asChild size="sm" variant="outline">
+              <a
+                href={linkedInPublication.external_url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <span>View on LinkedIn</span>
+                <ExternalLinkIcon className="size-3.5 ml-1.5" />
+              </a>
+            </Button>
           )}
+        </Alert>
+      )}
 
-          {/* Shared Post Preview Component */}
+      {post.status === "rejected" && (
+        <Alert variant="destructive">
+          <AlertCircleIcon className="size-4" />
+          <div className="flex-1">
+            <AlertTitle>Rejected</AlertTitle>
+            <AlertDescription className="text-xs">
+              This draft was rejected and will not be published.
+            </AlertDescription>
+          </div>
+        </Alert>
+      )}
+
+      {post.status === "expired" && (
+        <Alert>
+          <AlertCircleIcon className="size-4 text-muted-foreground" />
+          <div className="flex-1">
+            <AlertTitle>Expired</AlertTitle>
+            <AlertDescription className="text-xs text-muted-foreground">
+              This draft passed its review deadline before approval. Nothing was published.
+            </AlertDescription>
+          </div>
+        </Alert>
+      )}
+
+      {post.status === "failed" && (
+        <Alert variant="destructive">
+          <AlertCircleIcon className="size-4" />
+          <div className="flex-1">
+            <AlertTitle>Publishing failed</AlertTitle>
+            <AlertDescription className="text-xs">
+              {pubErrorInfo.message}
+            </AlertDescription>
+          </div>
+          {pubErrorInfo.action === "reconnect" && (
+            <Button asChild size="sm" variant="outline">
+              <Link href="/app/connections">Reconnect LinkedIn</Link>
+            </Button>
+          )}
+          {pubErrorInfo.action === "confirm_retry" && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowConfirmModal(true)}
+            >
+              Retry
+            </Button>
+          )}
+          {pubErrorInfo.action === "retry" && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSimpleRetry}
+              disabled={retryMutation.isPending}
+            >
+              {retryMutation.isPending ? "Retrying..." : "Retry publishing"}
+            </Button>
+          )}
+        </Alert>
+      )}
+
+      {/* Two-column layout: PostPreview on left, Based on sources on right */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Left Column: PostPreview */}
+        <div className="lg:col-span-7 space-y-4">
           <PostPreview
+            imageAlt={post.topic_title}
+            caption={post.caption}
+            hashtags={post.hashtags}
             imageUrl={imageUrl}
             imageLoading={imageLoading}
             imageError={imageError}
-            caption={post.caption}
-            hashtags={post.hashtags}
-            imageAlt={post.topic_title}
           />
         </div>
 
-        {/* Right Column (or stacked on mobile) */}
-        <div className="lg:col-span-5 w-full space-y-6">
-          <div className="p-6 rounded-[12px] bg-surface border border-line space-y-5">
-            <h2 className="text-xs font-mono font-medium text-muted uppercase tracking-wider">
-              Based on
-            </h2>
+        {/* Right Column: "Based on" Sources */}
+        <div className="lg:col-span-5 space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold text-foreground">
+                Based on sources
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Primary topic reference */}
+              {post.topic_url && (
+                <div className="space-y-1 pb-3 border-b border-border">
+                  <span className="text-caption font-medium text-muted-foreground">
+                    Primary trend
+                  </span>
+                  <p className="text-sm font-medium text-foreground">
+                    {post.topic_title}
+                  </p>
+                  <a
+                    href={post.topic_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                  >
+                    <span>{extractHostname(post.topic_url)}</span>
+                    <ExternalLinkIcon className="size-3" />
+                  </a>
+                </div>
+              )}
 
-            <div>
-              <a
-                href={post.topic_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-base font-semibold text-ink hover:text-signal transition-colors inline-flex items-start gap-1.5 group"
-              >
-                <span>{post.topic_title}</span>
-                <svg
-                  className="w-4 h-4 text-muted group-hover:text-signal shrink-0 mt-1"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                  <polyline points="15 3 21 3 21 9" />
-                  <line x1="10" y1="14" x2="21" y2="3" />
-                </svg>
-              </a>
-            </div>
-
-            {post.sources && post.sources.length > 0 && (
-              <div className="space-y-3 pt-4 border-t border-line">
-                <h3 className="text-xs font-medium text-muted uppercase tracking-wider">
-                  Sources
-                </h3>
-                <ul className="space-y-3">
-                  {post.sources.map((source, index) => {
-                    const host = extractHostname(source.url);
-                    const formattedDate = source.published_at
-                      ? formatRunDate(source.published_at)
-                      : null;
-
-                    return (
-                      <li key={index} className="text-xs space-y-1">
-                        <a
-                          href={source.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-ink font-medium hover:text-signal transition-colors hover:underline line-clamp-2 block"
-                        >
-                          {source.title}
-                        </a>
-                        <div className="text-muted flex items-center gap-2">
-                          <span>{host}</span>
-                          {formattedDate && (
-                            <>
-                              <span>·</span>
-                              <span>{formattedDate}</span>
-                            </>
+              {/* Verified source references */}
+              {post.sources && post.sources.length > 0 ? (
+                <div className="space-y-3">
+                  <span className="text-caption font-medium text-muted-foreground block">
+                    Referenced articles
+                  </span>
+                  <div className="space-y-2">
+                    {post.sources.map((src, i) => (
+                      <div
+                        key={i}
+                        className="p-2.5 rounded-md border border-border bg-muted/30 space-y-1"
+                      >
+                        <p className="text-xs font-medium text-foreground line-clamp-2">
+                          {src.title}
+                        </p>
+                        <div className="flex items-center justify-between text-caption text-muted-foreground pt-1">
+                          <a
+                            href={src.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline inline-flex items-center gap-1"
+                          >
+                            <span>{extractHostname(src.url)}</span>
+                            <ExternalLinkIcon className="size-3" />
+                          </a>
+                          {src.published_at && (
+                            <span className="tabular-nums">
+                              {formatRunDate(src.published_at)}
+                            </span>
                           )}
                         </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            )}
-          </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  No additional external sources referenced for this draft.
+                </p>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
 
-      {/* Confirmation Modal for Outcome Unknown Retry */}
-      {showConfirmModal && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs"
-        >
-          <div className="w-full max-w-[440px] bg-surface border border-line rounded-[12px] p-6 space-y-4 shadow-lg text-left">
-            <h3 className="text-base font-semibold text-ink">Confirm Post Retry</h3>
-            <p className="text-xs text-muted leading-relaxed">
-              Please verify that this post is not live on your LinkedIn feed. Retrying may create a duplicate if the post was already published.
-            </p>
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowConfirmModal(false)}
-                className="px-3.5 py-1.5 rounded-[6px] border border-line bg-surface hover:bg-paper text-xs text-ink cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={executeConfirmedRetry}
-                disabled={retrySubmitting}
-                className="px-4 py-1.5 rounded-[6px] bg-signal hover:bg-signal-hover text-surface text-xs font-semibold cursor-pointer"
-              >
-                {retrySubmitting ? "Retrying..." : "Yes, post again"}
-              </button>
-            </div>
+      {/* Confirmation Dialog for outcome_unknown retries */}
+      <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm Retry Publication</DialogTitle>
+            <DialogDescription>
+              We were unable to confirm if this post was already published to LinkedIn. Check your profile before retrying to prevent duplicate posts.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex items-start gap-3 py-3">
+            <Checkbox
+              id="confirmNotPosted"
+              checked={confirmedNotPosted}
+              onCheckedChange={(checked) => setConfirmedNotPosted(!!checked)}
+            />
+            <label
+              htmlFor="confirmNotPosted"
+              className="text-xs text-muted-foreground leading-snug cursor-pointer select-none"
+            >
+              I verified that this post does not appear on my LinkedIn profile.
+            </label>
           </div>
-        </div>
-      )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowConfirmModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={!confirmedNotPosted || retryMutation.isPending}
+              onClick={handleConfirmedRetry}
+            >
+              {retryMutation.isPending ? "Retrying..." : "Confirm and Retry"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

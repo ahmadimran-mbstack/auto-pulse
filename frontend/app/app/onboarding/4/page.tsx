@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { getProfile, saveStep4, completeOnboarding, ApiClientError } from "@/lib/api";
 import { OnboardingShell, OnboardingSkeleton } from "../components/OnboardingShell";
 import { TimezoneSelect } from "../components/TimezoneSelect";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface DayOption {
   day: number;
@@ -221,13 +223,13 @@ export default function OnboardingStep4Page() {
 
       {/* Time to Post */}
       <div className="space-y-1.5 text-left pt-2">
-        <label htmlFor="post_time" className="block text-sm font-medium text-ink">
-          Time to post <span className="text-signal">*</span>
-        </label>
-        <p id="post_time-hint" className="text-xs text-muted">
+        <Label htmlFor="post_time">
+          Time to post <span className="text-primary">*</span>
+        </Label>
+        <p id="post_time-hint" className="text-caption text-muted-foreground">
           The time of day when your post will be ready for review.
         </p>
-        <input
+        <Input
           id="post_time"
           ref={postTimeRef}
           type="time"
@@ -236,12 +238,12 @@ export default function OnboardingStep4Page() {
           aria-describedby={`post_time-hint ${
             fieldErrors.post_time ? "post_time-error" : ""
           }`.trim()}
-          className={`w-full max-w-[200px] h-10 px-3 rounded-[8px] border bg-surface font-mono text-sm text-ink transition-colors focus:outline-2 focus:outline-signal focus:outline-offset-2 ${
-            fieldErrors.post_time ? "border-rejected-text" : "border-line"
+          className={`max-w-xs font-mono tabular-nums ${
+            fieldErrors.post_time ? "border-destructive" : ""
           }`}
         />
         {fieldErrors.post_time && (
-          <p id="post_time-error" role="alert" className="text-xs text-rejected-text">
+          <p id="post_time-error" role="alert" className="text-caption text-destructive">
             {fieldErrors.post_time}
           </p>
         )}
@@ -249,10 +251,10 @@ export default function OnboardingStep4Page() {
 
       {/* Days of the Week as Seven Toggle Buttons */}
       <div className="space-y-2 text-left pt-2">
-        <label className="block text-sm font-medium text-ink">
-          Days of the week <span className="text-signal">*</span>
-        </label>
-        <p id="post_days-hint" className="text-xs text-muted">
+        <Label>
+          Days of the week <span className="text-primary">*</span>
+        </Label>
+        <p id="post_days-hint" className="text-caption text-muted-foreground">
           Select which days you want AutoPulse to generate drafts.
         </p>
 
@@ -267,10 +269,10 @@ export default function OnboardingStep4Page() {
             return (
               <label
                 key={opt.day}
-                className={`relative inline-flex items-center justify-center px-4 py-2.5 rounded-[8px] border text-xs font-medium cursor-pointer transition-all duration-150 select-none ${
+                className={`inline-flex items-center justify-center px-4 py-2 rounded-md border text-caption font-medium cursor-pointer transition-colors select-none ${
                   isSelected
-                    ? "bg-signal text-surface border-signal shadow-xs"
-                    : "bg-surface text-ink border-line hover:border-signal/40 hover:bg-paper"
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-card text-foreground border-border hover:bg-secondary/40"
                 }`}
               >
                 <input
@@ -288,7 +290,7 @@ export default function OnboardingStep4Page() {
         </div>
 
         {fieldErrors.post_days && (
-          <p role="alert" className="text-xs text-rejected-text pt-1">
+          <p role="alert" className="text-caption text-destructive pt-1">
             {fieldErrors.post_days}
           </p>
         )}
@@ -296,10 +298,10 @@ export default function OnboardingStep4Page() {
 
       {/* Approval Method (Single Radio) */}
       <div className="space-y-2 text-left pt-4">
-        <label className="block text-sm font-medium text-ink">
-          Approval method <span className="text-signal">*</span>
-        </label>
-        <div className="p-3.5 rounded-[10px] border border-signal bg-signal-soft/30 flex items-start gap-3">
+        <Label>
+          Approval method <span className="text-primary">*</span>
+        </Label>
+        <div className="p-3.5 rounded-md border border-signal-line bg-signal-soft/40 flex items-start gap-3">
           <input
             type="radio"
             id="approval-email"
@@ -307,13 +309,13 @@ export default function OnboardingStep4Page() {
             value="email"
             checked
             readOnly
-            className="mt-1 h-4 w-4 text-signal border-line accent-[#0B7F70]"
+            className="mt-1 size-4 text-primary border-border"
           />
           <div className="space-y-0.5 text-left">
-            <label htmlFor="approval-email" className="text-sm font-medium text-ink cursor-pointer">
+            <label htmlFor="approval-email" className="text-body font-medium text-foreground cursor-pointer">
               Email
             </label>
-            <p className="text-xs text-muted">
+            <p className="text-caption text-muted-foreground">
               We will email you each draft to approve.
             </p>
           </div>

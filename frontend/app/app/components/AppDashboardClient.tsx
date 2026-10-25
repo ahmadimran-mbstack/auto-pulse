@@ -1,419 +1,408 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
-import { useRouter } from "next/navigation";
+import * as React from "react";
 import Link from "next/link";
-import { getProfile, getConnections, getPosts, getPostSchedule } from "@/lib/api";
-import type { Profile } from "@/types/profile";
-import type { SocialConnection } from "@/types/connections";
-import type { PostListItem, PostSchedule } from "@/types/posts";
+import { toast } from "sonner";
+import {
+  AlertCircleIcon,
+  ClockIcon,
+  SparklesIcon,
+  Loader2Icon,
+  ExternalLinkIcon,
+} from "lucide-react";
+import {
+  useDashboardQuery,
+  useGenerateDraftMutation,
+  prefetchPosts,
+  prefetchPostDetail,
+} from "@/lib/queries";
+import { PageHeader } from "@/components/app/PageHeader";
+import { Section } from "@/components/app/Section";
+import { EmptyState } from "@/components/app/EmptyState";
+import { ErrorState } from "@/components/app/ErrorState";
+import { StatusBadge } from "@/components/app/StatusBadge";
+import { PostThumbnail } from "@/components/app/PostThumbnail";
+import { OverviewSkeleton } from "@/components/app/OverviewSkeleton";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { formatRunDate, formatNextDraftTime } from "@/lib/posts";
+import { getConnectionDisplayState } from "@/lib/connections-state";
 import { ApiCheckPanel } from "./ApiCheckPanel";
-import { AccountLinkingPanel } from "./AccountLinkingPanel";
-import { BrandPreviewCard } from "./BrandPreviewCard";
-import { LinkedInConnectionRow } from "./LinkedInConnectionRow";
-import { formatSchedule } from "@/lib/schedule-format";
-import { DraftsSection } from "./DraftsSection";
 
 interface AppDashboardClientProps {
   user: {
+    id: string;
     name?: string | null;
     email: string;
   };
-  apiUrl: string;
+  apiUrl?: string;
 }
 
 export function AppDashboardClient({ user, apiUrl }: AppDashboardClientProps) {
-  const router = useRouter();
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [initialConnection, setInitialConnection] = useState<SocialConnection | null>(null);
-  const [initialPosts, setInitialPosts] = useState<PostListItem[] | null>(null);
-  const [initialSchedule, setInitialSchedule] = useState<PostSchedule | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [successNotice, setSuccessNotice] = useState<string | null>(null);
+  const { data, isLoading, isError, error, refetch } = useDashboardQuery(user.id);
+  const generateMutation = useGenerateDraftMutation(user.id);
 
-  // Check for successful LinkedIn connection flash message on arrival
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("connected") === "linkedin") {
-        const cleanUrl = window.location.pathname;
-        window.history.replaceState({}, document.title, cleanUrl);
-        // Defer notice state update to the next event loop tick
-        const showTimer = setTimeout(() => {
-          setSuccessNotice("LinkedIn account connected successfully.");
-        }, 0);
-        const hideTimer = setTimeout(() => {
-          setSuccessNotice(null);
-        }, 5000);
-        return () => {
-          clearTimeout(showTimer);
-          clearTimeout(hideTimer);
-        };
-      }
-    }
-  }, []);
+  if (isLoading) {
+    return <OverviewSkeleton />;
+  }
 
-  // Load all overview page data concurrently with Promise.all
-  useEffect(() => {
-    let isMounted = true;
+  if (isError || !data) {
+    return (
+      <div className="py-12">
+        <ErrorState
+          message={error instanceof Error ? error.message : "Unable to load dashboard overview."}
+          onRetry={() => refetch()}
+        />
+      </div>
+    );
+  }
 
-    async function loadDashboardData() {
-      try {
-        const [profileRes, connectionsRes, postsRes, scheduleRes] = await Promise.all([
-          getProfile(),
-          getConnections().catch((err) => {
-            console.warn("Failed to load connections:", err);
-            return [] as SocialConnection[];
-          }),
-          getPosts(5).catch((err) => {
-            console.warn("Failed to load posts:", err);
-            return { items: [] as PostListItem[], next_cursor: null };
-          }),
-          getPostSchedule().catch((err) => {
-            console.warn("Failed to load schedule:", err);
-            return { next_draft_at: null, next_post_at: null } as PostSchedule;
-          }),
-        ]);
+  // Find LinkedIn connection telemetry from dashboard payload
+  const linkedin = data.connections?.find((c) => c.provider === "linkedin") || null;
+  const mappedStatus =
+    linkedin?.status === "expired"
+      ? ("expired" as const)
+      : linkedin?.status === "revoked"
+      ? ("revoked" as const)
+      : ("active" as const);
 
-        if (!isMounted) return;
-
-        // If onboarding is incomplete, redirect to resume onboarding flow
-        if (!profileRes.onboarding_complete) {
-          router.replace("/app/onboarding");
-          return;
+  const linkedinState = getConnectionDisplayState(
+    linkedin
+      ? {
+          provider: linkedin.provider,
+          status: mappedStatus,
+          account_name: linkedin.account_name,
+          connected_at: linkedin.connected_at || "",
+          expires_at: linkedin.expires_at || "",
+          days_left: linkedin.days_left ?? 0,
         }
+      : null
+  );
 
-        const linkedin = connectionsRes.find((c) => c.provider === "linkedin") || null;
-
-        setProfile(profileRes);
-        setInitialConnection(linkedin);
-        setInitialPosts(postsRes.items);
-        setInitialSchedule(scheduleRes);
-      } catch (err: unknown) {
-        if (!isMounted) return;
-        const msg = err instanceof Error ? err.message : "Failed to load profile";
-        setError(msg);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
+  // Trigger dev-only draft generation run
+  const handleGenerateNow = async () => {
+    try {
+      await generateMutation.mutateAsync(true);
+      toast.success("New draft generated successfully.");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Draft generation failed. Try again."
+      );
     }
-
-    loadDashboardData();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [router]);
-
-  // Calm skeleton while verifying onboarding status
-  if (loading) {
-    return (
-      <main className="flex-1 max-w-[1160px] w-full mx-auto px-6 py-10 space-y-8 animate-pulse text-left">
-        <div className="space-y-3">
-          <div className="h-4 bg-line rounded-md w-32" />
-          <div className="h-9 bg-line rounded-md w-72" />
-          <div className="h-4 bg-line rounded-md w-96" />
-        </div>
-        <div className="space-y-6 pt-6">
-          <div className="h-40 bg-surface rounded-[12px] border border-line" />
-          <div className="h-40 bg-surface rounded-[12px] border border-line" />
-        </div>
-      </main>
-    );
-  }
-
-  if (error) {
-    return (
-      <main className="flex-1 max-w-[1160px] w-full mx-auto px-6 py-10 text-left">
-        <div className="p-6 rounded-[12px] bg-rejected-bg border border-[#F5C2B9] text-sm text-rejected-text space-y-3">
-          <h2 className="text-base font-semibold">Unable to connect to backend</h2>
-          <p>{error}</p>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 rounded-[6px] bg-surface text-ink border border-line font-medium hover:bg-paper cursor-pointer"
-          >
-            Retry
-          </button>
-        </div>
-      </main>
-    );
-  }
-
-  // Fallback while redirecting if incomplete
-  if (!profile || !profile.onboarding_complete) {
-    return null;
-  }
-
-  const displayName = profile.display_name || user.name || user.email;
-  const schedulePhrase = formatSchedule(profile.post_time, profile.post_days, profile.timezone);
+  };
 
   return (
-    <main className="flex-1 max-w-[1160px] w-full mx-auto px-6 py-10 text-left space-y-10">
-      {/* Welcome Header */}
-      <div>
-        <h1 className="text-3xl sm:text-4xl font-geist font-normal tracking-tighter text-ink mb-2">
-          Welcome, {displayName}
-        </h1>
-        <p className="text-muted text-sm max-prose-copy">
-          Your publishing setup is configured and active.
-        </p>
-      </div>
-
-      {/* Success Notification announced to screen readers and auto-fading */}
-      {successNotice && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="p-4 rounded-[10px] bg-signal-soft border border-[#93D7CE] text-signal font-medium text-sm flex items-center justify-between animate-fade-in"
-        >
-          <div className="flex items-center gap-2.5">
-            <svg
-              className="w-4 h-4 text-signal shrink-0"
-              viewBox="0 0 16 16"
-              fill="none"
-              aria-hidden="true"
+    <div className="space-y-8">
+      {/* Page Header with optional dev action */}
+      <PageHeader
+        title="Overview"
+        description="Your daily publishing activity and review queue."
+        actions={
+          process.env.NODE_ENV !== "production" ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleGenerateNow}
+              disabled={generateMutation.isPending}
             >
-              <path
-                d="M3 8.5L6.5 12L13 4"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            <span>{successNotice}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setSuccessNotice(null)}
-            className="text-xs text-muted hover:text-ink cursor-pointer p-1"
-            aria-label="Dismiss notice"
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
-
-      {/* LinkedIn Connection Status Row */}
-      <LinkedInConnectionRow initialConnection={initialConnection} />
-
-      {/* Your Setup Section */}
-      <div className="space-y-6">
-        <div className="border-b border-line pb-3">
-          <h2 className="text-xl font-geist font-normal tracking-tight text-ink">
-            Your setup
-          </h2>
-        </div>
-
-        {/* Four compact summaries separated by 1px lines, spacing, and distinct layouts */}
-        <div className="divide-y divide-line border-y border-line">
-          {/* Summary 1: Focus */}
-          <div className="py-6 grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
-            <div className="space-y-1">
-              <span className="text-xs font-mono font-medium text-signal uppercase tracking-wider">
-                Step 1
-              </span>
-              <h3 className="text-base font-semibold text-ink">Focus</h3>
-              <Link
-                href="/app/onboarding/1"
-                className="inline-block text-xs font-medium text-signal hover:underline pt-1 cursor-pointer"
-              >
-                Edit focus
-              </Link>
-            </div>
-
-            <div className="md:col-span-3 space-y-3.5 text-sm">
-              {(profile.role_title || profile.industry) && (
-                <p className="font-medium text-ink">
-                  {[profile.role_title, profile.industry].filter(Boolean).join(" · ")}
-                </p>
-              )}
-
-              {profile.niche_description && (
-                <p className="text-muted leading-relaxed">
-                  {profile.niche_description}
-                </p>
-              )}
-
-              {profile.audience && (
-                <div className="text-xs text-muted">
-                  <span className="font-medium text-ink">Target Audience:</span> {profile.audience}
-                </div>
-              )}
-
-              {/* Topics chips */}
-              <div className="space-y-2 pt-1">
-                {profile.topics_include && profile.topics_include.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-xs font-medium text-ink mr-1">Topics:</span>
-                    {profile.topics_include.map((topic, i) => (
-                      <span
-                        key={i}
-                        className="px-2 py-0.5 rounded-[4px] bg-signal-soft/40 border border-signal/20 text-xs text-signal font-medium"
-                      >
-                        {topic}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {profile.topics_avoid && profile.topics_avoid.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="text-xs font-medium text-muted mr-1">Avoid:</span>
-                    {profile.topics_avoid.map((topic, i) => (
-                      <span
-                        key={i}
-                        className="px-2 py-0.5 rounded-[4px] bg-paper border border-line text-xs text-muted"
-                      >
-                        {topic}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Summary 2: Voice */}
-          <div className="py-6 grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
-            <div className="space-y-1">
-              <span className="text-xs font-mono font-medium text-signal uppercase tracking-wider">
-                Step 2
-              </span>
-              <h3 className="text-base font-semibold text-ink">Voice</h3>
-              <Link
-                href="/app/onboarding/2"
-                className="inline-block text-xs font-medium text-signal hover:underline pt-1 cursor-pointer"
-              >
-                Edit voice
-              </Link>
-            </div>
-
-            <div className="md:col-span-3 space-y-3 text-sm">
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-medium text-ink">Tone:</span>
-                <span className="px-2.5 py-0.5 rounded-full bg-signal text-surface text-xs font-medium capitalize shadow-2xs">
-                  {profile.tone || "Professional"}
-                </span>
-              </div>
-
-              {profile.voice_notes ? (
-                <div className="text-xs text-muted leading-relaxed">
-                  <span className="font-medium text-ink">Notes:</span> {profile.voice_notes}
-                </div>
+              {generateMutation.isPending ? (
+                <Loader2Icon className="size-4 animate-spin mr-1.5" />
               ) : (
-                <p className="text-xs text-muted">No custom voice notes provided.</p>
+                <SparklesIcon className="size-4 mr-1.5 text-primary" />
               )}
-
-              {profile.sample_posts ? (
-                <div className="text-xs text-muted leading-relaxed">
-                  <span className="font-medium text-ink">Sample Posts:</span> Provided
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          {/* Summary 3: Brand */}
-          <div className="py-6 grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
-            <div className="space-y-1">
-              <span className="text-xs font-mono font-medium text-signal uppercase tracking-wider">
-                Step 3
-              </span>
-              <h3 className="text-base font-semibold text-ink">Brand</h3>
-              <Link
-                href="/app/onboarding/3"
-                className="inline-block text-xs font-medium text-signal hover:underline pt-1 cursor-pointer"
-              >
-                Edit brand
-              </Link>
-            </div>
-
-            <div className="md:col-span-3 flex flex-col sm:flex-row items-start gap-6">
-              <BrandPreviewCard
-                brandName={profile.brand_name || "Your Brand"}
-                primaryHex={profile.brand_primary_hex || "#0B7F70"}
-                accentHex={profile.brand_accent_hex || "#14B8A6"}
-                showWarning={false}
-              />
-
-              <div className="space-y-2 text-xs text-muted">
-                <p>
-                  <span className="font-medium text-ink">Name:</span> {profile.brand_name || "Not set"}
-                </p>
-                <p className="flex items-center gap-2">
-                  <span className="font-medium text-ink">Primary:</span>
-                  <span
-                    className="w-3 h-3 rounded-full border border-line"
-                    style={{ backgroundColor: profile.brand_primary_hex || "#0B7F70" }}
-                  />
-                  <span className="font-mono uppercase">{profile.brand_primary_hex || "#0B7F70"}</span>
-                </p>
-                <p className="flex items-center gap-2">
-                  <span className="font-medium text-ink">Accent:</span>
-                  <span
-                    className="w-3 h-3 rounded-full border border-line"
-                    style={{ backgroundColor: profile.brand_accent_hex || "#14B8A6" }}
-                  />
-                  <span className="font-mono uppercase">{profile.brand_accent_hex || "#14B8A6"}</span>
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Summary 4: Schedule */}
-          <div className="py-6 grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
-            <div className="space-y-1">
-              <span className="text-xs font-mono font-medium text-signal uppercase tracking-wider">
-                Step 4
-              </span>
-              <h3 className="text-base font-semibold text-ink">Schedule</h3>
-              <Link
-                href="/app/onboarding/4"
-                className="inline-block text-xs font-medium text-signal hover:underline pt-1 cursor-pointer"
-              >
-                Edit schedule
-              </Link>
-            </div>
-
-            <div className="md:col-span-3 space-y-2 text-sm">
-              <p className="font-medium text-ink text-base">
-                {schedulePhrase}
-              </p>
-              <p className="text-xs text-muted">
-                Approval method: Email notifications for each daily draft.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Your drafts Section */}
-      <DraftsSection
-        timezone={profile.timezone}
-        initialPosts={initialPosts}
-        initialSchedule={initialSchedule}
+              <span>Generate a draft now</span>
+            </Button>
+          ) : null
+        }
       />
 
-      {/* Development-only API Check Panel */}
-      {process.env.NODE_ENV !== "production" && (
-        <div className="pt-8 border-t border-line">
-          <div className="text-xs font-mono text-muted mb-4 uppercase tracking-wider">
-            Development API Diagnostics
+      {/* Alert banner displayed only when LinkedIn connection needs attention */}
+      {linkedinState === "not_connected" && (
+        <Alert>
+          <AlertCircleIcon className="size-4" />
+          <div className="flex-1">
+            <AlertTitle>LinkedIn profile not connected</AlertTitle>
+            <AlertDescription>
+              Connect your LinkedIn profile in Connections to enable automated post publishing.
+            </AlertDescription>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-            <div className="space-y-6">
-              <Suspense fallback={<div className="p-5 rounded-xl border border-line bg-surface animate-pulse h-48" />}>
-                <AccountLinkingPanel userEmail={user.email} />
-              </Suspense>
-            </div>
-            <div className="space-y-6">
-              <ApiCheckPanel apiUrl={apiUrl} />
-            </div>
-          </div>
-        </div>
+          <Button asChild size="sm" variant="outline" className="shrink-0">
+            <Link href="/app/connections">Connect LinkedIn</Link>
+          </Button>
+        </Alert>
       )}
-    </main>
+
+      {linkedinState === "expiring_soon" && (
+        <Alert>
+          <AlertCircleIcon className="size-4" />
+          <div className="flex-1">
+            <AlertTitle>LinkedIn connection expiring soon</AlertTitle>
+            <AlertDescription>
+              Your session expires in {linkedin?.days_left} days. Reconnect now to avoid delivery interruptions.
+            </AlertDescription>
+          </div>
+          <Button asChild size="sm" variant="outline" className="shrink-0">
+            <Link href="/app/connections">Reconnect</Link>
+          </Button>
+        </Alert>
+      )}
+
+      {linkedinState === "expired" && (
+        <Alert variant="destructive">
+          <AlertCircleIcon className="size-4" />
+          <div className="flex-1">
+            <AlertTitle>LinkedIn connection expired</AlertTitle>
+            <AlertDescription>
+              Publishing is paused until you reconnect your LinkedIn profile.
+            </AlertDescription>
+          </div>
+          <Button asChild size="sm" variant="outline" className="shrink-0">
+            <Link href="/app/connections">Reconnect LinkedIn</Link>
+          </Button>
+        </Alert>
+      )}
+
+      {/* Row of four single-level summary cards without trend badges or charts */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* 1. Awaiting approval */}
+        <Link
+          href="/app/posts?tab=needs_approval"
+          onMouseEnter={() => prefetchPosts(user.id, { status: "awaiting_approval" })}
+          onFocus={() => prefetchPosts(user.id, { status: "awaiting_approval" })}
+          className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
+        >
+          <Card className="h-full hover:border-primary/50 transition-colors">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Awaiting approval
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold tracking-tight tabular-nums text-foreground">
+                {data.stats.awaiting_approval}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Drafts ready for your review
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+
+        {/* 2. Published, last 30 days */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Published, last 30 days
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tracking-tight tabular-nums text-foreground">
+              {data.stats.published_30d}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Delivered to LinkedIn
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* 3. Needs attention */}
+        <Link
+          href="/app/posts?tab=problems"
+          onMouseEnter={() => prefetchPosts(user.id, { status: "failed,rejected,expired" })}
+          onFocus={() => prefetchPosts(user.id, { status: "failed,rejected,expired" })}
+          className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
+        >
+          <Card className="h-full hover:border-primary/50 transition-colors">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Needs attention
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold tracking-tight tabular-nums text-foreground">
+                {data.stats.failed_30d}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Failed or expired drafts
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+
+        {/* 4. LinkedIn connection status */}
+        <Link
+          href="/app/connections"
+          className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
+        >
+          <Card className="h-full hover:border-primary/50 transition-colors">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                LinkedIn
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold tracking-tight truncate text-foreground">
+                {linkedinState === "connected" && `${linkedin?.days_left ?? 0} days left`}
+                {linkedinState === "expiring_soon" && `${linkedin?.days_left ?? 0} days left`}
+                {linkedinState === "expired" && "Expired"}
+                {linkedinState === "not_connected" && "Not connected"}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1 truncate">
+                {linkedin?.account_name || "Connect your profile"}
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
+
+      {/* Section: Today */}
+      <Section
+        title="Today"
+        description="The daily draft generated for your approved schedule."
+      >
+        {!data.today ? (
+          !data.profile.onboarding_complete ? (
+            <EmptyState
+              message="Finish setting up your niche and schedule to start generating daily drafts."
+              action={
+                <Button asChild size="sm">
+                  <Link href="/app/onboarding">Finish setup</Link>
+                </Button>
+              }
+            />
+          ) : (
+            <EmptyState
+              message={`Next draft scheduled for ${formatNextDraftTime(data.schedule.next_draft_at) || "tomorrow morning"}.`}
+              action={
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/app/posts">View all posts</Link>
+                </Button>
+              }
+            />
+          )
+        ) : (
+          <Card className="p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <PostThumbnail
+                  postId={data.today.id}
+                  alt={data.today.topic_title}
+                  width={240}
+                  className="size-14 shrink-0"
+                />
+                <div className="space-y-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {data.today.topic_title}
+                  </p>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <ClockIcon className="size-3.5" />
+                    <span>
+                      {data.today.publish_at
+                        ? `Publish at ${formatRunDate(data.today.run_date)}`
+                        : `Run date ${formatRunDate(data.today.run_date)}`}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 self-end sm:self-center shrink-0">
+                <StatusBadge status={data.today.status} />
+                {data.today.status === "awaiting_approval" ? (
+                  <Button asChild size="sm" variant="default">
+                    <Link href={`/app/posts/${data.today.id}`}>
+                      Review and approve
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button asChild size="sm" variant="outline">
+                    <Link href={`/app/posts/${data.today.id}`}>View</Link>
+                  </Button>
+                )}
+              </div>
+            </div>
+          </Card>
+        )}
+      </Section>
+
+      {/* Section: Recent posts */}
+      <Section
+        title="Recent posts"
+        description="The latest 5 drafts generated by your pipeline."
+        actions={
+          <Button asChild variant="ghost" size="sm">
+            <Link
+              href="/app/posts"
+              onMouseEnter={() => prefetchPosts(user.id)}
+              className="text-primary hover:text-primary font-medium"
+            >
+              <span>View all</span>
+              <ExternalLinkIcon className="size-3.5 ml-1" />
+            </Link>
+          </Button>
+        }
+      >
+        {data.recent_posts.length === 0 ? (
+          <EmptyState
+            message="No posts generated yet."
+            action={
+              <Button asChild variant="outline" size="sm">
+                <Link href="/app/posts">Explore posts</Link>
+              </Button>
+            }
+          />
+        ) : (
+          <Card className="overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-32">Date</TableHead>
+                  <TableHead>Topic</TableHead>
+                  <TableHead className="w-40 text-right">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.recent_posts.slice(0, 5).map((post) => (
+                  <TableRow
+                    key={post.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onMouseEnter={() => prefetchPostDetail(user.id, post.id)}
+                  >
+                    <TableCell className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                      <Link href={`/app/posts/${post.id}`} className="block size-full">
+                        {formatRunDate(post.run_date)}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="font-medium text-sm text-foreground">
+                      <Link href={`/app/posts/${post.id}`} className="block truncate max-w-lg">
+                        {post.topic_title}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-right whitespace-nowrap">
+                      <Link href={`/app/posts/${post.id}`} className="inline-block">
+                        <StatusBadge status={post.status} />
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        )}
+      </Section>
+
+      {/* Dev-only inspection panel */}
+      {process.env.NODE_ENV !== "production" && (
+        <ApiCheckPanel apiUrl={apiUrl || ""} />
+      )}
+    </div>
   );
 }
