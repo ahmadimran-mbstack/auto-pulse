@@ -50,7 +50,7 @@ for (const page of pages) {
     } catch (e) {
       console.error(`Failed ${page.slug}-${vp.width}.png:`, e.message);
     } finally {
-      try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch (_) {}
+      try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignore */ }
     }
   }
 }
