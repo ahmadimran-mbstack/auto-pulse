@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckIcon, RotateCcwIcon, Loader2Icon } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Check, Loader2, RotateCcw } from "lucide-react";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
-type Stage =
+// Sequence stages representing the daily post pipeline
+type PipelineStage =
   | "finding"
   | "writing"
   | "designing"
@@ -15,49 +17,49 @@ type Stage =
   | "rejected";
 
 export function HeroExample() {
-  const [stage, setStage] = useState<Stage>("finding");
+  const [stage, setStage] = useState<PipelineStage>("finding");
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
 
+  // Check if user prefers reduced motion to skip the automatic transitions
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 
-    const syncMotionPreference = () => {
+    const handleMotionChange = () => {
       if (mediaQuery.matches) {
         setPrefersReducedMotion(true);
         setStage("waiting");
       }
     };
 
-    const animId = requestAnimationFrame(syncMotionPreference);
-    mediaQuery.addEventListener("change", syncMotionPreference);
+    handleMotionChange();
+    mediaQuery.addEventListener("change", handleMotionChange);
 
-    return () => {
-      cancelAnimationFrame(animId);
-      mediaQuery.removeEventListener("change", syncMotionPreference);
-    };
+    return () => mediaQuery.removeEventListener("change", handleMotionChange);
   }, []);
 
+  // Step through the automated sequence unless the user prefers reduced motion
   useEffect(() => {
     if (prefersReducedMotion) return;
 
     if (stage === "finding") {
-      const t1 = setTimeout(() => setStage("writing"), 1100);
-      return () => clearTimeout(t1);
+      const timer = setTimeout(() => setStage("writing"), 1100);
+      return () => clearTimeout(timer);
     }
     if (stage === "writing") {
-      const t2 = setTimeout(() => setStage("designing"), 1100);
-      return () => clearTimeout(t2);
+      const timer = setTimeout(() => setStage("designing"), 1100);
+      return () => clearTimeout(timer);
     }
     if (stage === "designing") {
-      const t3 = setTimeout(() => setStage("waiting"), 1100);
-      return () => clearTimeout(t3);
+      const timer = setTimeout(() => setStage("waiting"), 1100);
+      return () => clearTimeout(timer);
     }
     if (stage === "approved") {
-      const t4 = setTimeout(() => setStage("published"), 900);
-      return () => clearTimeout(t4);
+      const timer = setTimeout(() => setStage("published"), 900);
+      return () => clearTimeout(timer);
     }
   }, [stage, prefersReducedMotion]);
 
+  // User actions
   const handleApprove = () => setStage("approved");
   const handleReject = () => setStage("rejected");
   const handleReplay = () => {
@@ -69,52 +71,72 @@ export function HeroExample() {
   };
 
   return (
-    <div className="w-full max-w-lg bg-card rounded-lg border border-border p-6 text-left transition-all">
-      {/* Header bar of example card */}
+    <Card className="w-full max-w-lg p-6 bg-card border-border text-left">
+      {/* Example badge label and replay reset button */}
       <div className="flex items-center justify-between pb-4 border-b border-border mb-4">
         <div className="flex items-center gap-2">
-          <span className="size-2 rounded-full bg-primary" />
-          <span className="text-xs font-semibold text-muted-foreground">
-            Daily Approval Queue
-          </span>
+          <span className="size-2 rounded-full bg-primary" aria-hidden="true" />
+          <Badge variant="neutral" className="text-caption font-mono uppercase">
+            Example
+          </Badge>
         </div>
         <Button
           type="button"
           variant="ghost"
           size="sm"
           onClick={handleReplay}
-          className="text-xs text-muted-foreground hover:text-foreground h-7 px-2 gap-1.5"
+          className="text-caption text-muted-foreground hover:text-foreground h-7 px-2 gap-1.5"
         >
-          <RotateCcwIcon className="size-3.5" />
-          <span>Replay sequence</span>
+          <RotateCcw className="size-3.5" aria-hidden="true" />
+          <span>Replay example</span>
         </Button>
       </div>
 
-      {/* Stepper progress indicator */}
-      <div className="grid grid-cols-4 gap-1.5 mb-5">
+      {/* Pipeline progress bar */}
+      <div
+        className="grid grid-cols-4 gap-1.5 mb-4"
+        role="progressbar"
+        aria-label="Daily draft preparation progress"
+        aria-valuenow={
+          stage === "finding"
+            ? 25
+            : stage === "writing"
+            ? 50
+            : stage === "designing"
+            ? 75
+            : 100
+        }
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
         <div
-          className={`h-1.5 rounded-full transition-colors duration-120 ${
-            stage === "finding" || stage === "writing" || stage === "designing" || stage === "waiting" || stage === "approved" || stage === "published"
+          className={`h-1.5 rounded-full transition-colors ${
+            stage !== "rejected" ? "bg-primary" : "bg-border"
+          }`}
+        />
+        <div
+          className={`h-1.5 rounded-full transition-colors ${
+            stage === "writing" ||
+            stage === "designing" ||
+            stage === "waiting" ||
+            stage === "approved" ||
+            stage === "published"
               ? "bg-primary"
               : "bg-border"
           }`}
         />
         <div
-          className={`h-1.5 rounded-full transition-colors duration-120 ${
-            stage === "writing" || stage === "designing" || stage === "waiting" || stage === "approved" || stage === "published"
+          className={`h-1.5 rounded-full transition-colors ${
+            stage === "designing" ||
+            stage === "waiting" ||
+            stage === "approved" ||
+            stage === "published"
               ? "bg-primary"
               : "bg-border"
           }`}
         />
         <div
-          className={`h-1.5 rounded-full transition-colors duration-120 ${
-            stage === "designing" || stage === "waiting" || stage === "approved" || stage === "published"
-              ? "bg-primary"
-              : "bg-border"
-          }`}
-        />
-        <div
-          className={`h-1.5 rounded-full transition-colors duration-120 ${
+          className={`h-1.5 rounded-full transition-colors ${
             stage === "waiting" || stage === "approved" || stage === "published"
               ? "bg-primary"
               : "bg-border"
@@ -122,120 +144,128 @@ export function HeroExample() {
         />
       </div>
 
-      {/* Dynamic status badge */}
+      {/* Stage indicator badge */}
       <div className="mb-4 flex items-center justify-between">
         {stage === "finding" && (
           <Badge variant="draft" className="gap-1.5">
-            <span className="size-1.5 rounded-full bg-status-draft-fg animate-pulse" />
-            1/4 Scanning industry trends...
+            <span className="size-1.5 rounded-full bg-status-draft-fg" aria-hidden="true" />
+            Finding topics
           </Badge>
         )}
         {stage === "writing" && (
           <Badge variant="draft" className="gap-1.5">
-            <span className="size-1.5 rounded-full bg-status-draft-fg animate-pulse" />
-            2/4 Drafting executive perspective...
+            <span className="size-1.5 rounded-full bg-status-draft-fg" aria-hidden="true" />
+            Writing
           </Badge>
         )}
         {stage === "designing" && (
           <Badge variant="draft" className="gap-1.5">
-            <span className="size-1.5 rounded-full bg-status-draft-fg animate-pulse" />
-            3/4 Designing branded visual card...
+            <span className="size-1.5 rounded-full bg-status-draft-fg" aria-hidden="true" />
+            Designing
           </Badge>
         )}
         {stage === "waiting" && (
           <Badge variant="draft" className="gap-1.5">
-            <span className="size-1.5 rounded-full bg-status-draft-fg" />
-            Ready for your review
+            <span className="size-1.5 rounded-full bg-status-draft-fg" aria-hidden="true" />
+            Waiting for your approval
           </Badge>
         )}
         {stage === "approved" && (
           <Badge variant="approved" className="gap-1.5">
-            <Loader2Icon className="size-3 animate-spin text-primary" />
-            Approved · Publishing now...
+            <Loader2 className="size-3 animate-spin text-primary" aria-hidden="true" />
+            Approved
           </Badge>
         )}
         {stage === "published" && (
           <Badge variant="published" className="gap-1.5">
-            <CheckIcon className="size-3 text-primary" />
-            Live on LinkedIn
+            <Check className="size-3 text-primary" aria-hidden="true" />
+            Published, live on LinkedIn
           </Badge>
         )}
         {stage === "rejected" && (
           <Badge variant="danger" className="gap-1.5">
-            Draft Rejected · Nothing published
+            Rejected
           </Badge>
         )}
 
-        <span className="text-caption text-muted-foreground">LinkedIn Post Preview</span>
+        <span className="text-caption text-muted-foreground">Draft preview</span>
       </div>
 
-      {/* Realistic LinkedIn Post Container */}
+      {/* Realistic LinkedIn Draft Card */}
       <div className="rounded-md border border-border bg-card p-4 mb-4">
-        {/* Author header */}
+        {/* Author info */}
         <div className="flex items-center gap-3 mb-3">
-          <div className="size-9 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-bold shrink-0">
+          <div
+            className="size-9 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-caption font-bold shrink-0"
+            aria-hidden="true"
+          >
             AM
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-1">
-              <span className="font-semibold text-xs text-foreground truncate">Alex Morgan</span>
-            </div>
-            <p className="text-caption text-muted-foreground truncate">VP of Product & AI Architecture · 8:15 AM</p>
+            <p className="font-semibold text-meta text-foreground truncate">
+              Alex Morgan
+            </p>
+            <p className="text-caption text-muted-foreground truncate">
+              Product Architect
+            </p>
           </div>
         </div>
 
         {/* Post body */}
-        <div className="text-xs text-foreground space-y-1.5 mb-3 leading-relaxed">
+        <div className="text-meta text-foreground space-y-1.5 mb-3 leading-relaxed">
           <p className="font-medium text-foreground">
-            Most teams measure activity metrics instead of completed customer workflows.
+            Teams that track customer outcomes ship with higher clarity.
           </p>
           <p className="text-muted-foreground">
-            When retention stalls, shipping more features rarely fixes the underlying friction. Measure completed workflows, not output volume.
+            When retention stalls, adding more features rarely fixes the underlying issue. Review completed user journeys every week.
           </p>
-          <p className="text-primary font-medium pt-1">
-            #ProductStrategy #EngineeringLeadership #AutoPulse
+          <p className="text-primary font-medium text-caption pt-0.5">
+            #ProductStrategy #EngineeringLeadership
           </p>
         </div>
 
-        {/* Branded visual card */}
-        <div className="w-full h-32 rounded-md bg-primary p-3.5 flex flex-col justify-between text-primary-foreground relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-caption font-bold tracking-wider text-signal-line uppercase">
+        {/* Branded image card in two colors */}
+        <div
+          className="w-full rounded-md bg-primary p-4 text-primary-foreground flex flex-col justify-between"
+          role="img"
+          aria-label="Branded quote graphic: Teams that track customer outcomes ship with higher clarity"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-caption font-semibold tracking-wider text-signal-line uppercase">
               AutoPulse Insight
             </span>
-            <span className="text-caption font-mono opacity-80">08:00 AM</span>
+            <span className="text-caption opacity-80 tabular-nums">08:00 AM</span>
           </div>
-          <p className="text-xs font-semibold leading-snug text-primary-foreground max-w-sm">
-            &ldquo;Measure completed customer workflows, not raw feature output volume.&rdquo;
+          <p className="text-meta font-semibold leading-snug mb-4">
+            &ldquo;Teams that track customer outcomes ship with higher clarity.&rdquo;
           </p>
-          <div className="flex items-center justify-between text-caption opacity-80">
+          <div className="flex items-center justify-between text-caption opacity-80 pt-2 border-t border-primary-foreground/20">
             <span>autopulse.ai</span>
             <span>Verified draft</span>
           </div>
         </div>
-
-        {/* Simulated Engagement Bar */}
-        <div className="flex items-center justify-between pt-3 mt-3 border-t border-border text-caption text-muted-foreground">
-          <span>148 reactions</span>
-          <span>32 comments · 14 reposts</span>
-        </div>
       </div>
 
-      {/* Interactive approval actions */}
+      {/* Interactive controls */}
       <div>
         {stage === "rejected" ? (
-          <Button
-            type="button"
-            variant="default"
-            onClick={handleReplay}
-            className="w-full"
-          >
-            Generate next morning draft
-          </Button>
+          <div className="space-y-2">
+            <p className="text-caption text-muted-foreground">
+              Draft was rejected. Nothing was published to your LinkedIn profile.
+            </p>
+            <Button
+              type="button"
+              variant="default"
+              onClick={handleReplay}
+              className="w-full"
+            >
+              Write another
+            </Button>
+          </div>
         ) : stage === "published" ? (
-          <div className="p-3 rounded-md bg-signal-soft border border-signal-line text-center">
-            <p className="text-xs font-medium text-primary">
-              Post successfully published to your LinkedIn profile.
+          <div className="p-3 rounded-md bg-signal-soft border border-signal-line text-left">
+            <p className="text-meta font-medium text-primary">
+              Published directly to LinkedIn through the official API.
             </p>
           </div>
         ) : (
@@ -247,7 +277,7 @@ export function HeroExample() {
               disabled={stage !== "waiting"}
               className="flex-1"
             >
-              Approve & Publish
+              Approve
             </Button>
             <Button
               type="button"
@@ -256,11 +286,11 @@ export function HeroExample() {
               disabled={stage !== "waiting"}
               className="flex-1"
             >
-              Reject Draft
+              Reject
             </Button>
           </div>
         )}
       </div>
-    </div>
+    </Card>
   );
 }

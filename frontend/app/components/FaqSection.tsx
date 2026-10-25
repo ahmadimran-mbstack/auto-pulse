@@ -8,45 +8,47 @@ import {
 } from "@/components/ui/accordion";
 
 interface FaqSectionProps {
-  contactEmail: string;
+  contactEmail?: string;
 }
 
-export function FaqSection({ contactEmail }: FaqSectionProps) {
-  const items = [
+export function FaqSection({ contactEmail = "" }: FaqSectionProps = {}) {
+  void contactEmail;
+  // Five core questions answering verification and safety
+  const faqItems = [
     {
       id: "item-1",
-      question: "Does AutoPulse ever post without my explicit approval?",
-      answer:
-        "Never. AutoPulse has zero automated publishing bypasses. Every single post, image, and caption enters your pending queue. If you do not click 'Approve', nothing is ever sent to LinkedIn.",
+      question: "Does AutoPulse post without my approval?",
+      answer: "No, every post waits for your approval.",
     },
     {
       id: "item-2",
-      question: "Does AutoPulse see or store my LinkedIn password?",
+      question: "Why not just use ChatGPT?",
       answer:
-        "No. AutoPulse uses the official LinkedIn OAuth 2.0 API. You sign in directly on LinkedIn's official authorization screen and grant posting permissions. We never see, handle, or store your password.",
+        "A chat starts blank each time. AutoPulse searches fresh news every day, writes in your saved tone and brand, makes the image, asks you to approve, and posts at your chosen time.",
     },
     {
       id: "item-3",
-      question: "Can I edit the post before approving it?",
+      question: "Will it sound like AI?",
       answer:
-        "Yes. You can edit any sentence, change hashtags, or request a complete rewrite with a different angle directly from your dashboard in seconds.",
+        "Posts follow your tone and sample posts, are checked against a list of stock phrases, and you approve each one before it goes out.",
     },
     {
       id: "item-4",
-      question: "Which social accounts are supported?",
+      question: "Is it safe to connect LinkedIn?",
       answer:
-        "LinkedIn personal profiles and LinkedIn company pages are fully supported today. X (Twitter), Facebook, and Instagram connectors are currently in closed beta testing.",
+        "We use LinkedIn's official API, post only after you approve, and you can disconnect at any time.",
     },
     {
       id: "item-5",
-      question: "How do I cancel or delete my account and data?",
-      answer: `You can disconnect LinkedIn with one click at any time. To permanently delete your account and all generated drafts, click 'Delete Account' in your dashboard or email ${contactEmail}. All data is erased within 24 hours.`,
+      question: "How do I delete my data?",
+      answer:
+        "Use Delete account in Settings. Posts already on LinkedIn stay there.",
     },
   ];
 
   return (
     <Accordion type="single" collapsible className="w-full space-y-3">
-      {items.map((item) => (
+      {faqItems.map((item) => (
         <AccordionItem
           key={item.id}
           value={item.id}
@@ -57,7 +59,7 @@ export function FaqSection({ contactEmail }: FaqSectionProps) {
               {item.question}
             </span>
           </AccordionTrigger>
-          <AccordionContent className="text-sm text-muted-foreground leading-relaxed pt-1 pb-4">
+          <AccordionContent className="text-body text-muted-foreground leading-relaxed pt-1 pb-4">
             <p>{item.answer}</p>
           </AccordionContent>
         </AccordionItem>
