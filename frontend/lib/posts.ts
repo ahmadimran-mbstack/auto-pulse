@@ -51,17 +51,17 @@ export function getStatusChipConfig(status: PostStatus): StatusChipConfig {
     case "draft":
       return {
         label: "Draft",
-        className: "bg-status-draft-bg text-status-draft-fg border-transparent",
+        className: "bg-status-warning-bg text-status-warning-fg border-transparent",
       };
     case "awaiting_approval":
       return {
         label: "Waiting for approval",
-        className: "bg-status-draft-bg text-status-draft-fg border-transparent",
+        className: "bg-status-warning-bg text-status-warning-fg border-transparent",
       };
     case "approved":
       return {
         label: "Approved",
-        className: "bg-signal-soft text-primary border-signal-line",
+        className: "bg-status-info-bg text-status-info-fg border-transparent",
       };
     case "published":
       return {
@@ -72,7 +72,7 @@ export function getStatusChipConfig(status: PostStatus): StatusChipConfig {
     case "rejected":
       return {
         label: "Rejected",
-        className: "bg-status-danger-bg text-status-danger-fg border-transparent",
+        className: "bg-status-neutral-bg text-status-neutral-fg border-transparent",
       };
     case "failed":
       return {
@@ -82,17 +82,17 @@ export function getStatusChipConfig(status: PostStatus): StatusChipConfig {
     case "publishing":
       return {
         label: "Publishing",
-        className: "bg-muted text-muted-foreground border-border",
+        className: "bg-status-info-bg text-status-info-fg border-transparent",
       };
     case "expired":
       return {
         label: "Expired",
-        className: "bg-muted text-muted-foreground border-border",
+        className: "bg-status-neutral-bg text-status-neutral-fg border-transparent",
       };
     default:
       return {
         label: "Draft",
-        className: "bg-status-draft-bg text-status-draft-fg border-transparent",
+        className: "bg-status-warning-bg text-status-warning-fg border-transparent",
       };
   }
 }

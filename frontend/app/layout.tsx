@@ -1,24 +1,9 @@
 import type { Metadata } from "next";
-import { Manrope, Geist } from "next/font/google";
+import { GeistSans } from "geist/font/sans";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
-
-// Configure DM Sans for all UI body text
-const geist = Geist({
-  variable: "--font-geist",
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  display: "swap",
-});
-
-// Configure Bricolage Grotesque for page titles and display headings
-const manrope = Manrope({
-  variable: "--font-manrope",
-  subsets: ["latin"],
-  weight: ["500"],
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "AutoPulse: Daily LinkedIn posts. You approve each one.",
@@ -43,13 +28,21 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geist.variable} ${manrope.variable}`}
+      className={GeistSans.variable}
+      suppressHydrationWarning
     >
-      <body className="min-h-screen bg-background text-foreground font-sans antialiased flex flex-col">
-        <TooltipProvider>
-          {children}
-          <Toaster />
-        </TooltipProvider>
+      <body className="min-h-screen bg-background text-foreground font-sans antialiased flex flex-col font-normal">
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <TooltipProvider>
+            {children}
+            <Toaster />
+          </TooltipProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

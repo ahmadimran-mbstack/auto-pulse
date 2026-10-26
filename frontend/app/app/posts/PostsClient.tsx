@@ -206,7 +206,7 @@ export function PostsClient({ user }: PostsClientProps) {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 md:p-8 space-y-6 max-w-7xl mx-auto">
       <PageHeader
         title="Posts"
         description="Review, inspect, and track all daily generated LinkedIn drafts."
@@ -228,7 +228,7 @@ export function PostsClient({ user }: PostsClientProps) {
 
       {/* Loading state */}
       {isLoading ? (
-        <PostsSkeleton />
+        <PostsSkeleton showHeader={false} />
       ) : isError ? (
         <div className="py-12">
           <ErrorState

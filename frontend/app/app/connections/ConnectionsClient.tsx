@@ -110,7 +110,7 @@ export function ConnectionsClient({ user }: ConnectionsClientProps) {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="p-6 md:p-8 space-y-8 max-w-4xl mx-auto">
       <PageHeader
         title="Connections"
         description="Manage your authorized social platforms and automated publishing profiles."

@@ -153,7 +153,7 @@ export function SettingsClient() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="p-6 md:p-8 space-y-8 max-w-5xl mx-auto">
       <PageHeader
         title="Settings"
         description="Manage your profile, content preferences, brand styling, schedule, and account."
@@ -1320,7 +1320,7 @@ function AccountTabPanel({
 
           <div className="space-y-2 py-2 text-left">
             <Label htmlFor="delete-confirm-input" className="text-xs text-foreground font-medium">
-              To confirm deletion, type <span className="font-mono font-bold text-destructive">DELETE</span> below:
+              To confirm deletion, type <span className="font-mono font-semibold text-destructive">DELETE</span> below:
             </Label>
             <Input
               id="delete-confirm-input"

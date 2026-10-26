@@ -125,7 +125,7 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
 
   if (postError || !post) {
     return (
-      <div className="py-12 space-y-4 max-w-lg">
+      <div className="p-6 md:p-8 space-y-4 max-w-lg mx-auto">
         <ErrorState
           message={
             error instanceof Error ? error.message : "We could not load this post."
@@ -196,7 +196,7 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 md:p-8 space-y-6 max-w-5xl mx-auto">
       {/* Breadcrumb navigation */}
       <Breadcrumb>
         <BreadcrumbList>

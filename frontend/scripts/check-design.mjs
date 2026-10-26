@@ -30,6 +30,8 @@ const isExempt = (filePath) => {
   if (normalized.includes("/node_modules/") || normalized.includes("/.next/")) return true;
   // Pure math WCAG color calculations
   if (normalized.endsWith("lib/contrast.ts")) return true;
+  // Pure math deterministic avatar gradient calculation
+  if (normalized.endsWith("lib/avatar-gradient.ts")) return true;
   return false;
 };
 

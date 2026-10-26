@@ -4,6 +4,7 @@ import { Slot } from "radix-ui";
 
 import { cn } from "@/lib/utils";
 
+// Badge variants using status tokens and primary/secondary tokens
 const badgeVariants = cva(
   "group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1.5 overflow-hidden rounded-md border px-2 py-0.5 text-xs font-medium whitespace-nowrap transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 [&>svg]:pointer-events-none [&>svg]:size-3",
   {
@@ -13,11 +14,15 @@ const badgeVariants = cva(
         secondary: "border-transparent bg-secondary text-secondary-foreground",
         destructive: "border-transparent bg-destructive text-destructive-foreground",
         outline: "border-border bg-transparent text-foreground",
-        neutral: "border-border bg-muted text-muted-foreground",
-        draft: "border-transparent bg-status-draft-bg text-status-draft-fg",
-        approved: "border-signal-line bg-signal-soft text-primary",
-        published: "border-border bg-card text-foreground",
+        info: "border-transparent bg-status-info-bg text-status-info-fg",
+        success: "border-transparent bg-status-success-bg text-status-success-fg",
+        warning: "border-transparent bg-status-warning-bg text-status-warning-fg",
         danger: "border-transparent bg-status-danger-bg text-status-danger-fg",
+        neutral: "border-transparent bg-status-neutral-bg text-status-neutral-fg",
+        // Backward compatibility mappings
+        draft: "border-transparent bg-status-warning-bg text-status-warning-fg",
+        approved: "border-transparent bg-status-info-bg text-status-info-fg",
+        published: "border-border bg-card text-foreground",
       },
     },
     defaultVariants: {

@@ -21,6 +21,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { EllipsisVerticalIcon, SettingsIcon, LogOutIcon } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { signOutAction } from "@/app/app/actions";
 import { clearAllAppCaches } from "@/lib/queries";
 
@@ -76,6 +77,11 @@ export function NavUser({ user }: { user: NavUserData }) {
                 </p>
               </div>
             </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <div className="px-2 py-1.5 flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Theme</span>
+              <ThemeToggle />
+            </div>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem asChild>

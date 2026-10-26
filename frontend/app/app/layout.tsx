@@ -1,12 +1,11 @@
 import * as React from "react";
 import { auth } from "@/lib/auth/server";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import { AppQueryProvider } from "@/components/providers/query-provider";
 import { UserProvider, type AppUser } from "@/components/providers/user-provider";
 
-// Server shell layout wrapping all /app views with providers, AppSidebar, and SiteHeader
+// Shell layout wrapping all /app views with fixed 256px sidebar and 56px header
 export default async function AppShellLayout({
   children,
 }: {
@@ -20,22 +19,20 @@ export default async function AppShellLayout({
   return (
     <AppQueryProvider>
       <UserProvider initialUser={user}>
-        <SidebarProvider
-          style={
-            {
-              "--sidebar-width": "232px",
-            } as React.CSSProperties
-          }
-          className="min-h-screen bg-background"
-        >
-          <AppSidebar user={user} />
-          <SidebarInset className="bg-background flex flex-col min-w-0">
+        <div className="min-h-screen bg-background flex">
+          {/* Fixed 256px sidebar on desktop (1024px and wider) */}
+          <div className="hidden lg:block w-64 shrink-0">
+            <AppSidebar user={user} className="fixed inset-y-0 left-0 w-64" />
+          </div>
+
+          {/* Main content column with 56px top header */}
+          <div className="flex-1 flex flex-col min-w-0">
             <SiteHeader />
-            <div className="flex-1 w-full page-container mx-auto px-4 md:px-6 py-4 md:py-6">
+            <main className="flex-1 w-full bg-background">
               {children}
-            </div>
-          </SidebarInset>
-        </SidebarProvider>
+            </main>
+          </div>
+        </div>
       </UserProvider>
     </AppQueryProvider>
   );

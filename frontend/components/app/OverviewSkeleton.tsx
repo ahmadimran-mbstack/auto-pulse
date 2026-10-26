@@ -1,68 +1,84 @@
 import * as React from "react";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
-// Loading placeholder matching the final Overview dashboard layout
+// Loading placeholder matching the exact 3fr:4fr reference Overview layout
 export function OverviewSkeleton() {
   return (
-    <div className="space-y-8 animate-pulse">
-      {/* Page Header skeleton */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-border">
-        <div className="space-y-2">
-          <Skeleton className="h-8 w-40" />
-          <Skeleton className="h-4 w-64" />
-        </div>
+    <div className="p-6 md:p-8 space-y-8 animate-pulse">
+      {/* 1. Tools row skeleton */}
+      <div className="flex items-center gap-2 h-9 w-full">
+        <Skeleton className="flex-1 h-9 rounded-lg" />
+        <Skeleton className="size-9 rounded-lg shrink-0" />
+        <Skeleton className="h-9 w-16 rounded-lg shrink-0" />
+        <Skeleton className="h-9 w-40 rounded-full shrink-0" />
       </div>
 
-      {/* Four metric cards skeleton */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Card key={i}>
-            <CardHeader className="pb-2">
-              <Skeleton className="h-4 w-28" />
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Skeleton className="h-8 w-16" />
-              <Skeleton className="h-3 w-36" />
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Today section skeleton */}
-      <div className="space-y-3">
-        <Skeleton className="h-5 w-24" />
-        <Card className="p-4">
-          <div className="flex items-center gap-4">
-            <Skeleton className="size-14 rounded-md shrink-0" />
-            <div className="space-y-2 flex-1">
-              <Skeleton className="h-5 w-3/4 max-w-md" />
-              <Skeleton className="h-4 w-40" />
+      {/* 2. Two-column grid skeleton: 3fr 4fr */}
+      <div className="grid grid-cols-1 lg:grid-cols-[3fr_4fr] gap-6">
+        {/* Left column */}
+        <div className="space-y-8">
+          {/* Last 30 days card skeleton */}
+          <div className="space-y-5">
+            <Skeleton className="h-5 w-32" />
+            <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+              <div className="flex justify-between items-center pb-2 border-b border-border">
+                <Skeleton className="h-5 w-24" />
+                <Skeleton className="h-6 w-20 rounded-md" />
+              </div>
+              <Skeleton className="h-8 w-full rounded-lg" />
+              <Skeleton className="h-8 w-full rounded-lg" />
+              <Skeleton className="h-8 w-full rounded-lg" />
+              <Skeleton className="h-8 w-full rounded-lg" />
             </div>
-            <Skeleton className="h-9 w-32 shrink-0 hidden sm:block" />
           </div>
-        </Card>
-      </div>
 
-      {/* Recent posts section skeleton */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <Skeleton className="h-5 w-28" />
-          <Skeleton className="h-4 w-16" />
-        </div>
-        <Card>
-          <div className="divide-y divide-border">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="flex items-center justify-between p-4">
-                <div className="space-y-1.5 flex-1 max-w-lg">
-                  <Skeleton className="h-4 w-2/3" />
-                  <Skeleton className="h-3 w-28" />
+          {/* Alerts card skeleton */}
+          <div className="space-y-5">
+            <Skeleton className="h-5 w-20" />
+            <div className="rounded-lg border border-border bg-card p-8 flex flex-col items-center justify-center space-y-3">
+              <Skeleton className="size-8 rounded-lg" />
+              <Skeleton className="h-4 w-64" />
+            </div>
+          </div>
+
+          {/* Today card skeleton */}
+          <div className="space-y-5">
+            <Skeleton className="h-5 w-20" />
+            <div className="rounded-lg border border-border bg-card p-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Skeleton className="size-14 rounded-md" />
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-3 w-24" />
                 </div>
-                <Skeleton className="h-6 w-20" />
+              </div>
+              <Skeleton className="h-8 w-20 rounded-md" />
+            </div>
+          </div>
+        </div>
+
+        {/* Right column: Posts skeleton */}
+        <div className="space-y-5">
+          <Skeleton className="h-5 w-20" />
+          <div className="space-y-6">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="rounded-lg border border-border bg-card p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="size-8 rounded-full" />
+                    <div className="space-y-1.5">
+                      <Skeleton className="h-4 w-48" />
+                      <Skeleton className="h-3 w-24" />
+                    </div>
+                  </div>
+                  <Skeleton className="size-8 rounded-full" />
+                </div>
+                <Skeleton className="h-4 w-5/6" />
+                <Skeleton className="h-3 w-32" />
               </div>
             ))}
           </div>
-        </Card>
+        </div>
       </div>
     </div>
   );

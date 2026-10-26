@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/app/EmptyState";
 // 404 Not Found state inside the /app shell
 export default function AppNotFound() {
   return (
-    <div className="space-y-6">
+    <div className="p-6 md:p-8 space-y-6 max-w-2xl mx-auto">
       <PageHeader
         title="Page not found"
         description="The page or resource you are looking for does not exist in AutoPulse."

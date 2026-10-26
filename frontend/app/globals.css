@@ -1,72 +1,158 @@
-@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap');
 @import "tailwindcss";
 
 /*
   Design Tokens for AutoPulse
-  Clean, calm and exact developer-tool aesthetic
-  Light mode only
+  Matched to Vercel dashboard reference layout
+  Supports light, dark, and system themes
 */
 :root {
   color-scheme: light;
 
   /* Base canvas and text */
-  --background: #F6F7F9;
-  --foreground: #12141A;
+  --background: #fafafa;
+  --foreground: #171717;
 
   /* Card and popover surfaces */
-  --card: #FFFFFF;
-  --card-foreground: #12141A;
-  --popover: #FFFFFF;
-  --popover-foreground: #12141A;
+  --card: #ffffff;
+  --card-foreground: #171717;
+  --popover: #ffffff;
+  --popover-foreground: #171717;
 
   /* Primary brand and action colors */
-  --primary: #0B7F70;
-  --primary-foreground: #FFFFFF;
-  --primary-hover: #096A5D;
-  --primary-active: #07584D;
+  --primary: #171717;
+  --primary-foreground: #ffffff;
 
   /* Neutral surfaces and text */
-  --secondary: #EEF0F4;
-  --secondary-foreground: #12141A;
-  --muted: #EEF0F4;
-  --muted-foreground: #5B6270;
-  --accent: #EEF0F4;
-  --accent-foreground: #12141A;
+  --secondary: #f2f2f2;
+  --secondary-foreground: #171717;
+  --muted: #f2f2f2;
+  --muted-foreground: #4d4d4d;
+  --accent: #f0f0f0; /* solid color in light mode for active and hover */
+  --accent-foreground: #171717;
+  --stripe: #fafafa; /* alternating zebra row background */
 
   /* Destructive action color */
-  --destructive: #B4412E;
-  --destructive-foreground: #FFFFFF;
+  --destructive: #cd2b31;
+  --destructive-foreground: #ffffff;
 
   /* Borders and controls */
-  --border: #E2E5EB;
-  --input: #CBD0D9;
-  --ring: #0B7F70;
+  --border: #d4d4d4; /* dividers and edges */
+  --card-border: #c8c8c8; /* card outlines and inputs */
+  --input: #c8c8c8;
+  --ring: #0072f5;
 
   /* Sidebar tokens */
-  --sidebar: #FFFFFF;
-  --sidebar-foreground: #12141A;
-  --sidebar-primary: #0B7F70;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #EEF0F4;
-  --sidebar-accent-foreground: #12141A;
-  --sidebar-border: #E2E5EB;
-  --sidebar-ring: #0B7F70;
-  --sidebar-width: 232px;
+  --sidebar: #f8f8f8;
+  --sidebar-foreground: #171717;
+  --sidebar-primary: #171717;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f0f0f0;
+  --sidebar-accent-foreground: #171717;
+  --sidebar-border: #d4d4d4;
+  --sidebar-ring: #0072f5;
+  --sidebar-width: 256px;
 
-  /* Status and signal tokens */
-  --signal-soft: #E3F4F1;
-  --signal-line: #B9E2DB;
-  --status-draft-fg: #8A5A0B;
-  --status-draft-bg: #FBF1DC;
-  --status-danger-fg: #B4412E;
-  --status-danger-bg: #FBE9E5;
+  /* Status tokens: light mode */
+  --status-info-fg: #0068d6;
+  --status-info-bg: #e0edfa;
+  --status-info-arc: #0072f5;
 
-  /* Radius: 8px for panels and dialogs (rounded-lg), 6px for controls (rounded-md) */
-  --radius: 0.5rem;
+  --status-success-fg: #297c3b;
+  --status-success-bg: #ecfdec;
+  --status-success-arc: #46a758;
 
-  /* Floating elevation shadow for dialogs, popovers, dropdowns and toasts */
-  --elevation-shadow: 0 8px 24px rgba(18, 20, 26, 0.08);
+  --status-warning-fg: #915b00;
+  --status-warning-bg: #fff6de;
+  --status-warning-arc: #ffb224;
+
+  --status-danger-fg: #c4262c;
+  --status-danger-bg: #ffeeef;
+  --status-danger-arc: #e5484d;
+
+  --status-neutral-fg: #4d4d4d;
+  --status-neutral-bg: #e6e6e6;
+  --status-neutral-arc: #666666;
+
+  /* Radius rules: 8px for cards, inputs, menus; 6px for small buttons and keys */
+  --radius: 8px;
+
+  /* Soft shadow for light mode cards */
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --elevation-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.dark {
+  /* dark values unverified */
+  color-scheme: dark;
+
+  /* Base canvas and text */
+  --background: #000000;
+  --foreground: #ededed;
+
+  /* Card and popover surfaces */
+  --card: #0a0a0a;
+  --card-foreground: #ededed;
+  --popover: #0a0a0a;
+  --popover-foreground: #ededed;
+
+  /* Primary action colors: white in dark mode */
+  --primary: #ededed;
+  --primary-foreground: #0a0a0a;
+
+  /* Neutral surfaces and text */
+  --secondary: #1a1a1a;
+  --secondary-foreground: #ededed;
+  --muted: #1a1a1a;
+  --muted-foreground: #a1a1a1;
+  --accent: #ffffff0f;
+  --accent-foreground: #ededed;
+  --stripe: #111111;
+
+  /* Destructive action color */
+  --destructive: #e5484d;
+  --destructive-foreground: #ffffff;
+
+  /* Borders and controls */
+  --border: #2e2e2e;
+  --card-border: #2e2e2e;
+  --input: #2e2e2e;
+  --ring: #3291ff;
+
+  /* Sidebar tokens */
+  --sidebar: #000000;
+  --sidebar-foreground: #ededed;
+  --sidebar-primary: #ededed;
+  --sidebar-primary-foreground: #0a0a0a;
+  --sidebar-accent: #ffffff0f;
+  --sidebar-accent-foreground: #ededed;
+  --sidebar-border: #2e2e2e;
+  --sidebar-ring: #3291ff;
+
+  /* Status tokens: dark mode */
+  --status-info-fg: #52a9ff;
+  --status-info-arc: #0072f5;
+  --status-info-bg: color-mix(in srgb, var(--status-info-arc) 14%, var(--card));
+
+  --status-success-fg: #62c073;
+  --status-success-arc: #46a758;
+  --status-success-bg: color-mix(in srgb, var(--status-success-arc) 14%, var(--card));
+
+  --status-warning-fg: #ffca16;
+  --status-warning-arc: #ffb224;
+  --status-warning-bg: color-mix(in srgb, var(--status-warning-arc) 14%, var(--card));
+
+  --status-danger-fg: #ff6369;
+  --status-danger-arc: #e5484d;
+  --status-danger-bg: color-mix(in srgb, var(--status-danger-arc) 14%, var(--card));
+
+  --status-neutral-fg: #a1a1a1;
+  --status-neutral-arc: #a1a1a1;
+  --status-neutral-bg: color-mix(in srgb, var(--status-neutral-arc) 14%, var(--card));
+
+  /* No shadows in dark mode for cards */
+  --card-shadow: none;
+  --elevation-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
 @theme {
@@ -78,17 +164,17 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
-  --color-primary-hover: var(--primary-hover);
-  --color-primary-active: var(--primary-active);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-stripe: var(--stripe);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
+  --color-card-border: var(--card-border);
   --color-input: var(--input);
   --color-ring: var(--ring);
 
@@ -101,64 +187,74 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  --color-signal-soft: var(--signal-soft);
-  --color-signal-line: var(--signal-line);
-  --color-status-draft-fg: var(--status-draft-fg);
-  --color-status-draft-bg: var(--status-draft-bg);
+  --color-status-info-fg: var(--status-info-fg);
+  --color-status-info-bg: var(--status-info-bg);
+  --color-status-info-arc: var(--status-info-arc);
+  --color-status-success-fg: var(--status-success-fg);
+  --color-status-success-bg: var(--status-success-bg);
+  --color-status-success-arc: var(--status-success-arc);
+  --color-status-warning-fg: var(--status-warning-fg);
+  --color-status-warning-bg: var(--status-warning-bg);
+  --color-status-warning-arc: var(--status-warning-arc);
   --color-status-danger-fg: var(--status-danger-fg);
   --color-status-danger-bg: var(--status-danger-bg);
+  --color-status-danger-arc: var(--status-danger-arc);
+  --color-status-neutral-fg: var(--status-neutral-fg);
+  --color-status-neutral-bg: var(--status-neutral-bg);
+  --color-status-neutral-arc: var(--status-neutral-arc);
 
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
 
-  --font-sans: var(--font-geist), "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-display: var(--font-manrope), "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-sans: var(--font-geist-sans), "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: var(--font-geist-sans), "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-/* Base typography and body reset */
-html {
-  color-scheme: light;
-}
-
+/* Base typography and body reset: Geist Sans with font-normal body text */
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: var(--font-dm-sans), "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-sans);
   font-size: 14px;
   line-height: 22px;
+  font-weight: 400;
   text-align: left;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Display font class for page titles and larger headings */
+/* Display font class for headings */
 .font-display {
-  font-family: var(--font-bricolage), "Bricolage Grotesque", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-sans);
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
 }
 
 /* Explicit type scale classes */
 .text-caption {
   font-size: 12px;
   line-height: 16px;
+  font-weight: 400;
 }
 
 .text-table,
 .text-meta {
   font-size: 13px;
   line-height: 20px;
+  font-weight: 400;
 }
 
 .text-body {
   font-size: 14px;
   line-height: 22px;
+  font-weight: 400;
 }
 
 .text-lead {
   font-size: 16px;
   line-height: 24px;
+  font-weight: 400;
 }
 
 .text-h3,
@@ -182,6 +278,10 @@ h1 {
   font-weight: 600;
 }
 
+h4 {
+  font-weight: 600;
+}
+
 /* Tabular figures for dates, numbers and counts */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
@@ -202,22 +302,37 @@ h1 {
   outline-offset: 2px;
 }
 
-/* Only elevated floating surfaces get box-shadow */
+/* Cards use the card border and soft card shadow in light mode, none in dark mode */
+[data-slot="card"] {
+  border-color: var(--card-border);
+  box-shadow: var(--card-shadow);
+}
+
+/* Elevated floating surfaces get elevation shadow */
 [data-slot="popover-content"],
 [data-slot="dropdown-menu-content"],
 [data-slot="dialog-content"],
 [data-slot="alert-dialog-content"],
 [data-slot="sheet-content"] {
-  box-shadow: 0 8px 24px rgba(18, 20, 26, 0.08) !important;
+  box-shadow: var(--elevation-shadow) !important;
 }
 
-/* Motion: 120ms ease-out for hover and focus, 200ms for menus and dialogs */
+/* Smooth scroll behavior for page navigation */
+html,
+main {
+  scroll-behavior: smooth;
+}
+
+/* Motion: 150ms ease-in-out for interactive elements, 200ms ease-in-out for menus and dialogs */
 button,
 a,
 input,
 select,
 textarea {
-  transition: background-color 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out, outline-color 120ms ease-out;
+  transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+              color 150ms cubic-bezier(0.4, 0, 0.2, 1),
+              outline-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 [data-slot="popover-content"],
@@ -226,12 +341,14 @@ textarea {
 [data-slot="alert-dialog-content"],
 [data-slot="sheet-content"],
 [data-slot="drawer-content"] {
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1) !important;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1) !important;
   transition-duration: 200ms !important;
+  animation-duration: 200ms !important;
 }
 
 /* Motion preference override */
 @media (prefers-reduced-motion: reduce) {
-
   *,
   ::before,
   ::after {

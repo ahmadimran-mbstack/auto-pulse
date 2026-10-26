@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 // Loading placeholder matching the Connections layout
 export function ConnectionsSkeleton() {
   return (
-    <div className="space-y-8 animate-pulse">
+    <div className="p-6 md:p-8 space-y-8 max-w-4xl mx-auto animate-pulse">
       {/* Page Header skeleton */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-border">
         <div className="space-y-2">

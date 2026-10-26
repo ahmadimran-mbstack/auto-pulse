@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 // Loading placeholder matching the Post Detail two-column layout
 export function PostDetailSkeleton() {
   return (
-    <div className="space-y-6 animate-pulse">
+    <div className="p-6 md:p-8 space-y-6 max-w-5xl mx-auto animate-pulse">
       {/* Breadcrumb skeleton */}
       <div className="flex items-center gap-2">
         <Skeleton className="h-4 w-12" />
