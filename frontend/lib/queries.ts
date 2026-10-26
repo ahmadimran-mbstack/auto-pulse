@@ -19,6 +19,8 @@ import {
   retryPostPublication,
   generateDraft,
   clearCachedToken,
+  getLinkedInStatus,
+  postToLinkedIn,
 } from "./api";
 import type { DashboardData } from "../types/dashboard";
 import type {
@@ -27,7 +29,12 @@ import type {
   PostDetail,
 } from "../types/posts";
 import type { Profile, PatchProfilePayload } from "../types/profile";
-import type { SocialConnection } from "../types/connections";
+import type {
+  SocialConnection,
+  LinkedInStatusResponse,
+  LinkedInPostResponse,
+} from "../types/connections";
+
 
 // Central in-memory QueryClient instance
 export const queryClient = new QueryClient({
@@ -73,7 +80,10 @@ export const queryKeys = {
     ["autopulse", userId || "anonymous", "profile"] as const,
   connections: (userId: string) =>
     ["autopulse", userId || "anonymous", "connections"] as const,
+  linkedinStatus: (userId: string) =>
+    ["autopulse", userId || "anonymous", "linkedin-status"] as const,
 };
+
 
 // 1. Dashboard Overview Query (Freshness: 30s, refetches on window focus)
 export function useDashboardQuery(userId: string) {
@@ -258,3 +268,28 @@ export function useGenerateDraftMutation(userId: string) {
     },
   });
 }
+
+// Query to inspect LinkedIn account connection state
+export function useLinkedInStatusQuery(userId: string) {
+  return useQuery<LinkedInStatusResponse>({
+    queryKey: queryKeys.linkedinStatus(userId),
+    queryFn: () => getLinkedInStatus(),
+    staleTime: 10_000,
+    enabled: !!userId,
+  });
+}
+
+// Mutation to publish direct manual posts to LinkedIn
+export function usePostToLinkedInMutation(userId: string) {
+  const qc = useQueryClient();
+  return useMutation<LinkedInPostResponse, Error, FormData>({
+    mutationFn: (formData: FormData) => postToLinkedIn(formData),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.all(userId) });
+      qc.invalidateQueries({ queryKey: queryKeys.linkedinStatus(userId) });
+      qc.invalidateQueries({ queryKey: queryKeys.posts(userId) });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard(userId) });
+    },
+  });
+}
+

@@ -14,6 +14,7 @@ from app.api.routes.connections import router as connections_router
 from app.api.routes.posts import router as posts_router
 from app.api.routes.public import router as public_router
 from app.api.routes.dashboard import router as dashboard_router
+from app.api.routes.linkedin import router as linkedin_router
 from app.core.config import settings
 
 # Configure server logging based on LOG_LEVEL
@@ -98,6 +99,20 @@ app.add_middleware(RequestLoggingMiddleware)
 # Exception handler for expected HTTP exceptions
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
+    # If detail specifically provided "error" as a top-level string, format flat response
+    if isinstance(exc.detail, dict) and "error" in exc.detail and isinstance(exc.detail["error"], str):
+        error_code = exc.detail["error"]
+        message = exc.detail.get("message", "")
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "error": error_code,
+                "message": message,
+                "code": error_code,
+            },
+            headers=exc.headers,
+        )
+
     if isinstance(exc.detail, dict) and "code" in exc.detail and "message" in exc.detail:
         error_dict = dict(exc.detail)
     else:
@@ -109,6 +124,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         content={"error": error_dict},
         headers=exc.headers,
     )
+
 
 
 # Exception handler for request validation failures
@@ -181,4 +197,5 @@ app.include_router(connections_router)
 app.include_router(posts_router)
 app.include_router(public_router)
 app.include_router(dashboard_router)
+app.include_router(linkedin_router)
 

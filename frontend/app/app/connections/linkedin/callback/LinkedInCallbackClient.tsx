@@ -56,8 +56,16 @@ export function LinkedInCallbackClient() {
     const performCallback = async (code: string, state: string) => {
       try {
         await callbackLinkedInConnection({ code, state });
-        // Navigate back to dashboard with confirmation flag
-        router.push("/app?connected=linkedin");
+        // Return to caller page if specified (such as /app/playground), otherwise default to /app
+        const returnUrl = typeof window !== "undefined" ? sessionStorage.getItem("linkedin_oauth_return_url") : null;
+        if (returnUrl) {
+          sessionStorage.removeItem("linkedin_oauth_return_url");
+          const target = returnUrl.includes("?") ? `${returnUrl}&connected=linkedin` : `${returnUrl}?connected=linkedin`;
+          router.push(target);
+        } else {
+          router.push("/app?connected=linkedin");
+        }
+
       } catch (err: unknown) {
         setStatus("error");
         if (err && typeof err === "object" && "status" in err && (err as { status: number }).status === 401) {

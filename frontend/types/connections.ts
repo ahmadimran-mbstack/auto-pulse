@@ -26,3 +26,18 @@ export type ConnectionDisplayState =
   | "connected"
   | "expiring_soon"
   | "expired";
+
+export interface LinkedInPostResponse {
+  id: string;
+  linkedin_post_id?: string | null;
+  posted_at: string;
+  visibility: "PUBLIC" | "CONNECTIONS";
+}
+
+export interface LinkedInStatusResponse {
+  connected: boolean;
+  expires_at: string | null;
+  account_name: string | null;
+  status?: string | null;
+}
+

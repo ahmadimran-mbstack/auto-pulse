@@ -129,3 +129,45 @@ def revoke_token_best_effort(access_token: str) -> None:
     except Exception:
         # Suppress any error because revocation is best-effort only
         pass
+
+
+def refresh_access_token(refresh_token: str) -> Tuple[str, int, Optional[str]]:
+    # Exchanges a valid LinkedIn refresh token for a fresh access token
+    # Never log or leak tokens in logs or exceptions
+    data = {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "client_id": settings.LINKEDIN_CLIENT_ID,
+        "client_secret": settings.LINKEDIN_CLIENT_SECRET,
+    }
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
+    try:
+        with httpx.Client(timeout=HTTP_TIMEOUT_SECONDS) as client:
+            response = client.post(LINKEDIN_TOKEN_URL, data=data, headers=headers)
+    except (httpx.TimeoutException, httpx.RequestError) as exc:
+        logger.warning("LinkedIn token refresh network error")
+        raise LinkedInUnavailableError() from exc
+
+    if response.status_code in (400, 401):
+        logger.warning(f"LinkedIn rejected refresh token with status {response.status_code}")
+        raise LinkedInRejectedError()
+
+    if response.status_code >= 500:
+        logger.warning(f"LinkedIn service error during refresh with status {response.status_code}")
+        raise LinkedInUnavailableError()
+
+    try:
+        payload = response.json()
+    except Exception as exc:
+        raise LinkedInUnavailableError() from exc
+
+    new_access_token = payload.get("access_token")
+    if not new_access_token:
+        raise LinkedInUnavailableError()
+
+    # Default to 60 days (5,184,000 seconds) if expires_in is omitted
+    expires_in = int(payload.get("expires_in") or 5184000)
+    new_refresh_token = payload.get("refresh_token")
+    return new_access_token, expires_in, new_refresh_token
+

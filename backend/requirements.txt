@@ -50,3 +50,4 @@ langchain-google-genai==4.4.2
 langchain-tavily==0.2.18
 langgraph==1.2.16
 pillow==13.0.0
+python-multipart==0.0.32

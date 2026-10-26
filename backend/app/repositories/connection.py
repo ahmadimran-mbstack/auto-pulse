@@ -1,6 +1,7 @@
 import datetime
 import hashlib
 import secrets
+import logging
 from typing import List, Optional, Tuple
 from fastapi import HTTPException, status
 from sqlalchemy import delete, select, text
@@ -8,7 +9,14 @@ from sqlalchemy.orm import Session
 from app.core.crypto import decrypt_text, encrypt_text
 from app.models.social_connection import OAuthState, SocialConnection
 from app.schemas.connection import ConnectionSummaryResponse
-from app.services.linkedin import revoke_token_best_effort
+from app.services.linkedin import refresh_access_token, revoke_token_best_effort
+from app.services.linkedin_publisher import (
+    LinkedInNotConnectedError,
+    LinkedInReconnectRequiredError,
+    LinkedInTokenExpiredError,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def create_oauth_state(db: Session, user_id: str, provider: str = "linkedin") -> str:
@@ -218,3 +226,120 @@ def disconnect_linkedin_connection(db: Session, user_id: str) -> None:
     # Delete the caller's row in database
     db.delete(conn)
     db.commit()
+
+
+def get_valid_linkedin_connection_token(
+    db: Session,
+    user_id: str,
+) -> Tuple[str, SocialConnection]:
+    # Look up the caller's LinkedIn connection row only
+    query = select(SocialConnection).where(
+        SocialConnection.user_id == user_id,
+        SocialConnection.provider == "linkedin",
+    )
+    conn = db.execute(query).scalar_one_or_none()
+
+    if conn is None:
+        raise LinkedInNotConnectedError("LinkedIn account is not connected.")
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+    expires_at = conn.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=datetime.timezone.utc)
+
+    # Check if access token is near expiry (within 5 minutes) or already expired
+    is_near_expiry = expires_at <= (now + datetime.timedelta(minutes=5))
+
+    if is_near_expiry:
+        # If a refresh token is stored, attempt token refresh
+        if conn.refresh_token_enc:
+            try:
+                plain_refresh_token = decrypt_text(conn.refresh_token_enc)
+            except Exception:
+                conn.status = "expired"
+                db.commit()
+                raise LinkedInReconnectRequiredError("Could not decrypt refresh token. Please reconnect.")
+
+            try:
+                new_token, expires_in, new_refresh = refresh_access_token(plain_refresh_token)
+                conn.access_token_enc = encrypt_text(new_token)
+                if new_refresh:
+                    conn.refresh_token_enc = encrypt_text(new_refresh)
+                conn.expires_at = now + datetime.timedelta(seconds=expires_in)
+                conn.status = "active"
+                conn.updated_at = now
+                db.commit()
+                db.refresh(conn)
+                return new_token, conn
+            except Exception as exc:
+                logger.warning(f"LinkedIn token refresh failed for user {user_id}: {exc}")
+                conn.status = "expired"
+                db.commit()
+                raise LinkedInReconnectRequiredError("LinkedIn token refresh failed. Please reconnect.")
+        else:
+            # No refresh token stored and access token is already expired
+            if expires_at <= now or conn.status != "active":
+                conn.status = "expired"
+                db.commit()
+                raise LinkedInTokenExpiredError("LinkedIn access token is expired. Please reconnect.")
+            # If still within 5 minutes but not yet past expires_at, allow using current access token
+
+    if conn.status != "active" or expires_at <= now:
+        conn.status = "expired"
+        db.commit()
+        raise LinkedInTokenExpiredError("LinkedIn access token is expired or inactive. Please reconnect.")
+
+    if not conn.access_token_enc:
+        raise LinkedInTokenExpiredError("LinkedIn connection has no access token. Please reconnect.")
+
+    try:
+        access_token = decrypt_text(conn.access_token_enc)
+    except Exception:
+        raise LinkedInReconnectRequiredError("Could not decrypt LinkedIn access token. Please reconnect.")
+
+    return access_token, conn
+
+
+def get_linkedin_status(
+    db: Session,
+    user_id: str,
+) -> dict:
+    # Look up the caller's LinkedIn connection row and determine connection health
+    query = select(SocialConnection).where(
+        SocialConnection.user_id == user_id,
+        SocialConnection.provider == "linkedin",
+    )
+    conn = db.execute(query).scalar_one_or_none()
+
+    if conn is None:
+        return {
+            "connected": False,
+            "expires_at": None,
+            "account_name": None,
+            "status": "not_connected",
+        }
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+    expires_at = conn.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=datetime.timezone.utc)
+
+    # Automatically transition to expired when past expires_at
+    if expires_at <= now:
+        is_connected = False
+        current_status = "expired"
+        if conn.status == "active":
+            conn.status = "expired"
+            conn.updated_at = now
+            db.commit()
+    else:
+        is_connected = conn.status == "active"
+        current_status = conn.status
+
+    return {
+        "connected": is_connected,
+        "expires_at": expires_at.isoformat(),
+        "account_name": conn.account_name,
+        "status": current_status,
+    }
+

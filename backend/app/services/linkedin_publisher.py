@@ -214,3 +214,165 @@ def publish_post_to_linkedin(
     finally:
         if should_close_client:
             http.close()
+
+
+class LinkedInNotConnectedError(Exception):
+    # Raised when the user has no LinkedIn connection
+    pass
+
+
+class LinkedInTokenExpiredError(Exception):
+    # Raised when the LinkedIn token is expired and cannot be used
+    pass
+
+
+class LinkedInReconnectRequiredError(Exception):
+    # Raised when the token refresh fails or the token cannot be decrypted
+    pass
+
+
+class LinkedInApiError(Exception):
+    # Raised when LinkedIn returns an error during upload or post creation
+    def __init__(self, message: str, status_code: Optional[int] = None):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def publish_direct_post(
+    access_token: str,
+    provider_account_id: str,
+    commentary: str,
+    visibility: str,
+    image_bytes: Optional[bytes] = None,
+    image_content_type: Optional[str] = None,
+    client: Optional[httpx.Client] = None,
+) -> str:
+    # Publishes commentary and optional image directly to LinkedIn
+    # Follows the register upload, binary PUT, and create post sequence
+    # Never logs raw tokens or codes
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Linkedin-Version": settings.LINKEDIN_API_VERSION,
+        "X-Restli-Protocol-Version": "2.0.0",
+    }
+
+    http = client or httpx.Client(timeout=30.0)
+    should_close_client = client is None
+
+    try:
+        image_urn = None
+        # Handle optional image upload flow
+        if image_bytes is not None:
+            # Step 1: initializeUpload
+            init_url = "https://api.linkedin.com/rest/images?action=initializeUpload"
+            init_body = {
+                "initializeUploadRequest": {
+                    "owner": f"urn:li:person:{provider_account_id}"
+                }
+            }
+            try:
+                init_res = http.post(init_url, json=init_body, headers=headers)
+            except Exception as exc:
+                logger.error(f"LinkedIn image upload initialization network error: {exc}")
+                raise LinkedInApiError("LinkedIn image upload initialization failed due to network error.")
+
+            if init_res.status_code == 401:
+                logger.warning("LinkedIn image upload initialization rejected with 401 Unauthorized")
+                raise LinkedInTokenExpiredError("LinkedIn access token is invalid or expired.")
+
+            if init_res.status_code != 200:
+                logger.error(
+                    f"LinkedIn image upload initialization failed: status={init_res.status_code} body={init_res.text[:200]}"
+                )
+                raise LinkedInApiError(
+                    f"LinkedIn image initialization failed with status {init_res.status_code}",
+                    status_code=init_res.status_code,
+                )
+
+            init_data = init_res.json()
+            upload_url = init_data.get("value", {}).get("uploadUrl")
+            image_urn = init_data.get("value", {}).get("image")
+
+            if not upload_url or not image_urn:
+                logger.error("LinkedIn initializeUpload response missing uploadUrl or image URN")
+                raise LinkedInApiError("LinkedIn image upload initialization returned incomplete data.")
+
+            # Step 2: PUT image binary
+            put_headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": image_content_type or "image/jpeg",
+            }
+            try:
+                put_res = http.put(upload_url, content=image_bytes, headers=put_headers)
+            except Exception as exc:
+                logger.error(f"LinkedIn image binary upload network error: {exc}")
+                raise LinkedInApiError("LinkedIn image upload failed due to network error.")
+
+            if put_res.status_code == 401:
+                logger.warning("LinkedIn image binary upload rejected with 401 Unauthorized")
+                raise LinkedInTokenExpiredError("LinkedIn access token is invalid or expired.")
+
+            if put_res.status_code not in (200, 201):
+                logger.error(
+                    f"LinkedIn image binary upload failed: status={put_res.status_code} body={put_res.text[:200]}"
+                )
+                raise LinkedInApiError(
+                    f"LinkedIn image binary upload failed with status {put_res.status_code}",
+                    status_code=put_res.status_code,
+                )
+
+        # Step 3: Create post
+        post_body = {
+            "author": f"urn:li:person:{provider_account_id}",
+            "commentary": commentary,
+            "visibility": visibility,
+            "distribution": {
+                "feedDistribution": "MAIN_FEED",
+                "targetEntities": [],
+                "thirdPartyDistributionChannels": [],
+            },
+            "lifecycleState": "PUBLISHED",
+        }
+
+        if image_urn:
+            post_body["content"] = {
+                "media": {
+                    "id": image_urn,
+                }
+            }
+
+        posts_url = "https://api.linkedin.com/rest/posts"
+        posts_headers = dict(headers)
+        posts_headers["Content-Type"] = "application/json"
+
+        try:
+            post_res = http.post(posts_url, json=post_body, headers=posts_headers)
+        except Exception as exc:
+            logger.error(f"LinkedIn post creation network error: {exc}")
+            raise LinkedInApiError("LinkedIn post creation failed due to network error.")
+
+        if post_res.status_code == 201:
+            external_urn = (
+                post_res.headers.get("x-restli-id")
+                or post_res.headers.get("X-RestLi-Id")
+                or post_res.headers.get("Location")
+                or f"urn:li:share:{uuid.uuid4()}"
+            )
+            return external_urn
+
+        if post_res.status_code == 401:
+            logger.warning("LinkedIn post creation rejected with 401 Unauthorized")
+            raise LinkedInTokenExpiredError("LinkedIn access token is invalid or expired.")
+
+        logger.error(
+            f"LinkedIn post creation failed: status={post_res.status_code} body={post_res.text[:200]}"
+        )
+        raise LinkedInApiError(
+            f"LinkedIn post creation failed with status {post_res.status_code}",
+            status_code=post_res.status_code,
+        )
+
+    finally:
+        if should_close_client:
+            http.close()
+

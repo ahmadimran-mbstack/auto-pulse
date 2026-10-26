@@ -114,9 +114,15 @@ export async function apiCall<T>(
   const url = `${env.apiUrl}${path}`;
   const headers = new Headers(options.headers || {});
   headers.set("Authorization", `Bearer ${token}`);
-  if (!headers.has("Content-Type") && options.body) {
+  // Do not set Content-Type header when sending FormData so the browser sets the boundary automatically
+  if (
+    !headers.has("Content-Type") &&
+    options.body &&
+    !(typeof FormData !== "undefined" && options.body instanceof FormData)
+  ) {
     headers.set("Content-Type", "application/json");
   }
+
 
   let response: Response;
   try {
@@ -440,3 +446,21 @@ export async function retryPostPublication(
     body: JSON.stringify({ confirm_not_posted: confirmNotPosted }),
   });
 }
+
+// Fetches the caller's LinkedIn account connection status
+export async function getLinkedInStatus(): Promise<import("@/types/connections").LinkedInStatusResponse> {
+  return apiCall<import("@/types/connections").LinkedInStatusResponse>("/api/linkedin/status", {
+    method: "GET",
+  });
+}
+
+// Publishes a post and optional image immediately to LinkedIn
+export async function postToLinkedIn(
+  formData: FormData
+): Promise<import("@/types/connections").LinkedInPostResponse> {
+  return apiCall<import("@/types/connections").LinkedInPostResponse>("/api/linkedin/post", {
+    method: "POST",
+    body: formData,
+  });
+}
+
