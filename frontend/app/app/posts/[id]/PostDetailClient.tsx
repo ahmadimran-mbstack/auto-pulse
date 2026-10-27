@@ -18,8 +18,9 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { PageHeader } from "@/components/app/PageHeader";
-import { StatusBadge } from "@/components/app/StatusBadge";
+import { PostDecisionBadge } from "@/components/app/PostDecisionBadge";
 import { PostPreview } from "@/app/components/PostPreview";
+import { PlatformLabel } from "@/components/app/PlatformLabel";
 import { PostDetailSkeleton } from "@/components/app/PostDetailSkeleton";
 import { ErrorState } from "@/components/app/ErrorState";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -216,7 +217,7 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
       <PageHeader
         title={post.topic_title}
         description={`Draft prepared for ${formatRunDate(post.run_date)}`}
-        actions={<StatusBadge status={post.status} />}
+        actions={<PostDecisionBadge post={post} layout="horizontal" />}
       />
 
       {/* Status Alert Section positioned prominently */}
@@ -266,8 +267,13 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
         <Alert className="border-signal-line bg-signal-soft text-foreground">
           <CheckCircle2Icon className="size-4 text-primary" />
           <div className="flex-1">
-            <AlertTitle className="text-primary font-medium">
-              Approved
+            <AlertTitle className="text-primary font-medium flex items-center gap-1.5">
+              <span>Approved</span>
+              {post.approval?.channel && (
+                <span className="text-xs font-normal text-muted-foreground">
+                  via {post.approval.channel === "slack" ? "Slack" : "Email"}
+                </span>
+              )}
             </AlertTitle>
             <AlertDescription className="text-xs text-muted-foreground">
               This post will be published around {formattedPublishAt || "the scheduled time"}.
@@ -281,8 +287,10 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
           <Loader2Icon className="size-4 animate-spin text-primary" />
           <div className="flex-1">
             <AlertTitle>Publishing in progress</AlertTitle>
-            <AlertDescription className="text-xs text-muted-foreground">
-              Delivering post to LinkedIn. This page will update automatically when complete.
+            <AlertDescription className="text-xs text-muted-foreground flex items-center gap-1">
+              <span>Delivering post to</span>
+              <PlatformLabel platform="linkedin" size="xs" />
+              <span>. This page will update automatically when complete.</span>
             </AlertDescription>
           </div>
         </Alert>
@@ -292,7 +300,10 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
         <Alert className="border-border bg-card">
           <CheckCircle2Icon className="size-4 text-primary" />
           <div className="flex-1">
-            <AlertTitle>Published to LinkedIn</AlertTitle>
+            <AlertTitle className="inline-flex items-center gap-1.5">
+              <span>Published to</span>
+              <PlatformLabel platform="linkedin" size="sm" />
+            </AlertTitle>
             <AlertDescription className="text-xs text-muted-foreground">
               Successfully delivered to your profile.
             </AlertDescription>
@@ -303,9 +314,11 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
                 href={linkedInPublication.external_url}
                 target="_blank"
                 rel="noopener noreferrer"
+                className="inline-flex items-center gap-1"
               >
-                <span>View on LinkedIn</span>
-                <ExternalLinkIcon className="size-3.5 ml-1.5" />
+                <span>View on</span>
+                <PlatformLabel platform="linkedin" size="xs" />
+                <ExternalLinkIcon className="size-3.5 ml-1" />
               </a>
             </Button>
           )}
@@ -347,7 +360,10 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
           </div>
           {pubErrorInfo.action === "reconnect" && (
             <Button asChild size="sm" variant="outline">
-              <Link href="/app/connections">Reconnect LinkedIn</Link>
+              <Link href="/app/connections" className="inline-flex items-center gap-1">
+                <span>Reconnect</span>
+                <PlatformLabel platform="linkedin" size="xs" />
+              </Link>
             </Button>
           )}
           {pubErrorInfo.action === "confirm_retry" && (

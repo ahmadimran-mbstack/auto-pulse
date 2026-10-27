@@ -15,6 +15,7 @@ import { OverviewPostsSection } from "@/components/app/overview-posts-section";
 import { Button } from "@/components/ui/button";
 import { mapTabToStatusFilter, type PostsTabFilter } from "@/lib/posts";
 import { AlertCircle } from "lucide-react";
+import { SlackDisconnectedBanner } from "@/components/app/SlackDisconnectedBanner";
 
 interface AppDashboardClientProps {
   user: {
@@ -148,6 +149,8 @@ export function AppDashboardClient({ user }: AppDashboardClientProps) {
 
   return (
     <div className="p-6 md:p-8 space-y-8 max-w-none">
+      <SlackDisconnectedBanner userId={user.id} />
+
       {/* 1. Tools Row: 36px high, 8px gaps */}
       <OverviewToolsRow
         searchQuery={searchQuery}

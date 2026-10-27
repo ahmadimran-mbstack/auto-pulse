@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { DashboardConnection } from "@/types/dashboard";
 
+import { PlatformLabel } from "@/components/app/PlatformLabel";
+
 interface SidebarNoticeCardProps {
   connections?: DashboardConnection[];
 }
@@ -81,7 +83,7 @@ export function SidebarNoticeCard({ connections }: SidebarNoticeCardProps) {
 
       {/* Header with Title and Status Badge */}
       <div className="flex items-center gap-2 pr-6">
-        <span className="text-sm font-medium text-foreground">LinkedIn</span>
+        <PlatformLabel platform="linkedin" size="sm" />
         <Badge variant={badgeVariant}>{badgeText}</Badge>
       </div>
 
@@ -97,11 +99,13 @@ export function SidebarNoticeCard({ connections }: SidebarNoticeCardProps) {
           size="sm"
           className="h-8 w-full rounded-md bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-medium"
         >
-          <Link href="/app/connections">
-            {isMissing ? "Connect LinkedIn" : "Reconnect LinkedIn"}
+          <Link href="/app/connections" className="inline-flex items-center justify-center gap-1.5">
+            <span>{isMissing ? "Connect" : "Reconnect"}</span>
+            <PlatformLabel platform="linkedin" size="xs" textClassName="text-primary-foreground" />
           </Link>
         </Button>
       </div>
     </div>
   );
 }
+

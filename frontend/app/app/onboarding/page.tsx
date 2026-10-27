@@ -26,8 +26,8 @@ export default function OnboardingIndexPage() {
           return;
         }
 
-        // Resume rule: step after last saved step, at most 4
-        const targetStep = Math.min(4, Math.max(1, (profile.onboarding_step || 0) + 1));
+        // Resume rule: step after last saved step, at most 5
+        const targetStep = Math.min(5, Math.max(1, (profile.onboarding_step || 0) + 1));
         router.replace(`/app/onboarding/${targetStep}`);
       } catch (err: unknown) {
         if (!isMounted) return;

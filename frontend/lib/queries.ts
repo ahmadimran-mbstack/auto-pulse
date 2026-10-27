@@ -21,6 +21,8 @@ import {
   clearCachedToken,
   getLinkedInStatus,
   postToLinkedIn,
+  getSlackStatus,
+  disconnectSlack,
 } from "./api";
 import type { DashboardData } from "../types/dashboard";
 import type {
@@ -33,6 +35,8 @@ import type {
   SocialConnection,
   LinkedInStatusResponse,
   LinkedInPostResponse,
+  SlackStatusResponse,
+  SlackDisconnectResponse,
 } from "../types/connections";
 
 
@@ -82,6 +86,8 @@ export const queryKeys = {
     ["autopulse", userId || "anonymous", "connections"] as const,
   linkedinStatus: (userId: string) =>
     ["autopulse", userId || "anonymous", "linkedin-status"] as const,
+  slackStatus: (userId: string) =>
+    ["autopulse", userId || "anonymous", "slack-status"] as const,
 };
 
 
@@ -292,4 +298,27 @@ export function usePostToLinkedInMutation(userId: string) {
     },
   });
 }
+
+// Query to inspect Slack integration state
+export function useSlackStatusQuery(userId: string = "current") {
+  return useQuery<SlackStatusResponse>({
+    queryKey: queryKeys.slackStatus(userId),
+    queryFn: () => getSlackStatus(),
+    staleTime: 10_000,
+  });
+}
+
+// Mutation to disconnect Slack integration
+export function useDisconnectSlackMutation(userId: string = "current") {
+  const qc = useQueryClient();
+  return useMutation<SlackDisconnectResponse, Error, void>({
+    mutationFn: () => disconnectSlack(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.slackStatus(userId) });
+      qc.invalidateQueries({ queryKey: queryKeys.profile(userId) });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard(userId) });
+    },
+  });
+}
+
 

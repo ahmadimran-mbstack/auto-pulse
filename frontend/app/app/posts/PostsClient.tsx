@@ -23,7 +23,7 @@ import {
 import { PageHeader } from "@/components/app/PageHeader";
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
-import { StatusBadge } from "@/components/app/StatusBadge";
+import { PostDecisionBadge } from "@/components/app/PostDecisionBadge";
 import { PostsSkeleton } from "@/components/app/PostsSkeleton";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -149,7 +149,7 @@ export function PostsClient({ user }: PostsClientProps) {
           header: () => <div className="text-right">Status</div>,
           cell: ({ row }) => (
             <div className="text-right whitespace-nowrap">
-              <StatusBadge status={row.original.status} />
+              <PostDecisionBadge post={row.original} />
             </div>
           ),
         }),
@@ -302,7 +302,7 @@ export function PostsClient({ user }: PostsClientProps) {
                   <span className="text-xs text-muted-foreground tabular-nums">
                     {formatRunDate(post.run_date)}
                   </span>
-                  <StatusBadge status={post.status} />
+                  <PostDecisionBadge post={post} layout="horizontal" />
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-foreground truncate">

@@ -20,7 +20,7 @@ import {
   DrawerFooter,
 } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
-import { StatusBadge } from "@/components/app/StatusBadge";
+import { PostDecisionBadge } from "@/components/app/PostDecisionBadge";
 import { PostThumbnail } from "@/components/app/PostThumbnail";
 import { formatRunDate } from "@/lib/posts";
 import type { PostListItem } from "@/types/posts";
@@ -48,7 +48,7 @@ export function PostQuickView({
         <span className="text-xs text-muted-foreground tabular-nums">
           {formatRunDate(post.run_date)}
         </span>
-        <StatusBadge status={post.status} />
+        <PostDecisionBadge post={post} layout="horizontal" />
       </div>
 
       <div className="aspect-square w-full max-w-xs mx-auto overflow-hidden rounded-md border border-border bg-muted">

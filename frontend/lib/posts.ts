@@ -251,3 +251,22 @@ export function formatNextDraftTime(
     return null;
   }
 }
+
+// Formats the decision timestamp into a concise readable string like 'Oct 27, 2:30 PM'
+export function formatDecisionTime(isoStr?: string | null): string {
+  if (!isoStr) return "";
+  try {
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return "";
+    return new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(d);
+  } catch {
+    return "";
+  }
+}
+

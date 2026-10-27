@@ -30,6 +30,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { RichPostEditor } from "./components/RichPostEditor";
+import { PlatformLabel } from "@/components/app/PlatformLabel";
 import {
   useLinkedInStatusQuery,
   usePostToLinkedInMutation,
@@ -316,8 +317,9 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
       {/* Page Title & Connection Status Pill */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
-            Post to LinkedIn
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground inline-flex items-center gap-2">
+            <span>Post to</span>
+            <PlatformLabel platform="linkedin" size="lg" />
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Write, preview, and immediately publish rich updates to your LinkedIn profile.
@@ -359,8 +361,9 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
             <div className="flex items-center gap-2.5">
               <CheckCircle2 className="size-5 text-status-success-fg shrink-0" />
               <div>
-                <p className="text-sm font-medium text-foreground">
-                  Published to LinkedIn
+                <p className="text-sm font-medium text-foreground inline-flex items-center gap-1.5">
+                  <span>Published to</span>
+                  <PlatformLabel platform="linkedin" size="sm" />
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Your post was shared with {publishedPost.visibility.toLowerCase()} visibility.
@@ -402,7 +405,7 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
       )}
 
       {/* Main Composer Card */}
-      <Card className="border border-card-border bg-card shadow-sm rounded-lg overflow-hidden">
+      <Card className="border border-card-border bg-card rounded-lg overflow-hidden">
         <CardContent className="p-4 sm:p-6 space-y-6">
           {/* 1. Optional Image Area */}
           <div className="space-y-2">
@@ -423,7 +426,7 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
                 </div>
 
                 {/* Floating controls on top of image */}
-                <div className="absolute top-3 right-3 flex items-center gap-2 bg-background/80 backdrop-blur-sm p-1.5 rounded-md border border-border shadow-sm">
+                <div className="absolute top-3 right-3 flex items-center gap-2 bg-background/80 backdrop-blur-sm p-1.5 rounded-md border border-border">
                   <Button
                     type="button"
                     variant="ghost"
@@ -609,7 +612,10 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
                   Posting...
                 </>
               ) : (
-                "Post to LinkedIn"
+                <span className="inline-flex items-center gap-1.5">
+                  <span>Post to</span>
+                  <PlatformLabel platform="linkedin" size="sm" textClassName="text-primary-foreground" />
+                </span>
               )}
             </Button>
           </div>
@@ -620,7 +626,11 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
       <Dialog open={showConnectDialog} onOpenChange={setShowConnectDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Connect your LinkedIn account</DialogTitle>
+            <DialogTitle className="inline-flex items-center gap-1.5">
+              <span>Connect your</span>
+              <PlatformLabel platform="linkedin" size="sm" />
+              <span>account</span>
+            </DialogTitle>
             <DialogDescription>
               To publish posts directly from AutoPulse, please connect your LinkedIn account. Your draft will be saved and published automatically as soon as the connection completes.
             </DialogDescription>
@@ -639,6 +649,7 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
               type="button"
               onClick={handleStartOAuth}
               disabled={isStartingOAuth}
+              className="inline-flex items-center gap-1.5"
             >
               {isStartingOAuth ? (
                 <>
@@ -646,7 +657,10 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
                   Connecting...
                 </>
               ) : (
-                "Connect LinkedIn"
+                <>
+                  <span>Connect</span>
+                  <PlatformLabel platform="linkedin" size="sm" textClassName="text-primary-foreground" />
+                </>
               )}
             </Button>
           </DialogFooter>

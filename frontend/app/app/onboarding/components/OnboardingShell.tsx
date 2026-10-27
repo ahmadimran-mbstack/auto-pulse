@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, AlertCircle, Loader2 } from "lucide-react";
 
 interface OnboardingShellProps {
-  step: 1 | 2 | 3 | 4;
+  step: 1 | 2 | 3 | 4 | 5;
   title: string;
   subtitle: string;
   children: React.ReactNode;
@@ -21,7 +21,7 @@ interface OnboardingShellProps {
   errorMessage?: string | null;
 }
 
-// Shell layout wrapping each step of the four-part onboarding wizard
+// Shell layout wrapping each step of the five-part onboarding wizard
 export function OnboardingShell({
   step,
   title,
@@ -51,7 +51,7 @@ export function OnboardingShell({
             <div className="size-7 rounded-md bg-card border border-border flex items-center justify-center text-primary group-hover:border-primary/40 transition-colors">
               <Activity className="size-4" strokeWidth={2} />
             </div>
-            <span className="font-display font-semibold text-h3 text-foreground">
+            <span className="font-display font-semibold text-h3 text-foreground tracking-tight">
               AutoPulse
             </span>
           </Link>
@@ -66,20 +66,20 @@ export function OnboardingShell({
       <main className="flex-1 form-container w-full mx-auto px-4 sm:px-6 py-8 sm:py-10">
         <div className="text-left">
           {/* Progress Indicator */}
-          <div className="mb-8" aria-label={`Step ${step} of 4`}>
+          <div className="mb-8" aria-label={`Step ${step} of 5`}>
             <div className="flex items-center justify-between text-caption font-medium text-muted-foreground mb-2 font-mono">
-              <span>Step {step} of 4</span>
-              <span className="tabular-nums">{step * 25}% complete</span>
+              <span>Step {step} of 5</span>
+              <span className="tabular-nums">{step * 20}% complete</span>
             </div>
-            {/* Four-segment progress bar */}
+            {/* Five-segment progress bar */}
             <div
-              className="grid grid-cols-4 gap-2 h-1.5 w-full"
+              className="grid grid-cols-5 gap-2 h-1.5 w-full"
               role="progressbar"
               aria-valuenow={step}
               aria-valuemin={1}
-              aria-valuemax={4}
+              aria-valuemax={5}
             >
-              {[1, 2, 3, 4].map((seg) => (
+              {[1, 2, 3, 4, 5].map((seg) => (
                 <div
                   key={seg}
                   className={`h-full rounded-full transition-colors duration-200 ${
@@ -162,7 +162,8 @@ export function OnboardingSkeleton() {
       <main className="flex-1 form-container w-full mx-auto px-4 sm:px-6 py-10">
         <div className="space-y-6">
           <Skeleton className="h-4 w-24 mb-2" />
-          <div className="grid grid-cols-4 gap-2 h-1.5 w-full">
+          <div className="grid grid-cols-5 gap-2 h-1.5 w-full">
+            <Skeleton className="h-full rounded-full" />
             <Skeleton className="h-full rounded-full" />
             <Skeleton className="h-full rounded-full" />
             <Skeleton className="h-full rounded-full" />

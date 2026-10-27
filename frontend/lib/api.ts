@@ -464,3 +464,35 @@ export async function postToLinkedIn(
   });
 }
 
+// Fetches current Slack integration status
+export async function getSlackStatus(): Promise<import("@/types/connections").SlackStatusResponse> {
+  return apiCall<import("@/types/connections").SlackStatusResponse>("/integrations/slack/status", {
+    method: "GET",
+  });
+}
+
+// Initiates Slack OAuth connection
+export async function connectSlack(
+  payload: import("@/types/connections").SlackConnectPayload = { return_to: "dashboard" }
+): Promise<import("@/types/connections").SlackConnectResponse> {
+  return apiCall<import("@/types/connections").SlackConnectResponse>("/integrations/slack/connect", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+// Sends a test Slack direct message
+export async function testSlack(): Promise<import("@/types/connections").SlackTestResponse> {
+  return apiCall<import("@/types/connections").SlackTestResponse>("/integrations/slack/test", {
+    method: "POST",
+  });
+}
+
+// Disconnects Slack integration
+export async function disconnectSlack(): Promise<import("@/types/connections").SlackDisconnectResponse> {
+  return apiCall<import("@/types/connections").SlackDisconnectResponse>("/integrations/slack", {
+    method: "DELETE",
+  });
+}
+
+
