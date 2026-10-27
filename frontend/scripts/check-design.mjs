@@ -32,6 +32,8 @@ const isExempt = (filePath) => {
   if (normalized.endsWith("lib/contrast.ts")) return true;
   // Pure math deterministic avatar gradient calculation
   if (normalized.endsWith("lib/avatar-gradient.ts")) return true;
+  // Official third-party platform brand logos (Slack, LinkedIn, Instagram, Facebook)
+  if (normalized.endsWith("components/app/PlatformLabel.tsx")) return true;
   return false;
 };
 

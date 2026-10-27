@@ -41,3 +41,33 @@ export interface LinkedInStatusResponse {
   status?: string | null;
 }
 
+export type SlackIntegrationStatus = "not_connected" | "connected" | "disconnected";
+
+export interface SlackStatusResponse {
+  connected?: boolean;
+  status: SlackIntegrationStatus;
+  team_id?: string | null;
+  team_name?: string | null;
+  connected_at?: string | null;
+  last_error?: string | null;
+  slack_user_id?: string | null;
+  dm_channel_id?: string | null;
+  slack_approval_enabled?: boolean;
+}
+
+export interface SlackConnectPayload {
+  return_to: "onboarding" | "dashboard";
+}
+
+export interface SlackConnectResponse {
+  authorize_url: string;
+}
+
+export interface SlackTestResponse {
+  sent: boolean;
+}
+
+export interface SlackDisconnectResponse {
+  disconnected: boolean;
+}
+

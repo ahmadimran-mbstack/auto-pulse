@@ -16,6 +16,14 @@ export interface PostSource {
   published_at: string | null;
 }
 
+export interface PostApprovalItem {
+  state: "pending" | "approved" | "rejected" | "expired";
+  expires_at?: string | null;
+  decided_at?: string | null;
+  channel?: "email" | "slack" | null;
+  decision?: "approved" | "rejected" | null;
+}
+
 export interface PostListItem {
   id: string;
   status: PostStatus;
@@ -23,6 +31,7 @@ export interface PostListItem {
   topic_title: string;
   caption_preview: string;
   created_at: string;
+  approval?: PostApprovalItem | null;
 }
 
 export interface PaginatedPosts {
@@ -42,12 +51,6 @@ export interface PostPublicationItem {
   external_url: string | null;
   error_code: string | null;
   published_at: string | null;
-}
-
-export interface PostApprovalItem {
-  state: "pending" | "approved" | "rejected" | "expired";
-  expires_at: string | null;
-  decided_at: string | null;
 }
 
 export interface PostDetail {
