@@ -16,6 +16,7 @@ class ConnectionSummaryResponse(BaseModel):
 class OAuthStartResponse(BaseModel):
     # Authorization URL where the user is redirected to grant permissions
     authorization_url: str
+    authorize_url: Optional[str] = None
 
 
 class OAuthCallbackRequest(BaseModel):

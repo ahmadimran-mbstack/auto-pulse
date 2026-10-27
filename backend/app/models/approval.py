@@ -84,7 +84,7 @@ class Approval(Base):
             name="ck_approvals_decision",
         ),
         CheckConstraint(
-            "decided_via IN ('email_link', 'dashboard')",
+            "decided_via IN ('email_link', 'dashboard', 'slack')",
             name="ck_approvals_decided_via",
         ),
     )

@@ -1,6 +1,6 @@
 import datetime
 from typing import List, Optional
-from sqlalchemy import CheckConstraint, DateTime, SmallInteger, Text, Time, func, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, SmallInteger, Text, Time, func, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db.session import Base
@@ -47,6 +47,11 @@ class Profile(Base):
     )
     approval_method: Mapped[str] = mapped_column(
         Text, nullable=False, server_default="email"
+    )
+
+    # Whether Slack approval notifications are enabled
+    slack_approval_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
     )
 
     # Onboarding tracking

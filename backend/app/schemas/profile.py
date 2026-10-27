@@ -244,6 +244,16 @@ class OnboardingStep4Request(BaseModel):
         return "email"
 
 
+class ApprovalSlackInfo(BaseModel):
+    available: bool = False
+    enabled: bool = False
+
+
+class ApprovalSettingsResponse(BaseModel):
+    email: bool = True
+    slack: ApprovalSlackInfo = ApprovalSlackInfo()
+
+
 # Full profile response returned to client (never includes user_id)
 class ProfileResponse(BaseModel):
     display_name: Optional[str] = None
@@ -263,8 +273,35 @@ class ProfileResponse(BaseModel):
     post_time: Optional[str] = None
     post_days: List[int] = []
     approval_method: str = "email"
+    slack_approval_enabled: bool = False
+    approval: ApprovalSettingsResponse = ApprovalSettingsResponse()
     onboarding_step: int = 0
     onboarding_completed_at: Optional[datetime.datetime] = None
     onboarding_complete: bool = False
     created_at: datetime.datetime
     updated_at: datetime.datetime
+
+
+class PatchApprovalRequest(BaseModel):
+    slack_enabled: Optional[bool] = None
+
+
+class PatchProfileRequest(BaseModel):
+    approval: Optional[PatchApprovalRequest] = None
+    slack_approval_enabled: Optional[bool] = None
+    display_name: Optional[str] = None
+    role_title: Optional[str] = None
+    industry: Optional[str] = None
+    niche_description: Optional[str] = None
+    audience: Optional[str] = None
+    topics_include: Optional[List[str]] = None
+    topics_avoid: Optional[List[str]] = None
+    tone: Optional[str] = None
+    voice_notes: Optional[str] = None
+    sample_posts: Optional[str] = None
+    brand_name: Optional[str] = None
+    brand_primary_hex: Optional[str] = None
+    brand_accent_hex: Optional[str] = None
+    timezone: Optional[str] = None
+    post_time: Optional[str] = None
+    post_days: Optional[List[int]] = None

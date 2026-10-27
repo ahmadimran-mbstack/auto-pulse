@@ -107,3 +107,15 @@ class OAuthState(Base):
     used_at: Mapped[Optional[datetime.datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+    # Destination on the frontend after completing OAuth flow ('onboarding' or 'dashboard')
+    return_to: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default="dashboard"
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "return_to IN ('onboarding', 'dashboard')",
+            name="ck_oauth_states_return_to",
+        ),
+    )

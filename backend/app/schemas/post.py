@@ -3,6 +3,14 @@ import uuid
 from pydantic import BaseModel, field_validator
 
 
+class PostApprovalInfo(BaseModel):
+    state: str
+    expires_at: Optional[str] = None
+    decided_at: Optional[str] = None
+    channel: Optional[str] = None
+    decision: Optional[str] = None
+
+
 class PostListItem(BaseModel):
     id: uuid.UUID
     status: str
@@ -10,17 +18,12 @@ class PostListItem(BaseModel):
     topic_title: str
     caption_preview: str
     created_at: str
+    approval: Optional[PostApprovalInfo] = None
 
 
 class PaginatedPostsResponse(BaseModel):
     items: List[PostListItem]
     next_cursor: Optional[str] = None
-
-
-class PostApprovalInfo(BaseModel):
-    state: str
-    expires_at: str
-    decided_at: Optional[str] = None
 
 
 class PostPublicationInfo(BaseModel):

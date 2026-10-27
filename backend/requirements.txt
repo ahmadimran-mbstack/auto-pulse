@@ -51,3 +51,5 @@ langchain-tavily==0.2.18
 langgraph==1.2.16
 pillow==13.0.0
 python-multipart==0.0.32
+redis>=5.0.0
+slack-sdk>=3.0.0

@@ -74,6 +74,12 @@ class Post(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
+    # Source of approval decision (email, slack, dashboard) and decision timestamp
+    approval_source: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    decided_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     __table_args__ = (
         CheckConstraint(
             "status IN ('draft', 'awaiting_approval', 'approved', 'rejected', 'publishing', 'published', 'failed', 'expired')",

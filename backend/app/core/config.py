@@ -87,6 +87,14 @@ class Settings(BaseSettings):
     CACHE_READS_ENABLED: bool = False
     TRUSTED_PROXY_COUNT: int = 0
 
+    # Slack integration settings
+    SLACK_CLIENT_ID: Optional[str] = None
+    SLACK_CLIENT_SECRET: Optional[str] = None
+    SLACK_REDIRECT_URI: Optional[str] = None
+    SLACK_APP_TOKEN: Optional[str] = None
+    SLACK_SIGNING_SECRET: Optional[str] = None
+    SLACK_SCOPES: str = "chat:write,im:write"
+
     # Configure pydantic-settings to read from backend/.env if it exists
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE) if ENV_FILE.exists() else None,
