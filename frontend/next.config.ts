@@ -10,6 +10,20 @@ const nextConfig: NextConfig = {
       },
     },
   },
+  async redirects() {
+    return [
+      {
+        source: "/onboarding",
+        destination: "/app/onboarding",
+        permanent: false,
+      },
+      {
+        source: "/dashboard",
+        destination: "/app/connections",
+        permanent: false,
+      },
+    ];
+  },
 };
 
 export default nextConfig;
