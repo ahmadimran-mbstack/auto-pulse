@@ -194,3 +194,42 @@ def send_approval_email(
 
     # Send message using SMTP
     send_smtp_message(msg)
+
+
+# Alert user when Slack authentication is revoked or invalid
+def send_slack_disconnect_alert_email(
+    to_email: str,
+    display_name: str,
+    error_reason: str,
+) -> None:
+    subject = "Action required: Your AutoPulse Slack integration was disconnected"
+    plain_text = (
+        f"Hi {display_name},\n\n"
+        f"Your Slack integration for AutoPulse was disconnected because Slack reported an authentication error ({error_reason}).\n\n"
+        f"Your post approval requests will continue to arrive by email as usual.\n\n"
+        f"To restore Slack approvals, please reconnect your Slack workspace from your AutoPulse dashboard:\n"
+        f"{settings.APP_BASE_URL.rstrip('/')}/dashboard\n\n"
+        f"---\nAutoPulse Support"
+    )
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>{html.escape(subject)}</title></head>
+<body style="margin: 0; padding: 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0b0f19; color: #f8fafc;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 32px;">
+    <h2 style="margin-top: 0; color: #f8fafc; font-size: 20px;">Hi {html.escape(display_name)},</h2>
+    <p style="color: #f87171; font-size: 15px; font-weight: 600;">Your Slack integration was disconnected</p>
+    <p style="color: #94a3b8; font-size: 14px; line-height: 1.6;">Slack reported an authentication error (<code>{html.escape(error_reason)}</code>). Your approval notifications will continue to arrive by email so you never miss a post.</p>
+    <div style="margin: 28px 0; text-align: center;">
+      <a href="{settings.APP_BASE_URL.rstrip('/')}/dashboard" style="display: inline-block; background-color: #0284c7; color: #ffffff; text-decoration: none; padding: 12px 24px; font-size: 14px; font-weight: 600; border-radius: 8px;">Reconnect Slack in Dashboard</a>
+    </div>
+  </div>
+</body>
+</html>"""
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = settings.EMAIL_FROM
+    msg["To"] = to_email
+    msg.set_content(plain_text)
+    msg.add_alternative(html_content, subtype="html")
+    send_smtp_message(msg)
+

@@ -9,6 +9,7 @@ from app.schemas.profile import (
     OnboardingStep2Request,
     OnboardingStep3Request,
     OnboardingStep4Request,
+    PatchProfileRequest,
     ProfileResponse,
 )
 
@@ -26,7 +27,64 @@ def get_caller_profile(
         user_id=user.id,
         display_name=user.name,
     )
-    return profile_repo.format_profile_response(profile)
+    return profile_repo.format_profile_response(profile, db=db)
+
+
+# Updates specific fields on the profile (such as slack approval settings)
+@router.patch("", response_model=ProfileResponse)
+def patch_caller_profile(
+    payload: PatchProfileRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> ProfileResponse:
+    profile = profile_repo.get_or_create_profile(
+        db=db,
+        user_id=user.id,
+        display_name=user.name,
+    )
+
+    if payload.approval is not None and payload.approval.slack_enabled is not None:
+        profile.slack_approval_enabled = payload.approval.slack_enabled
+    elif payload.slack_approval_enabled is not None:
+        profile.slack_approval_enabled = payload.slack_approval_enabled
+
+    if payload.display_name is not None:
+        profile.display_name = payload.display_name
+    if payload.role_title is not None:
+        profile.role_title = payload.role_title
+    if payload.industry is not None:
+        profile.industry = payload.industry
+    if payload.niche_description is not None:
+        profile.niche_description = payload.niche_description
+    if payload.audience is not None:
+        profile.audience = payload.audience
+    if payload.topics_include is not None:
+        profile.topics_include = payload.topics_include
+    if payload.topics_avoid is not None:
+        profile.topics_avoid = payload.topics_avoid
+    if payload.tone is not None:
+        profile.tone = payload.tone
+    if payload.voice_notes is not None:
+        profile.voice_notes = payload.voice_notes
+    if payload.sample_posts is not None:
+        profile.sample_posts = payload.sample_posts
+    if payload.brand_name is not None:
+        profile.brand_name = payload.brand_name
+    if payload.brand_primary_hex is not None:
+        profile.brand_primary_hex = payload.brand_primary_hex
+    if payload.brand_accent_hex is not None:
+        profile.brand_accent_hex = payload.brand_accent_hex
+    if payload.timezone is not None:
+        profile.timezone = payload.timezone
+    if payload.post_time is not None:
+        import datetime as dt_mod
+        profile.post_time = dt_mod.datetime.strptime(payload.post_time, "%H:%M").time()
+    if payload.post_days is not None:
+        profile.post_days = payload.post_days
+
+    db.commit()
+    db.refresh(profile)
+    return profile_repo.format_profile_response(profile, db=db)
 
 
 # Updates onboarding step 1: niche, role, audience, topics
@@ -42,7 +100,7 @@ def save_onboarding_step_1(
         data=payload,
         display_name=user.name,
     )
-    return profile_repo.format_profile_response(profile)
+    return profile_repo.format_profile_response(profile, db=db)
 
 
 # Updates onboarding step 2: voice and writing style
@@ -58,7 +116,7 @@ def save_onboarding_step_2(
         data=payload,
         display_name=user.name,
     )
-    return profile_repo.format_profile_response(profile)
+    return profile_repo.format_profile_response(profile, db=db)
 
 
 # Updates onboarding step 3: visual branding colors and name
@@ -74,7 +132,7 @@ def save_onboarding_step_3(
         data=payload,
         display_name=user.name,
     )
-    return profile_repo.format_profile_response(profile)
+    return profile_repo.format_profile_response(profile, db=db)
 
 
 # Updates onboarding step 4: scheduling and delivery settings
@@ -90,7 +148,7 @@ def save_onboarding_step_4(
         data=payload,
         display_name=user.name,
     )
-    return profile_repo.format_profile_response(profile)
+    return profile_repo.format_profile_response(profile, db=db)
 
 
 # Validates that all required fields are set and marks onboarding complete
@@ -115,4 +173,4 @@ def finish_onboarding(
             },
         )
 
-    return profile_repo.format_profile_response(profile)
+    return profile_repo.format_profile_response(profile, db=db)

@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.models.profile import Profile
 from app.schemas.profile import (
+    ApprovalSettingsResponse,
+    ApprovalSlackInfo,
     OnboardingStep1Request,
     OnboardingStep2Request,
     OnboardingStep3Request,
@@ -16,10 +18,19 @@ from app.schemas.profile import (
 
 # Converts a database Profile row into the public ProfileResponse model
 # Note: user_id is deliberately excluded to protect tenant privacy
-def format_profile_response(profile: Profile) -> ProfileResponse:
+def format_profile_response(profile: Profile, db: Optional[Session] = None) -> ProfileResponse:
     formatted_time = None
     if profile.post_time is not None:
         formatted_time = profile.post_time.strftime("%H:%M")
+
+    slack_available = False
+    if db is not None:
+        try:
+            from app.repositories import slack as slack_repo
+            integration = slack_repo.get_slack_integration(db, user_id=profile.user_id)
+            slack_available = bool(integration and integration.status == "connected")
+        except Exception:
+            slack_available = False
 
     return ProfileResponse(
         display_name=profile.display_name,
@@ -39,6 +50,14 @@ def format_profile_response(profile: Profile) -> ProfileResponse:
         post_time=formatted_time,
         post_days=list(profile.post_days) if profile.post_days else [],
         approval_method=profile.approval_method,
+        slack_approval_enabled=profile.slack_approval_enabled,
+        approval=ApprovalSettingsResponse(
+            email=True,
+            slack=ApprovalSlackInfo(
+                available=slack_available,
+                enabled=bool(profile.slack_approval_enabled),
+            ),
+        ),
         onboarding_step=profile.onboarding_step,
         onboarding_completed_at=profile.onboarding_completed_at,
         onboarding_complete=profile.onboarding_completed_at is not None,

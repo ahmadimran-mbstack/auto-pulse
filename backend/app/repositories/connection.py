@@ -19,7 +19,16 @@ from app.services.linkedin_publisher import (
 logger = logging.getLogger(__name__)
 
 
-def create_oauth_state(db: Session, user_id: str, provider: str = "linkedin") -> str:
+def create_oauth_state(
+    db: Session,
+    user_id: str,
+    provider: str = "linkedin",
+    return_to: str = "dashboard",
+) -> str:
+    # return_to is strictly restricted to onboarding or dashboard
+    if return_to not in ("onboarding", "dashboard"):
+        raise ValueError("return_to is only allowed to be 'onboarding' or 'dashboard'")
+
     # Generate at least 32 bytes of cryptographically secure random state
     raw_state = secrets.token_urlsafe(32)
 
@@ -43,6 +52,7 @@ def create_oauth_state(db: Session, user_id: str, provider: str = "linkedin") ->
         state_hash=state_hash,
         user_id=user_id,
         provider=provider,
+        return_to=return_to,
         created_at=now,
         expires_at=expires_at,
         used_at=None,
@@ -70,6 +80,24 @@ def claim_oauth_state(db: Session, user_id: str, raw_state: str) -> Optional[str
     db.commit()
 
     return result
+
+
+def claim_public_oauth_state(db: Session, raw_state: str) -> Optional[dict]:
+    # Compute SHA-256 hash to look up the state in the database
+    state_hash = hashlib.sha256(raw_state.encode("utf-8")).hexdigest()
+
+    # Atomically claim and mark the state as used in a single UPDATE statement without user_id in header
+    stmt = text(
+        "UPDATE oauth_states "
+        "SET used_at = now() "
+        "WHERE state_hash = :hash AND used_at IS NULL AND expires_at > now() "
+        "RETURNING user_id, provider, return_to"
+    )
+
+    row = db.execute(stmt, {"hash": state_hash}).mappings().fetchone()
+    db.commit()
+
+    return dict(row) if row else None
 
 
 def format_connection_summary(conn: SocialConnection) -> ConnectionSummaryResponse:

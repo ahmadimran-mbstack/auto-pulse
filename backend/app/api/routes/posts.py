@@ -3,7 +3,8 @@ import datetime
 from typing import Any, Dict, List, Optional
 import uuid
 import zoneinfo
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status as http_status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+http_status = status
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
@@ -118,8 +119,32 @@ def list_posts(
         next_raw = f"{last_item.created_at.isoformat()}|{str(last_item.id)}"
         next_cursor = base64.urlsafe_b64encode(next_raw.encode("utf-8")).decode("ascii")
 
-    return PaginatedPostsResponse(
-        items=[
+    post_ids = [p.id for p in posts]
+    approvals_map = {}
+    if post_ids:
+        appr_list = db.query(Approval).filter(Approval.post_id.in_(post_ids)).all()
+        approvals_map = {a.post_id: a for a in appr_list}
+
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    items = []
+    for p in posts:
+        appr = approvals_map.get(p.id)
+        appr_info = None
+        if appr:
+            channel = None
+            if appr.decided_via == "slack":
+                channel = "slack"
+            elif appr.decided_via in ("email_link", "email"):
+                channel = "email"
+            state_str = appr.decision or ("expired" if appr.expires_at <= now_utc else "pending")
+            appr_info = PostApprovalInfo(
+                state=state_str,
+                decision=appr.decision,
+                channel=channel,
+                expires_at=appr.expires_at.isoformat() if appr.expires_at else None,
+                decided_at=appr.decided_at.isoformat() if appr.decided_at else None,
+            )
+        items.append(
             PostListItem(
                 id=p.id,
                 status=p.status,
@@ -127,9 +152,12 @@ def list_posts(
                 topic_title=p.topic_title,
                 caption_preview=p.caption[:140],
                 created_at=p.created_at.isoformat(),
+                approval=appr_info,
             )
-            for p in posts
-        ],
+        )
+
+    return PaginatedPostsResponse(
+        items=items,
         next_cursor=next_cursor,
     )
 
@@ -195,9 +223,17 @@ def get_post(
         else:
             state_str = "pending"
 
+        channel = None
+        if approval.decided_via == "slack":
+            channel = "slack"
+        elif approval.decided_via in ("email_link", "email"):
+            channel = "email"
+
         approval_info = PostApprovalInfo(
             state=state_str,
-            expires_at=approval.expires_at.isoformat(),
+            decision=approval.decision,
+            channel=channel,
+            expires_at=approval.expires_at.isoformat() if approval.expires_at else None,
             decided_at=approval.decided_at.isoformat() if approval.decided_at else None,
         )
 

@@ -147,6 +147,14 @@ def request_approval(
             {"id": post.id},
         )
         db.commit()
+
+        # Best-effort Slack approval dispatch (never breaks pipeline)
+        try:
+            from app.services.slack import notify_slack_approval
+            notify_slack_approval(db, post)
+        except Exception as slack_exc:
+            logger.warning(f"Slack approval dispatch failed for post {post.id}: {slack_exc}")
+
         return True
 
     except Exception as exc:
@@ -195,11 +203,15 @@ def decide_approval(
         claimed_post_id = result.post_id
         claimed_user_id = result.user_id
 
-        # Update post state and create publication row on approval
+        # Update post state, audit columns, and create publication row on approval
         if decision == "approved":
             db.execute(
-                text("UPDATE posts SET status = 'approved', updated_at = now() WHERE id = :id AND status = 'awaiting_approval'"),
-                {"id": claimed_post_id},
+                text(
+                    "UPDATE posts "
+                    "SET status = 'approved', approval_source = :approval_source, decided_at = now(), updated_at = now() "
+                    "WHERE id = :id AND status = 'awaiting_approval'"
+                ),
+                {"id": claimed_post_id, "approval_source": decided_via},
             )
             # Create exactly one pending publication record for LinkedIn
             pub = PostPublication(
@@ -212,11 +224,47 @@ def decide_approval(
             db.add(pub)
         elif decision == "rejected":
             db.execute(
-                text("UPDATE posts SET status = 'rejected', updated_at = now() WHERE id = :id AND status = 'awaiting_approval'"),
-                {"id": claimed_post_id},
+                text(
+                    "UPDATE posts "
+                    "SET status = 'rejected', approval_source = :approval_source, decided_at = now(), updated_at = now() "
+                    "WHERE id = :id AND status = 'awaiting_approval'"
+                ),
+                {"id": claimed_post_id, "approval_source": decided_via},
             )
 
         db.commit()
+
+        # Best-effort update of Slack message to show decision and remove buttons
+        try:
+            from app.models.slack import SlackApprovalMessage, SlackIntegration
+            from app.core.crypto import decrypt_text
+            from app.services.slack import update_message_after_decision
+
+            slack_msg = db.query(SlackApprovalMessage).filter(
+                SlackApprovalMessage.post_id == claimed_post_id,
+                SlackApprovalMessage.status == "sent",
+            ).first()
+            if slack_msg and slack_msg.message_ts:
+                integration = db.query(SlackIntegration).filter(
+                    SlackIntegration.user_id == claimed_user_id,
+                    SlackIntegration.status == "connected",
+                ).first()
+                if integration and integration.bot_token_encrypted:
+                    token = decrypt_text(integration.bot_token_encrypted)
+                    decided_label = (
+                        "Email" if "email" in decided_via.lower()
+                        else ("Slack" if "slack" in decided_via.lower() else "Dashboard")
+                    )
+                    update_message_after_decision(
+                        bot_token=token,
+                        channel_id=slack_msg.channel_id,
+                        message_ts=slack_msg.message_ts,
+                        decision=decision,
+                        decided_via=decided_label,
+                    )
+        except Exception as update_exc:
+            logger.debug(f"Slack message update after decision skipped: {update_exc}")
+
         return {"status": "ok", "decision": decision}
 
     # If atomic update returned nothing, determine the exact failure reason

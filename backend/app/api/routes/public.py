@@ -1,5 +1,6 @@
 import datetime
 import hashlib
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
@@ -9,10 +10,11 @@ from app.models.post import Post
 from app.models.profile import Profile
 from app.schemas.post import DecisionRequest, PublicApprovalDetail
 from app.services.approval import decide_approval
-from app.services.image import build_image_etag, render_post_image
+from app.services.image import build_image_etag, render_post_image, verify_signed_image_signature
 
 # DAY 6: rate limit these routes
 router = APIRouter(prefix="/public/approvals", tags=["public-approvals"])
+posts_public_router = APIRouter(prefix="/public/posts", tags=["public-posts"])
 
 
 # Dependency to inject required security headers on public approval responses
@@ -133,3 +135,64 @@ def post_public_approval_decision(
         decided_via="email_link",
         token_hash=token_hash,
     )
+
+
+# GET /public/posts/{post_id}/image.png: serves post image via HMAC SHA-256 signed URL valid for 7 days
+@posts_public_router.get("/{post_id}/image.png")
+def get_public_post_signed_image(
+    post_id: uuid.UUID,
+    exp: int = Query(...),
+    sig: str = Query(...),
+    request: Request = None,
+    w: int = Query(default=1200),
+    db: Session = Depends(get_db),
+) -> Response:
+    if w not in {240, 480, 1200}:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "invalid_width", "message": "Width must be 240, 480, or 1200"},
+        )
+
+    import time
+    if time.time() > exp:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail={"code": "expired", "message": "Image signature has expired"},
+        )
+
+    if not verify_signed_image_signature(post_id=post_id, exp=exp, sig=sig):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "invalid_signature", "message": "Image signature is invalid"},
+        )
+
+    post = db.query(Post).filter(Post.id == post_id).first()
+    if not post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "not_found", "message": "Post not found"},
+        )
+
+    etag = build_image_etag(post.image_spec, w)
+    if_none_match = request.headers.get("if-none-match") if request else None
+    if if_none_match and if_none_match.strip() == etag:
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers={
+                "ETag": etag,
+                "Cache-Control": "public, max-age=604800",
+                "X-Robots-Tag": "noindex",
+            },
+        )
+
+    png_bytes = render_post_image(post.image_spec, width_target=w)
+    return Response(
+        content=png_bytes,
+        media_type="image/png",
+        headers={
+            "ETag": etag,
+            "Cache-Control": "public, max-age=604800",
+            "X-Robots-Tag": "noindex",
+        },
+    )
+

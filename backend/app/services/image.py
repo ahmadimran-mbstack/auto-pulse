@@ -5,7 +5,12 @@ from typing import Any, Dict, List, Tuple
 from PIL import Image, ImageDraw, ImageFont
 
 import hashlib
+import hmac
 import json
+import time
+import uuid
+
+from app.core.config import settings
 
 # Path to font assets
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
@@ -59,6 +64,26 @@ def build_image_etag(image_spec: Dict[str, Any], width: int) -> str:
     canonical_json = json.dumps(image_spec, sort_keys=True, separators=(",", ":"))
     spec_hash = hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()[:16]
     return f'"{spec_hash}-{width}"'
+
+
+def generate_signed_image_url(post_id: uuid.UUID, expires_in_seconds: int = 7 * 86400) -> str:
+    """Generates an HMAC SHA-256 signed public URL valid for 7 days."""
+    exp = int(time.time()) + expires_in_seconds
+    key = settings.TOKEN_ENCRYPTION_KEY.strip().encode("utf-8")
+    msg = f"{post_id}:{exp}".encode("utf-8")
+    sig = hmac.new(key, msg, hashlib.sha256).hexdigest()
+    base = settings.APP_BASE_URL.rstrip("/")
+    return f"{base}/public/posts/{post_id}/image.png?exp={exp}&sig={sig}"
+
+
+def verify_signed_image_signature(post_id: uuid.UUID, exp: int, sig: str) -> bool:
+    """Validates the expiry timestamp and HMAC signature."""
+    if time.time() > exp:
+        return False
+    key = settings.TOKEN_ENCRYPTION_KEY.strip().encode("utf-8")
+    msg = f"{post_id}:{exp}".encode("utf-8")
+    expected_sig = hmac.new(key, msg, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(sig, expected_sig)
 
 
 # Helper to verify font assets exist before rendering

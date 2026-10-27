@@ -73,9 +73,39 @@ Once running, you can visit:
 
 ## 6. Running Tests
 
-Tests run completely isolated without calling Neon Auth or external databases. Test keys and fake settings are used.
+Tests run isolated with schema sandboxing on Neon PostgreSQL.
+
+```bash
+# Run all tests or specific Slack suites:
+uv run pytest tests/test_slack_connect.py -v
+uv run pytest tests/test_slack_notify.py -v
+uv run pytest tests/test_slack_actions.py -v
+```
+
+---
+
+## 7. Slack Integration & Socket Mode Listener
+
+AutoPulse supports post approval notifications and one-click approvals directly inside Slack via Socket Mode.
+
+### Environment Settings
+- `SLACK_CLIENT_ID`: Slack App Client ID.
+- `SLACK_CLIENT_SECRET`: Slack App Client Secret.
+- `SLACK_APP_TOKEN`: App-level token with `connections:write` scope (`xapp-...`).
+- `SLACK_REDIRECT_URI`: OAuth redirect URI (defaults to `{APP_BASE_URL}/connections/slack/callback`).
+
+### Running the Standalone Socket Mode Listener
+Interactive button clicks (Approve / Reject) arrive over a WebSocket via Slack Socket Mode. The listener runs as a dedicated standalone background process outside the FastAPI web workers:
 
 ```bash
 # From the backend directory:
-pytest -q
+uv run python -m app.slack_listener
 ```
+
+The listener process:
+1. Connects to Slack using `SLACK_APP_TOKEN`.
+2. Immediately ACKs incoming events to Slack in under 3 seconds.
+3. Dispatches interactive actions to `handle_block_action(payload)`.
+4. Enforces 30 requests/minute per-user rate limiting via Redis (with memory fallback).
+5. Automatically reconnects if the network connection drops.
+

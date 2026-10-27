@@ -12,9 +12,15 @@ from app.api.routes.me import router as me_router
 from app.api.routes.profile import router as profile_router
 from app.api.routes.connections import router as connections_router
 from app.api.routes.posts import router as posts_router
-from app.api.routes.public import router as public_router
+from app.api.routes.public import posts_public_router, router as public_router
 from app.api.routes.dashboard import router as dashboard_router
 from app.api.routes.linkedin import router as linkedin_router
+from app.api.routes.slack import (
+    integrations_router as slack_integrations_router,
+    router as slack_router,
+    api_router as slack_api_router,
+    api_integrations_router as slack_api_integrations_router,
+)
 from app.core.config import settings
 
 # Configure server logging based on LOG_LEVEL
@@ -196,6 +202,11 @@ app.include_router(profile_router)
 app.include_router(connections_router)
 app.include_router(posts_router)
 app.include_router(public_router)
+app.include_router(posts_public_router)
 app.include_router(dashboard_router)
 app.include_router(linkedin_router)
+app.include_router(slack_router)
+app.include_router(slack_integrations_router)
+app.include_router(slack_api_router)
+app.include_router(slack_api_integrations_router)
 
