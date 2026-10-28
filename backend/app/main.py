@@ -7,11 +7,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 import re
+from sqlalchemy import text
 from app.api.routes.health import router as health_router
 from app.api.routes.me import router as me_router
 from app.api.routes.profile import router as profile_router
 from app.api.routes.connections import router as connections_router
 from app.api.routes.posts import router as posts_router
+from app.api.routes.playground import router as playground_router
+from app.api.routes.runs import router as runs_router
 from app.api.routes.public import posts_public_router, router as public_router
 from app.api.routes.dashboard import router as dashboard_router
 from app.api.routes.linkedin import router as linkedin_router
@@ -184,6 +187,13 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.exception(f"Unhandled error processing request: {request.method} {request.url.path}")
+    origin = request.headers.get("origin")
+    resp_headers = {}
+    if origin and (origin in settings.cors_origins or "*" in settings.cors_origins):
+        resp_headers["Access-Control-Allow-Origin"] = origin
+        resp_headers["Access-Control-Allow-Credentials"] = "false"
+        resp_headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        resp_headers["Access-Control-Allow-Headers"] = "*"
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
@@ -192,6 +202,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
                 "message": "An unexpected internal server error occurred",
             }
         },
+        headers=resp_headers,
     )
 
 
@@ -201,6 +212,8 @@ app.include_router(me_router)
 app.include_router(profile_router)
 app.include_router(connections_router)
 app.include_router(posts_router)
+app.include_router(playground_router)
+app.include_router(runs_router)
 app.include_router(public_router)
 app.include_router(posts_public_router)
 app.include_router(dashboard_router)
@@ -209,4 +222,24 @@ app.include_router(slack_router)
 app.include_router(slack_integrations_router)
 app.include_router(slack_api_router)
 app.include_router(slack_api_integrations_router)
+
+
+@app.on_event("startup")
+def sweep_stale_playground_runs():
+    """Startup sweeper: Marks playground runs stuck in 'running' for > 10 minutes as failed."""
+    try:
+        from app.db.session import SessionLocal
+        with SessionLocal() as db:
+            db.execute(
+                text(
+                    "UPDATE playground_runs "
+                    "SET status = 'failed', finished_at = now() "
+                    "WHERE status = 'running' AND started_at < now() - interval '10 minutes'"
+                )
+            )
+            db.commit()
+            logger.info("Startup sweep of stale playground runs completed")
+    except Exception as exc:
+        logger.warning(f"Failed to sweep stale playground runs on startup: {exc}")
+
 

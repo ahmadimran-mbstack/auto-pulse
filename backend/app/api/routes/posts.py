@@ -19,6 +19,7 @@ from app.repositories import profile as profile_repo
 from app.schemas.post import (
     DecisionRequest,
     PaginatedPostsResponse,
+    PostAgentTraceResponse,
     PostApprovalInfo,
     PostDetail,
     PostListItem,
@@ -28,7 +29,7 @@ from app.schemas.post import (
 )
 from app.services.approval import decide_approval, request_approval
 from app.services.image import build_image_etag, render_post_image
-from app.services.pipeline import build_graph, create_chat_model
+from app.services.pipeline import execute_pipeline
 from app.services.prompts import PROMPT_VERSION
 from app.services.search import get_search_adapter
 
@@ -153,6 +154,12 @@ def list_posts(
                 caption_preview=p.caption[:140],
                 created_at=p.created_at.isoformat(),
                 approval=appr_info,
+                angle=p.angle,
+                hook_type=p.hook_type,
+                post_format=p.post_format,
+                ai_score=p.ai_score,
+                needs_review=p.needs_review,
+                topic=p.topic_title,
             )
         )
 
@@ -250,6 +257,38 @@ def get_post(
         created_at=p.created_at.isoformat(),
         approval=approval_info,
         publications=publication_infos,
+        angle=p.angle,
+        hook_type=p.hook_type,
+        post_format=p.post_format,
+        ai_score=p.ai_score,
+        needs_review=p.needs_review,
+        topic=p.topic_title,
+    )
+
+
+# GET /posts/{id}/agent-trace: agent execution trace for caller's post
+@router.get("/{post_id}/agent-trace", response_model=PostAgentTraceResponse)
+def get_post_agent_trace(
+    post_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    p = post_repo.get_caller_post(db=db, user_id=user.id, post_id=post_id)
+    if not p:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail={"code": "not_found", "message": "Post not found"},
+        )
+    gen_run = (
+        db.query(GenerationRun)
+        .filter(GenerationRun.post_id == post_id, GenerationRun.user_id == user.id)
+        .first()
+    )
+    trace_data = gen_run.agent_trace if gen_run else None
+    return PostAgentTraceResponse(
+        post_id=post_id,
+        trace=trace_data,
+        agent_trace=trace_data,
     )
 
 
@@ -452,13 +491,9 @@ def generate_draft_now(
     db.commit()
     db.refresh(run)
 
-    # Prepare pipeline graph inputs
-    fast_model = create_chat_model(settings.LLM_MODEL_FAST)
-    main_model = create_chat_model(settings.LLM_MODEL)
+    # Prepare pipeline inputs
     search_tool = get_search_adapter(settings.SEARCH_PROVIDER)
-    app = build_graph(fast_model, main_model, search_tool, partial=False)
-
-    recent_titles, recent_captions = post_repo.get_recent_titles_and_captions(db, user.id, days=14)
+    history = post_repo.get_user_post_history(db, user.id, limit=30)
 
     profile_dict = {
         "role_title": profile.role_title,
@@ -475,22 +510,27 @@ def generate_draft_now(
         "brand_accent_hex": profile.brand_accent_hex,
     }
 
-    initial_state = {
-        "profile": profile_dict,
-        "recent_titles": recent_titles,
-        "recent_captions": recent_captions,
-        "counters": {"search_calls": 0, "llm_calls": 0, "tokens_in": 0, "tokens_out": 0},
-        "seconds_per_node": {},
-    }
+    def _step_callback(step_name: str, round_num: int, state: dict):
+        run.current_step = step_name
+        run.round = round_num
+        db.commit()
 
-    # Execute graph
-    final_state = app.invoke(initial_state)
+    final_state = execute_pipeline(
+        user_id=user.id,
+        profile_dict=profile_dict,
+        history=history,
+        search_tool=search_tool,
+        step_callback=_step_callback,
+    )
 
     counters = final_state.get("counters", {})
     run.search_calls = counters.get("search_calls", 0)
     run.llm_calls = counters.get("llm_calls", 0)
     run.tokens_in = counters.get("tokens_in", 0)
     run.tokens_out = counters.get("tokens_out", 0)
+    run.agent_trace = final_state.get("agent_trace")
+    run.round = final_state.get("round", 0)
+    run.current_step = "completed"
 
     err_code = final_state.get("error_code")
     if err_code:
@@ -534,6 +574,11 @@ def generate_draft_now(
         publish_at=publish_at,
         topic_title=chosen.get("title") or "Industry Update",
         topic_url=chosen.get("url") or "",
+        angle=final_state.get("angle"),
+        hook_type=final_state.get("hook_type"),
+        post_format=final_state.get("post_format"),
+        ai_score=final_state.get("ai_score"),
+        needs_review=final_state.get("needs_review", False),
         sources=sources_list,
         caption=draft.get("post_text", ""),
         hashtags=draft.get("hashtags", []),
@@ -565,4 +610,33 @@ def generate_draft_now(
         caption=post.caption,
         hashtags=post.hashtags,
         created_at=post.created_at.isoformat(),
+        angle=post.angle,
+        hook_type=post.hook_type,
+        post_format=post.post_format,
+        ai_score=post.ai_score,
+        needs_review=post.needs_review,
     )
+
+
+@router.get("/{post_id}/agent-trace", response_model=PostAgentTraceResponse)
+def get_post_agent_trace(
+    post_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    """Retrieves full multi-agent trace for a specific post.
+    Strictly scoped to current_user.
+    """
+    post = db.query(Post).filter(Post.id == post_id, Post.user_id == user.id).first()
+    if not post:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Post not found",
+        )
+
+    run = db.query(GenerationRun).filter(GenerationRun.post_id == post_id, GenerationRun.user_id == user.id).first()
+    return PostAgentTraceResponse(
+        post_id=post.id,
+        agent_trace=run.agent_trace if run else None,
+    )
+
