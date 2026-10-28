@@ -50,6 +50,15 @@ class Settings(BaseSettings):
     )
     LLM_MODEL: str = "gemini-3.5-flash-lite"
     LLM_MODEL_FAST: str = "gemini-3.1-flash-lite"
+    LLM_MODEL_DETECTOR: str = "gemini-3.5-flash-lite"
+    LLM_MODEL_DRAFTER: str = "gemini-3.5-flash-lite"
+    LLM_MODEL_FINDER: str = "gemini-3.5-flash-lite"
+    LLM_MODEL_GTM: str = "gemini-3.5-flash-lite"
+
+    # Multi-agent thresholds and iteration bounds
+    AI_SCORE_THRESHOLD: int = 15
+    MAX_REWRITE_ROUNDS: int = 3
+    MAX_LLM_CALLS_PER_RUN: int = 20
 
     # Pipeline schedule and lead time settings
     DRAFT_LEAD_MINUTES: int = 180

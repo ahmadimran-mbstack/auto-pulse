@@ -1,0 +1,196 @@
+version: "1.0"
+
+# Configurable scoring weights and category caps
+weights:
+  banned_word_strong: 6
+  banned_word_weak: 2
+  min_distinct_weak_words: 2
+  banned_phrase: 8
+  em_dash: 5
+  arrow_symbol: 5
+  dramatic_ellipsis: 5
+  excess_exclamation: 6
+  emoji_at_line_start: 7
+  markdown_formatting: 6
+  excess_hashtags: 6
+  structure_cliche: 8
+  colon_reveal: 6
+  participle_tail: 6
+  serves_stands_as: 5
+  stacked_hedges: 6
+  inflated_significance: 7
+  vague_source: 7
+  rhetorical_question_hook: 7
+  repeated_x_isnt_y: 7
+  bullets_template: 8
+  rule_of_three_repeated: 6
+  rhythm_one_sentence_paragraphs: 8
+  rhythm_equal_sentence_lengths: 7
+  rhythm_repeated_sentence_opener: 7
+  rhythm_uniform_paragraphs: 6
+
+caps:
+  banned_words_total: 36
+  banned_phrases_total: 40
+  punctuation_total: 25
+  structure_total: 40
+  rhythm_total: 25
+  max_deterministic_score: 100
+
+# Banned single words split into two tiers:
+# Strong tells (6 points each)
+# Weak or ambiguous words (2 points each, counted only when 2 or more different weak words appear in the post)
+banned_words:
+  strong:
+    - delve
+    - tapestry
+    - testament
+    - ever-evolving
+    - game-changer
+    - supercharge
+    - unleash
+    - groundbreaking
+    - transformative
+    - pivotal
+    - seamless
+    - holistic
+    - synergy
+    - elevate
+    - revolutionize
+    - underscoring
+    - showcasing
+  weak:
+    - journey
+    - navigate
+    - landscape
+    - realm
+    - crucial
+    - leverage
+    - foster
+    - harness
+    - empower
+    - vibrant
+    - robust
+    - paradigm
+    - streamline
+    - unlock
+    - cutting-edge
+
+# Banned phrases (8 points each, capped)
+# Used by both the deterministic scanner and checks.py check_banned_phrases
+banned_phrases:
+  - "in today's fast-paced world"
+  - "in the ever-evolving"
+  - "I'm excited to share"
+  - "I'm thrilled to announce"
+  - "here's the thing"
+  - "let that sink in"
+  - "let's dive in"
+  - "let's break it down"
+  - "at the end of the day"
+  - "it's no secret"
+  - "it's important to note"
+  - "in conclusion"
+  - "ultimately,"
+  - "the future of"
+  - "what do you think?"
+  - "agree?"
+  - "thoughts?"
+  - "drop a comment"
+  - "follow for more"
+  - "read that again"
+  - "here's why"
+  - "here's what I learned"
+  - "stop scrolling"
+  - "the result?"
+  - "the truth?"
+  # Retained from legacy checks.py to prevent regressions
+  - "game changer"
+  - "unlock the power"
+  - "it's not just"
+  - "landscape of"
+  - "navigate the complexities"
+
+# Punctuation & formatting slop triggers
+punctuation_rules:
+  em_dash:
+    patterns:
+      - "—"
+      - "--"
+    description: "Em dash or double-hyphen dash breaks human conversational cadence"
+  arrow_symbols:
+    patterns:
+      - "→"
+      - "➡"
+      - "➜"
+      - "➤"
+      - "►"
+      - "▶"
+      - "-->"
+    description: "Arrow symbols used for fake bullet points"
+  dramatic_ellipsis:
+    patterns:
+      - "\\.\\.\\."
+      - "…"
+    description: "Dramatic ellipsis used as cheap suspense"
+  excess_exclamation_threshold: 2
+  excess_hashtags_threshold: 3
+
+# Structural cliches
+structural_patterns:
+  not_just_x_its_y:
+    regex: "(?i)\\bnot\\s+just\\b[\\s\\S]{1,60}?\\b(it['’]?s|it\\s+is)\\b"
+    description: "Cliche 'not just X, it's Y' contrast frame"
+  not_only_x_but_also_y:
+    regex: "(?i)\\bnot\\s+only\\b[\\s\\S]{1,60}?\\bbut\\s+also\\b"
+    description: "Formal academic 'not only X but also Y' structure"
+  its_not_about_x_its_about_y:
+    regex: "(?i)\\b(it['’]?s|it\\s+is)\\s+not\\s+about\\b[\\s\\S]{1,60}?\\b(it['’]?s|it\\s+is)\\s+about\\b"
+    description: "Pretentious 'it's not about X, it's about Y' reframing"
+  whether_youre_x_or_y:
+    regex: "(?i)\\bwhether\\s+you['’]?re\\b[\\s\\S]{1,60}?\\bor\\b"
+    description: "Expository 'whether you're X or Y' generalization"
+  serves_stands_as:
+    regex: "(?i)\\b(serves\\s+as|stands\\s+as)\\b"
+    description: "Pretentious 'serves as' / 'stands as' instead of direct 'is'"
+  colon_reveals:
+    regex: "(?i)\\b(the\\s+secret|the\\s+catch|the\\s+problem|the\\s+takeaway|the\\s+truth|the\\s+reality|the\\s+result|here['’]?s\\s+the\\s+deal):"
+    description: "Dramatic colon reveal pattern"
+  participle_tails:
+    regex: ",\\s+(highlighting|underscoring|ensuring|demonstrating|showcasing|reflecting|emphasizing|signaling|paving\\s+the\\s+way\\s+for)\\b"
+    description: "AI-typical participle tail attaching pseudo-significance to sentences"
+  stacked_hedges:
+    regex: "(?i)\\b(arguably\\s+perhaps|could\\s+potentially|might\\s+perhaps|possibly\\s+arguably|may\\s+potentially)\\b"
+    description: "Stacked hedging words softening claims unnaturally"
+  inflated_significance:
+    regex: "(?i)\\b(a\\s+pivotal\\s+moment|a\\s+testament\\s+to|a\\s+defining\\s+chapter|a\\s+monumental\\s+shift|a\\s+beacon\\s+of)\\b"
+    description: "Inflated significance phrase"
+  vague_sources:
+    regex: "(?i)\\b(experts\\s+say|studies\\s+show|research\\s+suggests|industry\\s+leaders\\s+agree|reports\\s+indicate)\\b"
+    description: "Vague, unsourced authority claim"
+
+# Rhythm constraints
+rhythm_rules:
+  min_paragraphs_for_one_sentence_check: 3
+  repeated_sentence_opener_threshold: 3
+  min_sentences_for_length_uniformity: 4
+  sentence_length_std_dev_threshold: 3.5
+
+# Content criteria used exclusively by the LLM Judge
+llm_content_rubric:
+  categories:
+    - name: "vocabulary"
+      weight: 20
+      description: "Detects buzzwords, corporate jargon, AI filler words, and inflated vocabulary."
+    - name: "structure"
+      weight: 20
+      description: "Detects predictable templates, contrast frames, colon reveals, and bullet formulas."
+    - name: "rhythm"
+      weight: 20
+      description: "Detects monotone sentence pacing, uniform paragraph lengths, and single-sentence paragraphs."
+    - name: "specificity"
+      weight: 20
+      description: "Checks if every claim is grounded in source facts and flags missing details, invented stats, or hallucinations."
+    - name: "tone"
+      weight: 20
+      description: "Detects patronizing cheerleading, motivational lecturing, generic swap-test advice, and moralizing closers."

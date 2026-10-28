@@ -2,19 +2,30 @@ import datetime
 import re
 from typing import List, Optional, Set, Tuple
 
-# Extensible banned phrases list
-BANNED_PHRASES: List[str] = [
-    "delve",
-    "in today's fast-paced world",
-    "game-changer",
-    "game changer",
-    "unlock the power",
-    "it's not just",
-    "revolutionize",
-    "landscape of",
-    "navigate the complexities",
-    "in the ever-evolving",
-]
+from app.agents.scanner import get_banned_phrases
+
+# Extensible banned phrases list loaded dynamically from ai_slop_patterns.yaml
+def get_current_banned_phrases() -> List[str]:
+    try:
+        phrases = get_banned_phrases()
+        if phrases:
+            return phrases
+    except Exception:
+        pass
+    return [
+        "delve",
+        "in today's fast-paced world",
+        "game-changer",
+        "game changer",
+        "unlock the power",
+        "it's not just",
+        "revolutionize",
+        "landscape of",
+        "navigate the complexities",
+        "in the ever-evolving",
+    ]
+
+BANNED_PHRASES: List[str] = get_current_banned_phrases()
 
 
 # Check caption length, paragraph count, and first line length
@@ -56,7 +67,8 @@ def check_hashtags_and_urls(caption: str, hashtags: List[str]) -> Optional[str]:
 # Check that no banned cliche phrases appear in the caption
 def check_banned_phrases(caption: str) -> Optional[str]:
     lower_caption = caption.lower()
-    for phrase in BANNED_PHRASES:
+    phrases = get_current_banned_phrases()
+    for phrase in phrases:
         if phrase.lower() in lower_caption:
             return f"Caption contains banned phrase: '{phrase}'"
     return None

@@ -18,3 +18,11 @@ venv/
 .coverage
 htmlcov/
 eval_output/
+
+# Calibration sample folders
+calibration/human_samples/
+calibration/ai_lazy/
+calibration/ai_instructed/
+human_samples/
+ai_lazy/
+ai_instructed/

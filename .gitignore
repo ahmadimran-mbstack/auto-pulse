@@ -46,3 +46,14 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 eval_output/
+
+# Calibration sample folders
+calibration/human_samples/
+calibration/ai_lazy/
+calibration/ai_instructed/
+backend/calibration/human_samples/
+backend/calibration/ai_lazy/
+backend/calibration/ai_instructed/
+human_samples/
+ai_lazy/
+ai_instructed/
