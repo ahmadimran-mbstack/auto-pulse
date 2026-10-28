@@ -2,6 +2,7 @@ import datetime
 from typing import Any, Dict, List, Optional
 import uuid
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -42,6 +43,21 @@ class Post(Base):
     # Chosen topic title and primary source URL
     topic_title: Mapped[str] = mapped_column(Text, nullable=False)
     topic_url: Mapped[str] = mapped_column(Text, nullable=False)
+
+    @property
+    def topic(self) -> str:
+        return self.topic_title
+
+    # Editorial metadata from Post Finder agent (nullable)
+    angle: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    hook_type: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    post_format: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Quality scores and human review flag from AI-Slop Detector loop
+    ai_score: Mapped[Optional[int]] = mapped_column(SmallInteger, nullable=True)
+    needs_review: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
 
     # Candidate source articles used to research and ground the post
     sources: Mapped[List[Dict[str, Any]]] = mapped_column(JSONB, nullable=False)
@@ -140,6 +156,13 @@ class GenerationRun(Base):
         UUID(as_uuid=True), nullable=True
     )
 
+    # Agent loop execution trace and intermediate state
+    agent_trace: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    current_step: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    round: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, server_default="0"
+    )
+
     # Timestamps for run duration tracking
     started_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -158,3 +181,56 @@ class GenerationRun(Base):
             "user_id", "run_date", name="uq_generation_runs_user_id_run_date"
         ),
     )
+
+
+class PlaygroundRun(Base):
+    __tablename__ = "playground_runs"
+
+    # Unique identifier for the playground experiment
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+
+    # Scoped strictly to the authenticated creator
+    user_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+
+    # Run lifecycle status: queued, running, completed, failed
+    status: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default="queued"
+    )
+
+    # Current execution step (e.g. finder, gtm_brief, drafter, detector, post_loop)
+    current_step: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Active rewrite round counter
+    round: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, server_default="0"
+    )
+
+    # Final generated output (post_text, hashtags, headline, scores) - never saved to posts table
+    result: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+
+    # Comprehensive multi-agent audit trace across all rounds
+    trace: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+
+    # Lifecycle timestamps
+    started_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    finished_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued', 'running', 'completed', 'failed')",
+            name="ck_playground_runs_status",
+        ),
+        Index("ix_playground_runs_user_id_created_at", "user_id", "created_at"),
+    )
+

@@ -19,6 +19,12 @@ class PostListItem(BaseModel):
     caption_preview: str
     created_at: str
     approval: Optional[PostApprovalInfo] = None
+    angle: Optional[str] = None
+    hook_type: Optional[str] = None
+    post_format: Optional[str] = None
+    ai_score: Optional[int] = None
+    needs_review: Optional[bool] = None
+    topic: Optional[str] = None
 
 
 class PaginatedPostsResponse(BaseModel):
@@ -47,6 +53,56 @@ class PostDetail(BaseModel):
     created_at: str
     approval: Optional[PostApprovalInfo] = None
     publications: List[PostPublicationInfo] = []
+    angle: Optional[str] = None
+    hook_type: Optional[str] = None
+    post_format: Optional[str] = None
+    ai_score: Optional[int] = None
+    needs_review: Optional[bool] = None
+    topic: Optional[str] = None
+
+
+class PlaygroundRunCreateRequest(BaseModel):
+    topic_hint: Optional[str] = None
+    model_config = {"extra": "ignore"}
+
+
+class PlaygroundRunCreateResponse(BaseModel):
+    run_id: uuid.UUID
+    status: str
+
+
+class PlaygroundRunDetail(BaseModel):
+    id: uuid.UUID
+    status: str
+    current_step: Optional[str] = None
+    round: int = 0
+    max_rounds: int = 3
+    result: Optional[Dict[str, Any]] = None
+    trace: Optional[Dict[str, Any]] = None
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    created_at: str
+
+
+class PostAgentTraceResponse(BaseModel):
+    post_id: uuid.UUID
+    trace: Optional[Dict[str, Any]] = None
+    agent_trace: Optional[Dict[str, Any]] = None
+
+
+class GenerationRunDetail(BaseModel):
+    id: uuid.UUID
+    status: str
+    current_step: Optional[str] = None
+    round: int = 0
+    max_rounds: int = 3
+    trace: Optional[Dict[str, Any]] = None
+    agent_trace: Optional[Dict[str, Any]] = None
+    post_id: Optional[uuid.UUID] = None
+    result: Optional[Dict[str, Any]] = None
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+
 
 
 class ScheduleResponse(BaseModel):

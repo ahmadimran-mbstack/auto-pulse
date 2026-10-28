@@ -56,6 +56,39 @@ def get_recent_titles_and_captions(
     return titles, captions
 
 
+# Retrieve last 30 posts for caller once per run for the Post Finder agent
+def get_user_post_history(
+    db: Session, user_id: str, limit: int = 30
+) -> List[dict]:
+    stmt = (
+        select(Post)
+        .where(Post.user_id == user_id)
+        .order_by(desc(Post.created_at))
+        .limit(limit)
+    )
+    posts = list(db.scalars(stmt).all())
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    cutoff_14d = now_utc - datetime.timedelta(days=14)
+
+    history = []
+    for p in posts:
+        is_recent = p.created_at >= cutoff_14d if p.created_at else False
+        history.append({
+            "id": str(p.id),
+            "run_date": p.run_date.isoformat() if p.run_date else None,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+            "is_last_14_days": is_recent,
+            "topic_title": p.topic_title,
+            "topic_url": p.topic_url,
+            "sources": p.sources or [],
+            "angle": p.angle,
+            "hook_type": p.hook_type,
+            "post_format": p.post_format,
+            "caption_preview": (p.caption[:200] if p.caption else ""),
+        })
+    return history
+
+
 # Delete draft and associated generation run for a specific date if status is draft
 def delete_draft_and_run_for_date(
     db: Session, user_id: str, run_date: datetime.date
