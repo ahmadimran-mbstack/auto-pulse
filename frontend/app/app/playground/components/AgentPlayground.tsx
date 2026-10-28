@@ -39,16 +39,13 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
   const [showTrace, setShowTrace] = React.useState(false);
 
   // Run creation mutation
-  const createMutation = useCreatePlaygroundRunMutation(userId);
+  const createMutation = useCreatePlaygroundRunMutation();
 
   // Run polling query (every 2 seconds while isPolling is true)
   const { data: runData, isError: runError, error: runErrorObj, refetch: refetchRun } = useRunQuery(
     userId,
-    runId || "",
-    {
-      enabled: Boolean(runId && isPolling),
-      refetchInterval: isPolling ? 2000 : false,
-    }
+    runId,
+    isPolling ? 2000 : false
   );
 
   // 180-second timeout guard with unmount timer cleanup
