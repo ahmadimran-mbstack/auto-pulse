@@ -243,6 +243,7 @@ def build_approval_blocks(
     topic_title: str,
     image_file_id: Optional[str] = None,
     signed_image_url: Optional[str] = None,
+    needs_review: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     Builds the Block Kit message layout:
@@ -261,6 +262,15 @@ def build_approval_blocks(
             },
         }
     ]
+
+    if needs_review:
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": ":warning: *Needs Review*: AI-slop score did not meet target threshold (< 15) or checks flagged warnings.",
+            },
+        })
 
     dashboard_url = f"{settings.APP_BASE_URL.rstrip('/')}/posts/{post_id}"
 
@@ -346,6 +356,7 @@ def post_approval_message(
     topic_title: str,
     image_file_id: Optional[str] = None,
     signed_image_url: Optional[str] = None,
+    needs_review: bool = False,
 ) -> Tuple[str, str, str]:
     """
     Posts the approval message to Slack with retries and graceful image fallbacks.
@@ -377,6 +388,7 @@ def post_approval_message(
             topic_title=topic_title,
             image_file_id=f_id,
             signed_image_url=s_url,
+            needs_review=needs_review,
         )
         payload = {
             "channel": channel_id,
@@ -565,6 +577,7 @@ def notify_slack_approval(db: Any, post: Any) -> Optional[str]:
                 topic_title=post.topic_title,
                 image_file_id=image_file_id,
                 signed_image_url=signed_image_url,
+                needs_review=getattr(post, "needs_review", False),
             )
             db.execute(
                 text(

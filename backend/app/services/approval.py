@@ -135,6 +135,7 @@ def request_approval(
             caption=post.caption,
             raw_token=raw_token,
             idempotency_key=idempotency_key,
+            needs_review=getattr(post, "needs_review", False),
         )
 
         # Record successful dispatch and advance post status

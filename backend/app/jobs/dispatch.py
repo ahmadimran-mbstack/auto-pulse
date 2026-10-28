@@ -123,12 +123,9 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
         return None
 
     try:
-        fast_model = create_chat_model(settings.LLM_MODEL_FAST)
-        main_model = create_chat_model(settings.LLM_MODEL)
+        from app.services.pipeline import execute_pipeline
         search_tool = get_search_adapter(settings.SEARCH_PROVIDER)
-        app = build_graph(fast_model, main_model, search_tool, partial=False)
-
-        recent_titles, recent_captions = post_repo.get_recent_titles_and_captions(db, profile.user_id, days=14)
+        history = post_repo.get_user_post_history(db, profile.user_id, limit=30)
 
         profile_dict = {
             "role_title": profile.role_title,
@@ -145,21 +142,27 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
             "brand_accent_hex": profile.brand_accent_hex,
         }
 
-        initial_state = {
-            "profile": profile_dict,
-            "recent_titles": recent_titles,
-            "recent_captions": recent_captions,
-            "counters": {"search_calls": 0, "llm_calls": 0, "tokens_in": 0, "tokens_out": 0},
-            "seconds_per_node": {},
-        }
+        def _step_callback(step_name: str, round_num: int, state: dict):
+            run.current_step = step_name
+            run.round = round_num
+            db.commit()
 
-        final_state = app.invoke(initial_state)
+        final_state = execute_pipeline(
+            user_id=profile.user_id,
+            profile_dict=profile_dict,
+            history=history,
+            search_tool=search_tool,
+            step_callback=_step_callback,
+        )
 
         counters = final_state.get("counters", {})
         run.search_calls = counters.get("search_calls", 0)
         run.llm_calls = counters.get("llm_calls", 0)
         run.tokens_in = counters.get("tokens_in", 0)
         run.tokens_out = counters.get("tokens_out", 0)
+        run.agent_trace = final_state.get("agent_trace")
+        run.round = final_state.get("round", 0)
+        run.current_step = "completed"
 
         err_code = final_state.get("error_code")
         if err_code:
@@ -168,6 +171,8 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
             run.error_detail = final_state.get("error_detail")
             run.finished_at = datetime.datetime.now(datetime.timezone.utc)
             db.commit()
+            elapsed = (run.finished_at - run.started_at).total_seconds()
+            logger.warning(f"Generation run {run.id} failed after {elapsed:.2f}s: {err_code} - {run.error_detail}")
             return None
 
         chosen = final_state.get("chosen", {})
@@ -200,6 +205,11 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
             publish_at=publish_at,
             topic_title=chosen.get("title") or "Industry Update",
             topic_url=chosen.get("url") or "",
+            angle=final_state.get("angle"),
+            hook_type=final_state.get("hook_type"),
+            post_format=final_state.get("post_format"),
+            ai_score=final_state.get("ai_score"),
+            needs_review=final_state.get("needs_review", False),
             sources=sources_list,
             caption=draft.get("post_text", ""),
             hashtags=draft.get("hashtags", []),
@@ -215,6 +225,12 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
         run.post_id = post.id
         run.finished_at = datetime.datetime.now(datetime.timezone.utc)
         db.commit()
+
+        elapsed = (run.finished_at - run.started_at).total_seconds()
+        logger.info(
+            f"Generation run {run.id} for user {profile.user_id} succeeded in {elapsed:.2f}s "
+            f"(ai_score={post.ai_score}, needs_review={post.needs_review})"
+        )
 
         # Call request_approval after draft is saved
         request_approval(db, post)

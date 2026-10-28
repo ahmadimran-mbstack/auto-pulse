@@ -122,6 +122,7 @@ def send_approval_email(
     caption: str,
     raw_token: str,
     idempotency_key: Optional[str] = None,
+    needs_review: bool = False,
 ) -> None:
     # Subject line matching specification
     subject = f"Approve your LinkedIn post for {weekday} {time_str}"
@@ -130,10 +131,21 @@ def send_approval_email(
     approve_url = f"{settings.APP_BASE_URL.rstrip('/')}/approve/{raw_token}"
     image_url = f"{settings.APP_BASE_URL.rstrip('/')}/public/approvals/{raw_token}/image.png"
 
+    review_notice_plain = (
+        "\n\n⚠️ Needs Review: AI-slop score did not meet target threshold (< 15) or checks flagged warnings."
+        if needs_review
+        else ""
+    )
+    review_notice_html = (
+        """<div style="background-color: #7f1d1d; border: 1px solid #ef4444; border-radius: 6px; padding: 12px; margin-bottom: 20px; color: #fecaca; font-weight: 600; font-size: 14px;">⚠️ Needs Review: AI-slop score did not meet target threshold (&lt; 15) or checks flagged warnings.</div>"""
+        if needs_review
+        else ""
+    )
+
     # Plain text version (contains exactly one link: the decision link)
     plain_text = (
         f"Hi {display_name},\n\n"
-        f"Your automated LinkedIn post draft is ready for review.\n\n"
+        f"Your automated LinkedIn post draft is ready for review.{review_notice_plain}\n\n"
         f"Topic: {topic_title}\n\n"
         f"Caption:\n{caption}\n\n"
         f"Decide before {local_deadline}. After that this draft is skipped.\n\n"
@@ -159,7 +171,7 @@ def send_approval_email(
   <div style="max-width: 600px; margin: 0 auto; background-color: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 32px;">
     <h2 style="margin-top: 0; color: #f8fafc; font-size: 20px;">Hi {escaped_display_name},</h2>
     <p style="color: #94a3b8; font-size: 14px; margin-bottom: 24px;">Your LinkedIn post draft is ready for your approval.</p>
-
+    {review_notice_html}
     <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
       <div style="font-weight: 600; color: #38bdf8; font-size: 14px; margin-bottom: 8px;">Topic: {escaped_topic}</div>
       <div style="color: #e2e8f0; font-size: 14px; line-height: 1.6;">{escaped_caption}</div>
