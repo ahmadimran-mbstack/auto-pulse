@@ -20,6 +20,7 @@ import {
   DrawerFooter,
 } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { PostDecisionBadge } from "@/components/app/PostDecisionBadge";
 import { PostThumbnail } from "@/components/app/PostThumbnail";
 import { formatRunDate } from "@/lib/posts";
@@ -44,11 +45,23 @@ export function PostQuickView({
 
   const content = (
     <div className="space-y-4 py-2">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <span className="text-xs text-muted-foreground tabular-nums">
           {formatRunDate(post.run_date)}
         </span>
-        <PostDecisionBadge post={post} layout="horizontal" />
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {post.ai_score !== null && post.ai_score !== undefined && (
+            <Badge variant="secondary" className="text-[11px] font-normal px-1.5 py-0 h-4.5">
+              AI-slop check {post.ai_score} / 100
+            </Badge>
+          )}
+          {post.needs_review && (
+            <Badge variant="outline" className="text-[11px] font-normal px-1.5 py-0 h-4.5">
+              Needs review
+            </Badge>
+          )}
+          <PostDecisionBadge post={post} layout="horizontal" />
+        </div>
       </div>
 
       <div className="aspect-square w-full max-w-xs mx-auto overflow-hidden rounded-md border border-border bg-muted">

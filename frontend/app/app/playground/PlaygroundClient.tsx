@@ -29,7 +29,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RichPostEditor } from "./components/RichPostEditor";
+import { AgentPlayground } from "./components/AgentPlayground";
 import { PlatformLabel } from "@/components/app/PlatformLabel";
 import {
   useLinkedInStatusQuery,
@@ -112,6 +114,7 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
     return "PUBLIC";
   });
 
+  const [activeTab, setActiveTab] = React.useState<"agents" | "composer">("agents");
   const [imageFile, setImageFile] = React.useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = React.useState<string | null>(null);
   const [isDragging, setIsDragging] = React.useState(false);
@@ -121,6 +124,14 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
   const [showClearDialog, setShowClearDialog] = React.useState(false);
   const [isStartingOAuth, setIsStartingOAuth] = React.useState(false);
   const [publishedPost, setPublishedPost] = React.useState<LinkedInPostResponse | null>(null);
+
+  const handleUseInComposer = (text: string) => {
+    setPlainText(text);
+    const htmlFormatted = `<p>${text.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br/>")}</p>`;
+    setContentHtml(htmlFormatted);
+    setActiveTab("composer");
+    toast.success("Draft transferred to LinkedIn composer");
+  };
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -317,12 +328,11 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
       {/* Page Title & Connection Status Pill */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground inline-flex items-center gap-2">
-            <span>Post to</span>
-            <PlatformLabel platform="linkedin" size="lg" />
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
+            Playground
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Write, preview, and immediately publish rich updates to your LinkedIn profile.
+            Test multi-agent post generation with live trace, or draft and publish directly to LinkedIn.
           </p>
         </div>
 
@@ -354,8 +364,19 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
         </div>
       </div>
 
-      {/* Success banner shown after publishing */}
-      {publishedPost && (
+      <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as "agents" | "composer")} className="w-full flex flex-col gap-4">
+        <TabsList className="grid w-full grid-cols-2 max-w-xs h-9">
+          <TabsTrigger value="agents">Write with Agents</TabsTrigger>
+          <TabsTrigger value="composer">LinkedIn Composer</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="agents" className="mt-4">
+          <AgentPlayground userId={user.id} onUseInComposer={handleUseInComposer} />
+        </TabsContent>
+
+        <TabsContent value="composer" className="space-y-6 mt-4">
+          {/* Success banner shown after publishing */}
+          {publishedPost && (
         <Card className="border border-status-success-fg/30 bg-status-success-bg/40 p-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-2.5">
@@ -621,6 +642,8 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
           </div>
         </CardContent>
       </Card>
+      </TabsContent>
+      </Tabs>
 
       {/* Connect LinkedIn Modal Dialog */}
       <Dialog open={showConnectDialog} onOpenChange={setShowConnectDialog}>

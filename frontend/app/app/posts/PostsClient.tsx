@@ -27,6 +27,7 @@ import { PostDecisionBadge } from "@/components/app/PostDecisionBadge";
 import { PostsSkeleton } from "@/components/app/PostsSkeleton";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -135,10 +136,22 @@ export function PostsClient({ user }: PostsClientProps) {
         columnHelper.accessor("topic_title", {
           header: "Topic",
           cell: ({ row }) => (
-            <div className="space-y-0.5 max-w-lg min-w-0">
-              <p className="text-sm font-medium text-foreground truncate">
-                {row.original.topic_title}
-              </p>
+            <div className="space-y-1 max-w-lg min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm font-medium text-foreground truncate">
+                  {row.original.topic_title}
+                </p>
+                {row.original.ai_score !== null && row.original.ai_score !== undefined && (
+                  <Badge variant="secondary" className="font-normal text-[11px] px-1.5 py-0 h-4.5 shrink-0">
+                    AI-slop check {row.original.ai_score} / 100
+                  </Badge>
+                )}
+                {row.original.needs_review && (
+                  <Badge variant="outline" className="font-normal text-[11px] px-1.5 py-0 h-4.5 shrink-0">
+                    Needs review
+                  </Badge>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground truncate">
                 {row.original.caption_preview || "No caption preview available"}
               </p>

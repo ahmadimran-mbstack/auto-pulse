@@ -8,6 +8,7 @@ import {
   Loader2Icon,
   AlertCircleIcon,
   CheckCircle2Icon,
+  HelpCircleIcon,
 } from "lucide-react";
 import {
   Breadcrumb,
@@ -19,6 +20,8 @@ import {
 } from "@/components/ui/breadcrumb";
 import { PageHeader } from "@/components/app/PageHeader";
 import { PostDecisionBadge } from "@/components/app/PostDecisionBadge";
+import { PostTraceSheet } from "@/components/app/PostTraceSheet";
+import { Badge } from "@/components/ui/badge";
 import { PostPreview } from "@/app/components/PostPreview";
 import { PlatformLabel } from "@/components/app/PlatformLabel";
 import { PostDetailSkeleton } from "@/components/app/PostDetailSkeleton";
@@ -106,6 +109,7 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
   // Modal state for outcome_unknown retry confirmation
   const [showConfirmModal, setShowConfirmModal] = React.useState(false);
   const [confirmedNotPosted, setConfirmedNotPosted] = React.useState(false);
+  const [showTrace, setShowTrace] = React.useState(false);
 
   // Poll post data every 10 seconds while status is "publishing"
   React.useEffect(() => {
@@ -217,7 +221,30 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
       <PageHeader
         title={post.topic_title}
         description={`Draft prepared for ${formatRunDate(post.run_date)}`}
-        actions={<PostDecisionBadge post={post} layout="horizontal" />}
+        actions={
+          <div className="flex items-center gap-2 flex-wrap">
+            {post.ai_score !== null && post.ai_score !== undefined && (
+              <Badge variant="secondary" className="font-normal text-xs">
+                AI-slop check {post.ai_score} / 100
+              </Badge>
+            )}
+            {post.needs_review && (
+              <Badge variant="outline" className="font-normal text-xs">
+                Needs review
+              </Badge>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowTrace(true)}
+              className="gap-1.5 h-8 text-xs"
+            >
+              <HelpCircleIcon className="size-3.5" />
+              <span>How this was written</span>
+            </Button>
+            <PostDecisionBadge post={post} layout="horizontal" />
+          </div>
+        }
       />
 
       {/* Status Alert Section positioned prominently */}
@@ -521,6 +548,14 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* "How this was written" Sheet Panel */}
+      <PostTraceSheet
+        open={showTrace}
+        onOpenChange={setShowTrace}
+        userId={user.id}
+        postId={post.id}
+      />
     </div>
   );
 }
