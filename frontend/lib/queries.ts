@@ -23,12 +23,17 @@ import {
   postToLinkedIn,
   getSlackStatus,
   disconnectSlack,
+  createPlaygroundRun,
+  getRun,
+  getPostAgentTrace,
 } from "./api";
 import type { DashboardData } from "../types/dashboard";
 import type {
   GetPostsParams,
   PaginatedPosts,
   PostDetail,
+  AgentTrace,
+  RunResponse,
 } from "../types/posts";
 import type { Profile, PatchProfilePayload } from "../types/profile";
 import type {
@@ -88,6 +93,10 @@ export const queryKeys = {
     ["autopulse", userId || "anonymous", "linkedin-status"] as const,
   slackStatus: (userId: string) =>
     ["autopulse", userId || "anonymous", "slack-status"] as const,
+  run: (userId: string, runId: string) =>
+    ["autopulse", userId || "anonymous", "run", runId] as const,
+  postTrace: (userId: string, postId: string) =>
+    ["autopulse", userId || "anonymous", "post-trace", postId] as const,
 };
 
 
@@ -298,6 +307,49 @@ export function usePostToLinkedInMutation(userId: string) {
     },
   });
 }
+
+// ---------------------------------------------------------------------------
+// Writing Agents Hooks
+// ---------------------------------------------------------------------------
+
+// Mutation to trigger an experimental playground run
+export function useCreatePlaygroundRunMutation() {
+  return useMutation<{ run_id: string }, Error, string | undefined>({
+    mutationFn: (topicHint?: string) => createPlaygroundRun(topicHint),
+  });
+}
+
+// Query to inspect or poll run status (refetches every 2s while running)
+export function useRunQuery(
+  userId: string,
+  runId: string | null,
+  pollInterval: number | false = 2000
+) {
+  return useQuery<RunResponse>({
+    queryKey: queryKeys.run(userId, runId || ""),
+    queryFn: () => getRun(runId!),
+    enabled: !!userId && !!runId,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (status === "done" || status === "failed") {
+        return false;
+      }
+      return pollInterval;
+    },
+    staleTime: 1000,
+  });
+}
+
+// Query to load multi-agent audit trace for a post
+export function usePostAgentTraceQuery(userId: string, postId: string) {
+  return useQuery<{ trace: AgentTrace | null }>({
+    queryKey: queryKeys.postTrace(userId, postId),
+    queryFn: () => getPostAgentTrace(postId),
+    enabled: !!userId && !!postId,
+    staleTime: 60_000,
+  });
+}
+
 
 // Query to inspect Slack integration state
 export function useSlackStatusQuery(userId: string = "current") {

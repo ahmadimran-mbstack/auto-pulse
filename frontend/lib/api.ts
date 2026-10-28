@@ -17,6 +17,8 @@ import type {
   PostDetail,
   PostListItem,
   PostSchedule,
+  AgentTrace,
+  RunResponse,
 } from "../types/posts";
 
 // Error class carrying HTTP status code, optional per-field validation errors, and retry-after header
@@ -494,5 +496,42 @@ export async function disconnectSlack(): Promise<import("@/types/connections").S
     method: "DELETE",
   });
 }
+
+// ---------------------------------------------------------------------------
+// Writing Agents API Endpoints
+// ---------------------------------------------------------------------------
+
+// Enqueues an experimental playground run with writing agents
+export async function createPlaygroundRun(topicHint?: string): Promise<{ run_id: string }> {
+  return apiCall<{ run_id: string }>("/playground/runs", {
+    method: "POST",
+    body: JSON.stringify(topicHint ? { topic_hint: topicHint } : {}),
+  });
+}
+
+// Retrieves status, step, round, and audit trace for a run (daily or playground)
+export async function getRun(runId: string): Promise<RunResponse> {
+  const data = await apiCall<RunResponse & { agent_trace?: AgentTrace | null }>(`/runs/${runId}`, {
+    method: "GET",
+  });
+  if (!data.trace && data.agent_trace) {
+    data.trace = data.agent_trace;
+  }
+  return data;
+}
+
+// Fetches multi-agent audit trace for an existing post (null for legacy posts)
+export async function getPostAgentTrace(postId: string): Promise<{ trace: AgentTrace | null }> {
+  const data = await apiCall<{ trace?: AgentTrace | null; agent_trace?: AgentTrace | null }>(
+    `/posts/${postId}/agent-trace`,
+    {
+      method: "GET",
+    }
+  );
+  return {
+    trace: data.trace ?? data.agent_trace ?? null,
+  };
+}
+
 
 
