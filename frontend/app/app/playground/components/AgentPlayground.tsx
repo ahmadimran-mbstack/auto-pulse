@@ -38,6 +38,7 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
   const [copied, setCopied] = React.useState(false);
   const [showTrace, setShowTrace] = React.useState(false);
 
+
   // Run creation mutation
   const createMutation = useCreatePlaygroundRunMutation();
 
@@ -156,8 +157,8 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
     (runData?.result?.check_failures && runData.result.check_failures.length > 0
       ? `Quality check flags: ${runData.result.check_failures.join(", ")}`
       : needsReview
-      ? "AI-slop score was above the threshold or stopped at maximum rounds"
-      : null);
+        ? "AI-slop score was above the threshold or stopped at maximum rounds"
+        : null);
 
   // Compute 4 progress steps
   const isRewriting =
@@ -331,13 +332,12 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
                 return (
                   <div
                     key={step.label}
-                    className={`flex items-start gap-3 p-3 rounded-lg border transition-all ${
-                      isCurrent
+                    className={`flex items-start gap-3 p-3 rounded-lg border transition-all ${isCurrent
                         ? "border-primary/40 bg-accent/30 text-foreground"
                         : isComplete
-                        ? "border-border/60 bg-muted/20 text-muted-foreground"
-                        : "border-border/30 bg-muted/10 text-muted-foreground/60"
-                    }`}
+                          ? "border-border/60 bg-muted/20 text-muted-foreground"
+                          : "border-border/30 bg-muted/10 text-muted-foreground/60"
+                      }`}
                   >
                     <div className="shrink-0 mt-0.5">
                       {isComplete ? (
@@ -353,11 +353,10 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
                         Step {idx + 1}
                       </p>
                       <p
-                        className={`text-xs leading-snug line-clamp-2 ${
-                          isCurrent
+                        className={`text-xs leading-snug line-clamp-2 ${isCurrent
                             ? "font-semibold text-foreground"
                             : "font-normal"
-                        }`}
+                          }`}
                       >
                         {step.label}
                       </p>
