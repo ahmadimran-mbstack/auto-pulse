@@ -289,6 +289,7 @@ class PatchApprovalRequest(BaseModel):
 class PatchProfileRequest(BaseModel):
     approval: Optional[PatchApprovalRequest] = None
     slack_approval_enabled: Optional[bool] = None
+    approval_method: Optional[str] = None
     display_name: Optional[str] = None
     role_title: Optional[str] = None
     industry: Optional[str] = None

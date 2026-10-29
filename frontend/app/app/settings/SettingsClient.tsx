@@ -17,19 +17,27 @@ import {
 } from "lucide-react";
 
 import { useUser } from "@/components/providers/user-provider";
-import { useProfileQuery, usePatchProfileMutation, clearAllAppCaches } from "@/lib/queries";
+import {
+  useProfileQuery,
+  usePatchProfileMutation,
+  useSlackStatusQuery,
+  clearAllAppCaches,
+} from "@/lib/queries";
 import { deleteAccount, ApiClientError } from "@/lib/api";
 import { authClient } from "@/lib/auth/client";
 import { signOutAction } from "@/app/app/actions";
 import { getTimezonesLazy } from "@/lib/timezones";
+import { cn } from "@/lib/utils";
 
 import { PageHeader } from "@/components/app/PageHeader";
 import { ColorField } from "@/components/app/ColorField";
 import { TagInput } from "@/components/app/TagInput";
 import { BrandPreviewCard } from "@/components/app/BrandPreviewCard";
 import { SettingsSkeleton } from "@/components/app/SettingsSkeleton";
+import { PlatformLabel } from "@/components/app/PlatformLabel";
 
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -841,6 +849,10 @@ function ScheduleTabForm({
   onDirtyChange: (dirty: boolean) => void;
   patchProfileMutation: ReturnType<typeof usePatchProfileMutation>;
 }) {
+  const router = useRouter();
+  const { data: slackStatus } = useSlackStatusQuery();
+  const isSlackConnected = slackStatus?.status === "connected";
+
   // Lazily compute timezone list only on settings schedule tab
   const timezones = React.useMemo(() => getTimezonesLazy(), []);
   const detectedTz = React.useMemo(() => {
@@ -851,6 +863,18 @@ function ScheduleTabForm({
     }
   }, []);
 
+  const defaultSlackEnabled = Boolean(
+    profile.approval?.slack?.enabled ?? profile.slack_approval_enabled
+  );
+  const defaultEmailEnabled =
+    profile.approval_method !== "slack" || !defaultSlackEnabled;
+  const defaultMethod: "email" | "slack" | "both" =
+    defaultEmailEnabled && defaultSlackEnabled
+      ? "both"
+      : defaultSlackEnabled
+      ? "slack"
+      : "email";
+
   const form = useForm<ScheduleFormValues>({
     resolver: zodResolver(scheduleFormSchema),
     defaultValues: {
@@ -859,11 +883,16 @@ function ScheduleTabForm({
       post_days: Array.isArray(profile.post_days) && profile.post_days.length > 0
         ? profile.post_days
         : [0, 1, 2, 3, 4],
-      approval_method: "email",
+      approval_method: defaultMethod,
+      email_approval_enabled: defaultEmailEnabled,
+      slack_approval_enabled: defaultSlackEnabled,
     },
   });
 
   const selectedTz = form.watch("timezone");
+  const emailApprovalEnabled = form.watch("email_approval_enabled");
+  const slackApprovalEnabled = form.watch("slack_approval_enabled");
+
   const currentTimeInSelectedTz = React.useMemo(() => {
     try {
       return new Date().toLocaleTimeString("en-US", {
@@ -902,11 +931,19 @@ function ScheduleTabForm({
 
   const onSubmit = async (values: ScheduleFormValues) => {
     try {
+      const emailOn = values.email_approval_enabled;
+      const slackOn = values.slack_approval_enabled;
+      const resolvedMethod = emailOn ? "email" : "slack";
+
       await patchProfileMutation.mutateAsync({
         timezone: values.timezone,
         post_time: values.post_time,
         post_days: values.post_days,
-        approval_method: "email",
+        approval_method: resolvedMethod,
+        slack_approval_enabled: slackOn,
+        approval: {
+          slack_enabled: slackOn,
+        },
       });
 
       toast.success("Schedule settings saved.");
@@ -1041,29 +1078,207 @@ function ScheduleTabForm({
               )}
             </div>
 
-            {/* Approval Method (Fixed to Email) */}
-            <div className="space-y-1.5 pt-2">
-              <Label>Approval Notification Method</Label>
-              <div className="p-3 rounded-md border border-signal-line bg-signal-soft/40 flex items-start gap-3">
-                <input
-                  type="radio"
-                  id="sched-approval-email"
-                  checked
-                  readOnly
-                  className="mt-1 size-4 text-primary"
-                />
-                <div className="space-y-0.5">
-                  <label
-                    htmlFor="sched-approval-email"
-                    className="text-body font-medium text-foreground cursor-pointer"
-                  >
-                    Email
-                  </label>
-                  <p className="text-caption text-muted-foreground">
-                    You receive an email notification each morning with an instant one-click approval link.
-                  </p>
+            {/* Approval Notification Method */}
+            <div className="space-y-2 pt-2">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <Label>Approval Notification Method</Label>
+                <span className="text-xs text-muted-foreground">
+                  Select your notification channels
+                </span>
+              </div>
+
+              <div className="space-y-3 pt-1">
+                {/* 1. Email Approval Option Card */}
+                <div
+                  onClick={() => {
+                    const nextVal = !emailApprovalEnabled;
+                    if (!nextVal && !slackApprovalEnabled) {
+                      toast.error("At least one approval method must remain active.");
+                      return;
+                    }
+                    form.setValue("email_approval_enabled", nextVal, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    });
+                    const nextMethod: "email" | "slack" | "both" =
+                      nextVal && slackApprovalEnabled
+                        ? "both"
+                        : nextVal
+                        ? "email"
+                        : "slack";
+                    form.setValue("approval_method", nextMethod, {
+                      shouldDirty: true,
+                    });
+                  }}
+                  className={cn(
+                    "p-3.5 rounded-lg border transition-all cursor-pointer flex items-start gap-3.5 select-none",
+                    emailApprovalEnabled
+                      ? "border-primary/50 bg-primary/5 shadow-xs"
+                      : "border-border bg-card/60 hover:bg-muted/40"
+                  )}
+                >
+                  <Checkbox
+                    id="sched-approval-email"
+                    checked={emailApprovalEnabled}
+                    onCheckedChange={(checked) => {
+                      const nextVal = Boolean(checked);
+                      if (!nextVal && !slackApprovalEnabled) {
+                        toast.error("At least one approval method must remain active.");
+                        return;
+                      }
+                      form.setValue("email_approval_enabled", nextVal, {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      });
+                      const nextMethod: "email" | "slack" | "both" =
+                        nextVal && slackApprovalEnabled
+                          ? "both"
+                          : nextVal
+                          ? "email"
+                          : "slack";
+                      form.setValue("approval_method", nextMethod, {
+                        shouldDirty: true,
+                      });
+                    }}
+                    className="mt-0.5"
+                    aria-label="Email approval notifications"
+                  />
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <PlatformLabel platform="email" size="sm" />
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-xs font-normal",
+                          emailApprovalEnabled
+                            ? "border-primary/30 text-primary bg-primary/10"
+                            : "text-muted-foreground"
+                        )}
+                      >
+                        {emailApprovalEnabled ? "Active" : "Disabled"}
+                      </Badge>
+                    </div>
+                    <p className="text-caption text-muted-foreground leading-relaxed">
+                      You receive an email notification each morning with an instant one-click approval link.
+                    </p>
+                  </div>
+                </div>
+
+                {/* 2. Slack Approval Option Card */}
+                <div
+                  onClick={() => {
+                    if (!isSlackConnected) {
+                      router.push("/app/connections");
+                      return;
+                    }
+                    const nextVal = !slackApprovalEnabled;
+                    if (!nextVal && !emailApprovalEnabled) {
+                      toast.error("At least one approval method must remain active.");
+                      return;
+                    }
+                    form.setValue("slack_approval_enabled", nextVal, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    });
+                    const nextMethod: "email" | "slack" | "both" =
+                      emailApprovalEnabled && nextVal
+                        ? "both"
+                        : nextVal
+                        ? "slack"
+                        : "email";
+                    form.setValue("approval_method", nextMethod, {
+                      shouldDirty: true,
+                    });
+                  }}
+                  className={cn(
+                    "p-3.5 rounded-lg border transition-all cursor-pointer flex items-start gap-3.5 select-none",
+                    slackApprovalEnabled
+                      ? "border-primary/50 bg-primary/5 shadow-xs"
+                      : "border-border bg-card/60 hover:bg-muted/40"
+                  )}
+                >
+                  <Checkbox
+                    id="sched-approval-slack"
+                    checked={slackApprovalEnabled}
+                    disabled={!isSlackConnected}
+                    onCheckedChange={(checked) => {
+                      if (!isSlackConnected) return;
+                      const nextVal = Boolean(checked);
+                      if (!nextVal && !emailApprovalEnabled) {
+                        toast.error("At least one approval method must remain active.");
+                        return;
+                      }
+                      form.setValue("slack_approval_enabled", nextVal, {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      });
+                      const nextMethod: "email" | "slack" | "both" =
+                        emailApprovalEnabled && nextVal
+                          ? "both"
+                          : nextVal
+                          ? "slack"
+                          : "email";
+                      form.setValue("approval_method", nextMethod, {
+                        shouldDirty: true,
+                      });
+                    }}
+                    className="mt-0.5"
+                    aria-label="Slack approval notifications"
+                  />
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <PlatformLabel platform="slack" size="sm" />
+                      </div>
+                      {isSlackConnected ? (
+                        <div className="flex items-center gap-1.5">
+                          {slackStatus?.team_name && (
+                            <span className="text-xs text-muted-foreground font-medium hidden sm:inline">
+                              {slackStatus.team_name}
+                            </span>
+                          )}
+                          <Badge
+                            variant="outline"
+                            className="border-status-success-fg/30 bg-status-success-bg text-status-success-fg text-xs font-normal"
+                          >
+                            Connected
+                          </Badge>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs text-muted-foreground font-normal">
+                            Not connected
+                          </Badge>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs px-2.5 gap-1.5"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push("/app/connections");
+                            }}
+                          >
+                            <PlatformLabel platform="slack" showName={false} size="xs" />
+                            <span>Connect Slack</span>
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-caption text-muted-foreground leading-relaxed">
+                      Receive an interactive direct message in your Slack workspace with instant Approve and Reject buttons.
+                    </p>
+                  </div>
                 </div>
               </div>
+
+              {form.formState.errors.approval_method && (
+                <p className="text-xs text-destructive font-medium pt-1">
+                  {form.formState.errors.approval_method.message}
+                </p>
+              )}
             </div>
 
             {/* Required informative note from design rules */}

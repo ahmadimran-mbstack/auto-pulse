@@ -506,11 +506,10 @@ def notify_slack_approval(db: Any, post: Any) -> Optional[str]:
         if not integration or not integration.dm_channel_id or not integration.bot_token_encrypted:
             return None
 
-        # 2. Verify profile has Slack approval enabled (auto-sync if integration is connected)
+        # 2. Verify profile has Slack approval enabled
         profile = db.query(Profile).filter(Profile.user_id == post.user_id).first()
-        if profile and not profile.slack_approval_enabled:
-            profile.slack_approval_enabled = True
-            db.commit()
+        if not profile or not profile.slack_approval_enabled:
+            return None
 
         # 3. Atomically claim the dispatch
         insert_stmt = (

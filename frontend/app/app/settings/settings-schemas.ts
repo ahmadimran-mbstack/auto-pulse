@@ -44,16 +44,26 @@ export const brandFormSchema = z.object({
 
 export type BrandFormValues = z.infer<typeof brandFormSchema>;
 
-export const scheduleFormSchema = z.object({
-  timezone: z.string().min(1, "Please select a timezone"),
-  post_time: z
-    .string()
-    .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Post time must be in HH:MM format"),
-  post_days: z
-    .array(z.number().min(0).max(6))
-    .min(1, "Select at least one day to schedule posts"),
-  approval_method: z.literal("email"),
-});
+export const scheduleFormSchema = z
+  .object({
+    timezone: z.string().min(1, "Please select a timezone"),
+    post_time: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Post time must be in HH:MM format"),
+    post_days: z
+      .array(z.number().min(0).max(6))
+      .min(1, "Select at least one day to schedule posts"),
+    approval_method: z.enum(["email", "slack", "both"]),
+    email_approval_enabled: z.boolean(),
+    slack_approval_enabled: z.boolean(),
+  })
+  .refine(
+    (data) => data.email_approval_enabled || data.slack_approval_enabled,
+    {
+      message: "Select at least one approval notification method (Email or Slack)",
+      path: ["approval_method"],
+    }
+  );
 
 export type ScheduleFormValues = z.infer<typeof scheduleFormSchema>;
 

@@ -48,6 +48,9 @@ def patch_caller_profile(
     elif payload.slack_approval_enabled is not None:
         profile.slack_approval_enabled = payload.slack_approval_enabled
 
+    if payload.approval_method is not None:
+        profile.approval_method = payload.approval_method
+
     if payload.display_name is not None:
         profile.display_name = payload.display_name
     if payload.role_title is not None:

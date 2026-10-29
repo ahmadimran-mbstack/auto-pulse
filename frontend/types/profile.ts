@@ -9,7 +9,7 @@ export type Tone =
 
 export type ToneChoice = Tone;
 
-export type ApprovalMethod = "email" | "whatsapp";
+export type ApprovalMethod = "email" | "slack" | "both" | "whatsapp";
 
 export interface ProfileApprovalSettings {
   email: boolean;

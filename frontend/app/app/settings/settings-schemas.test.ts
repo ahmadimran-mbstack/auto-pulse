@@ -80,8 +80,43 @@ describe("settings-schemas", () => {
         post_time: "09:30",
         post_days: [0, 1, 2, 3, 4],
         approval_method: "email",
+        email_approval_enabled: true,
+        slack_approval_enabled: false,
       });
       expect(res.success).toBe(true);
+    });
+
+    it("accepts slack and both approval methods", () => {
+      const slackRes = scheduleFormSchema.safeParse({
+        timezone: "America/New_York",
+        post_time: "09:30",
+        post_days: [0, 1, 2, 3, 4],
+        approval_method: "slack",
+        email_approval_enabled: false,
+        slack_approval_enabled: true,
+      });
+      expect(slackRes.success).toBe(true);
+
+      const bothRes = scheduleFormSchema.safeParse({
+        timezone: "America/New_York",
+        post_time: "09:30",
+        post_days: [0, 1, 2, 3, 4],
+        approval_method: "both",
+        email_approval_enabled: true,
+        slack_approval_enabled: true,
+      });
+      expect(bothRes.success).toBe(true);
+    });
+
+    it("rejects when all approval methods are disabled", () => {
+      const allDisabled = scheduleFormSchema.safeParse({
+        timezone: "UTC",
+        post_time: "09:00",
+        post_days: [1],
+        email_approval_enabled: false,
+        slack_approval_enabled: false,
+      });
+      expect(allDisabled.success).toBe(false);
     });
 
     it("rejects invalid time formats or empty days", () => {
@@ -90,6 +125,8 @@ describe("settings-schemas", () => {
         post_time: "25:99",
         post_days: [0],
         approval_method: "email",
+        email_approval_enabled: true,
+        slack_approval_enabled: false,
       });
       expect(badTime.success).toBe(false);
 
@@ -98,6 +135,8 @@ describe("settings-schemas", () => {
         post_time: "09:00",
         post_days: [],
         approval_method: "email",
+        email_approval_enabled: true,
+        slack_approval_enabled: false,
       });
       expect(emptyDays.success).toBe(false);
     });
