@@ -145,6 +145,15 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
         def _step_callback(step_name: str, round_num: int, state: dict):
             run.current_step = step_name
             run.round = round_num
+            live_trace = dict(run.agent_trace or {})
+            if state.get("finder_output"):
+                live_trace["finder"] = state.get("finder_output")
+            if state.get("gtm_brief"):
+                live_trace["gtm_brief"] = state.get("gtm_brief")
+            if state.get("rounds_history"):
+                live_trace["rounds"] = state.get("rounds_history")
+            if live_trace:
+                run.agent_trace = live_trace
             db.commit()
 
         final_state = execute_pipeline(

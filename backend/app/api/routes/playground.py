@@ -66,15 +66,26 @@ def run_playground_pipeline_task(run_id: uuid.UUID, user_id: str, topic_hint: Op
             )
 
             def _step_callback(step_name: str, round_num: int, state: Dict[str, Any]):
-                db.execute(
-                    text(
-                        "UPDATE playground_runs "
-                        "SET current_step = :step, round = :round "
-                        "WHERE id = :id"
-                    ),
-                    {"step": step_name, "round": round_num, "id": run_id},
-                )
-                db.commit()
+                run = db.query(PlaygroundRun).filter(PlaygroundRun.id == run_id).first()
+                if run:
+                    run.current_step = step_name
+                    run.round = round_num
+
+                    # Progressive intermediate trace persistence for real-time frontend updates
+                    live_trace = dict(run.trace or {})
+                    if state.get("finder_output"):
+                        live_trace["finder"] = state.get("finder_output")
+                    if state.get("gtm_brief"):
+                        live_trace["gtm_brief"] = state.get("gtm_brief")
+                    if state.get("rounds_history"):
+                        live_trace["rounds"] = state.get("rounds_history")
+                    if live_trace:
+                        run.trace = live_trace
+
+                    if state.get("draft"):
+                        run.result = state.get("draft")
+
+                    db.commit()
 
             final_state = execute_pipeline(
                 user_id=user_id,
