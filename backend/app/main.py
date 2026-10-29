@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 import uuid
@@ -242,5 +243,47 @@ def sweep_stale_playground_runs():
             logger.info("Startup sweep of stale playground runs completed")
     except Exception as exc:
         logger.warning(f"Failed to sweep stale playground runs on startup: {exc}")
+
+
+async def _background_scheduler_loop():
+    """Continuous background worker loop for automated post generation and LinkedIn publishing."""
+    logger.info("AutoPulse automated scheduler loop started (interval: 60s)")
+    # Wait 5 seconds after startup before the first run
+    await asyncio.sleep(5)
+    while True:
+        try:
+            await asyncio.to_thread(_run_scheduler_cycle)
+        except asyncio.CancelledError:
+            logger.info("AutoPulse automated scheduler loop cancelled")
+            break
+        except Exception as exc:
+            logger.error(f"Error in background scheduler cycle: {exc}", exc_info=True)
+        await asyncio.sleep(60)
+
+
+def _run_scheduler_cycle():
+    from app.db.session import SessionLocal
+    from app.jobs.dispatch import run_dispatch
+    from app.jobs.publish import run_publisher
+
+    with SessionLocal() as db:
+        try:
+            run_dispatch(db)
+        except Exception as exc:
+            logger.error(f"Error in automated dispatch cycle: {exc}")
+
+        try:
+            run_publisher(db)
+        except Exception as exc:
+            logger.error(f"Error in automated publishing cycle: {exc}")
+
+
+@app.on_event("startup")
+def start_automated_scheduler():
+    import os, sys
+    if os.environ.get("PYTEST_CURRENT_TEST") or "pytest" in sys.modules:
+        logger.info("Skipping background scheduler in test environment")
+        return
+    asyncio.create_task(_background_scheduler_loop())
 
 

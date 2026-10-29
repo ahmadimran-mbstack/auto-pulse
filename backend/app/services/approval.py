@@ -81,10 +81,9 @@ def request_approval(
         db.commit()
         return False
 
-    # Do not attempt send if less than 10 minutes remain before publish_at
-    ten_minutes = datetime.timedelta(minutes=10)
-    if post.publish_at - now_utc < ten_minutes:
-        logger.info(f"Skipping approval send for post {post.id}: less than 10 minutes before publish deadline")
+    # Do not attempt send if publication window has fully expired (older than 6 hours)
+    if post.publish_at and post.publish_at < now_utc - datetime.timedelta(hours=6):
+        logger.info(f"Skipping approval send for post {post.id}: publish deadline expired > 6 hours ago")
         return False
 
     # Check existing approval status and attempts
@@ -92,7 +91,7 @@ def request_approval(
     if approval and approval.sent_at is not None:
         return True
     if approval and approval.send_attempts >= 3:
-        logger.warning(f"Max email send attempts reached for post {post.id}")
+        logger.warning(f"Max approval send attempts reached for post {post.id}")
         return False
 
     # Create new approval or rotate token for retry
@@ -100,12 +99,6 @@ def request_approval(
 
     # Determine destination email address
     to_email = recipient_email or get_user_email(db, post.user_id)
-    if not to_email:
-        approval.send_attempts += 1
-        approval.send_error = "Recipient email address not found"
-        db.commit()
-        logger.error(f"Cannot send approval email: No email address for user {post.user_id}")
-        return False
 
     # Load profile details for display formatting
     profile = db.query(Profile).filter(Profile.user_id == post.user_id).first()
@@ -117,28 +110,51 @@ def request_approval(
     except Exception:
         user_tz = datetime.timezone.utc
 
-    local_publish = post.publish_at.astimezone(user_tz)
+    local_publish = post.publish_at.astimezone(user_tz) if post.publish_at else now_utc.astimezone(user_tz)
     weekday = local_publish.strftime("%A")
     time_str = local_publish.strftime("%H:%M")
     local_deadline = local_publish.strftime("%A at %H:%M %Z")
 
     idempotency_key = f"{approval.id}-{approval.send_attempts + 1}"
 
-    try:
-        send_approval_email(
-            to_email=to_email,
-            display_name=display_name,
-            weekday=weekday,
-            time_str=time_str,
-            local_deadline=local_deadline,
-            topic_title=post.topic_title,
-            caption=post.caption,
-            raw_token=raw_token,
-            idempotency_key=idempotency_key,
-            needs_review=getattr(post, "needs_review", False),
-        )
+    slack_dispatched = False
+    email_dispatched = False
 
-        # Record successful dispatch and advance post status
+    # 1. Dispatch interactive Slack Block Kit DM approval if Slack is connected
+    try:
+        from app.services.slack import notify_slack_approval
+        slack_route = notify_slack_approval(db, post)
+        if slack_route:
+            slack_dispatched = True
+            logger.info(f"Slack approval dispatched for post {post.id} via {slack_route}")
+    except Exception as slack_exc:
+        logger.warning(f"Slack approval dispatch failed for post {post.id}: {slack_exc}")
+
+    # 2. Dispatch email approval if recipient email is available
+    if to_email:
+        try:
+            send_approval_email(
+                to_email=to_email,
+                display_name=display_name,
+                weekday=weekday,
+                time_str=time_str,
+                local_deadline=local_deadline,
+                topic_title=post.topic_title,
+                caption=post.caption,
+                raw_token=raw_token,
+                idempotency_key=idempotency_key,
+                needs_review=getattr(post, "needs_review", False),
+            )
+            email_dispatched = True
+            logger.info(f"Approval email dispatched for post {post.id} to {to_email}")
+        except Exception as email_exc:
+            logger.warning(f"Approval email dispatch failed for post {post.id}: {email_exc}")
+            approval.send_error = str(email_exc)[:200]
+    else:
+        logger.info(f"No recipient email address for user {post.user_id}; email dispatch skipped")
+
+    # 3. If either Slack or Email succeeded, advance post to awaiting_approval
+    if slack_dispatched or email_dispatched:
         approval.sent_at = datetime.datetime.now(datetime.timezone.utc)
         approval.send_attempts += 1
         approval.send_error = None
@@ -148,21 +164,11 @@ def request_approval(
             {"id": post.id},
         )
         db.commit()
-
-        # Best-effort Slack approval dispatch (never breaks pipeline)
-        try:
-            from app.services.slack import notify_slack_approval
-            notify_slack_approval(db, post)
-        except Exception as slack_exc:
-            logger.warning(f"Slack approval dispatch failed for post {post.id}: {slack_exc}")
-
         return True
-
-    except Exception as exc:
+    else:
         approval.send_attempts += 1
-        approval.send_error = str(exc)[:200]
         db.commit()
-        logger.warning(f"Approval email dispatch failed for post {post.id}: {exc}")
+        logger.warning(f"Both Slack and Email approval dispatches failed for post {post.id}")
         return False
 
 

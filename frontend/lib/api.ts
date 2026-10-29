@@ -353,6 +353,7 @@ export async function generateDraft(replace: boolean = true): Promise<PostDetail
     method: "POST",
   });
 }
+export const generateDraftNow = generateDraft;
 
 // Fetches the post branded image as a raw Blob using fresh Bearer authentication
 export async function fetchPostImageBlob(

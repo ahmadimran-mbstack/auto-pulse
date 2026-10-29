@@ -31,7 +31,12 @@ def compute_publish_at(
     except Exception:
         user_tz = datetime.timezone.utc
     local_dt = datetime.datetime.combine(run_date, target_time, tzinfo=user_tz)
-    return local_dt.astimezone(datetime.timezone.utc)
+    publish_dt = local_dt.astimezone(datetime.timezone.utc)
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    # If the scheduled time for today has already passed, give a 30-minute review window from now
+    if publish_dt <= now_utc:
+        publish_dt = now_utc + datetime.timedelta(minutes=30)
+    return publish_dt
 
 
 # Marks posts in draft or awaiting_approval whose publish_at has passed as expired
@@ -295,8 +300,14 @@ def run_dispatch(db: Session) -> None:
         lead_minutes = settings.DRAFT_LEAD_MINUTES
         draft_window = target_post_dt - datetime.timedelta(minutes=lead_minutes)
 
-        # Trigger draft if within draft window and before post time
+        # Trigger draft if within draft window, OR if post time passed today within 4 hours and no post exists yet
+        should_generate = False
         if now_user >= draft_window and now_user < target_post_dt:
+            should_generate = True
+        elif now_user >= target_post_dt and now_user < target_post_dt + datetime.timedelta(hours=4):
+            should_generate = True
+
+        if should_generate:
             # Check if post already created for today
             existing_post = (
                 db.query(Post)
@@ -304,6 +315,10 @@ def run_dispatch(db: Session) -> None:
                 .first()
             )
             if not existing_post:
+                logger.info(
+                    f"Triggering scheduled draft for user {profile.user_id} "
+                    f"(target={target_post_dt}, now={now_user}, timezone={profile.timezone})"
+                )
                 generate_draft_for_user(db, profile, today_local)
 
 

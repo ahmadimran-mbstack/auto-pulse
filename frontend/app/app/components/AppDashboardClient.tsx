@@ -14,7 +14,9 @@ import { TodayCard } from "@/components/app/today-card";
 import { OverviewPostsSection } from "@/components/app/overview-posts-section";
 import { Button } from "@/components/ui/button";
 import { mapTabToStatusFilter, type PostsTabFilter } from "@/lib/posts";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Globe } from "lucide-react";
+import { toast } from "sonner";
+import { patchProfile } from "@/lib/api";
 import { SlackDisconnectedBanner } from "@/components/app/SlackDisconnectedBanner";
 
 interface AppDashboardClientProps {
@@ -55,6 +57,36 @@ export function AppDashboardClient({ user }: AppDashboardClientProps) {
   // Client search and filter state
   const [searchQuery, setSearchQuery] = React.useState("");
   const [dateRange, setDateRange] = React.useState<DateFilterRange>("all");
+
+  // Device timezone detection for schedule alignment
+  const [deviceTz, setDeviceTz] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    try {
+      setDeviceTz(Intl.DateTimeFormat().resolvedOptions().timeZone || null);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const profileTz = dashboardData?.profile?.timezone;
+  const isTzMismatch = Boolean(deviceTz && profileTz && deviceTz !== profileTz);
+  const [dismissTzNotice, setDismissTzNotice] = React.useState(false);
+  const [isSyncingTz, setIsSyncingTz] = React.useState(false);
+
+  const handleSyncTimezone = async () => {
+    if (!deviceTz) return;
+    setIsSyncingTz(true);
+    try {
+      await patchProfile({ timezone: deviceTz });
+      toast.success(`Schedule timezone synced to ${deviceTz}`);
+      refetchDash();
+      refetchPosts();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to update schedule timezone");
+    } finally {
+      setIsSyncingTz(false);
+    }
+  };
 
   const storedViewMode = React.useSyncExternalStore(
     (callback) => {
@@ -150,6 +182,41 @@ export function AppDashboardClient({ user }: AppDashboardClientProps) {
   return (
     <div className="p-6 md:p-8 space-y-8 max-w-none">
       <SlackDisconnectedBanner userId={user.id} />
+
+      {/* Timezone alignment notice: alerts user when device timezone differs from profile schedule timezone */}
+      {isTzMismatch && !dismissTzNotice && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3.5 rounded-lg border border-primary/30 bg-primary/5 text-xs text-foreground shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <Globe className="size-4 text-primary shrink-0" />
+            <p className="leading-relaxed">
+              <span>Your scheduled posting timezone is </span>
+              <span className="font-semibold">{profileTz}</span>
+              <span>, but your current browser is in </span>
+              <span className="font-semibold text-primary">{deviceTz}</span>
+              <span>. Sync them to ensure posts generate and publish at your exact local hours.</span>
+            </p>
+          </div>
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+            <Button
+              size="sm"
+              variant="default"
+              disabled={isSyncingTz}
+              onClick={handleSyncTimezone}
+              className="h-7 text-xs px-2.5 shadow-xs font-medium"
+            >
+              {isSyncingTz ? "Syncing..." : `Sync to ${deviceTz}`}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setDismissTzNotice(true)}
+              className="h-7 text-xs text-muted-foreground px-2"
+            >
+              Keep {profileTz}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* 1. Tools Row: 36px high, 8px gaps */}
       <OverviewToolsRow

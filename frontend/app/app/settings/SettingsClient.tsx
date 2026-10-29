@@ -843,6 +843,13 @@ function ScheduleTabForm({
 }) {
   // Lazily compute timezone list only on settings schedule tab
   const timezones = React.useMemo(() => getTimezonesLazy(), []);
+  const detectedTz = React.useMemo(() => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch {
+      return null;
+    }
+  }, []);
 
   const form = useForm<ScheduleFormValues>({
     resolver: zodResolver(scheduleFormSchema),
@@ -855,6 +862,20 @@ function ScheduleTabForm({
       approval_method: "email",
     },
   });
+
+  const selectedTz = form.watch("timezone");
+  const currentTimeInSelectedTz = React.useMemo(() => {
+    try {
+      return new Date().toLocaleTimeString("en-US", {
+        timeZone: selectedTz || "UTC",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      });
+    } catch {
+      return null;
+    }
+  }, [selectedTz]);
 
   const isDirty = form.formState.isDirty;
   React.useEffect(() => {
@@ -918,8 +939,29 @@ function ScheduleTabForm({
               name="timezone"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Timezone</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <FormLabel>Timezone</FormLabel>
+                    {currentTimeInSelectedTz && (
+                      <span className="text-xs text-muted-foreground font-mono">
+                        Current time: <span className="font-semibold text-foreground">{currentTimeInSelectedTz}</span>
+                      </span>
+                    )}
+                  </div>
+                  {detectedTz && detectedTz !== selectedTz && (
+                    <div className="flex items-center gap-2 p-2 rounded-md bg-muted/60 border border-border text-xs">
+                      <span className="text-muted-foreground">Detected device timezone:</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          form.setValue("timezone", detectedTz, { shouldDirty: true });
+                        }}
+                        className="font-medium text-primary hover:underline cursor-pointer"
+                      >
+                        Switch to {detectedTz}
+                      </button>
+                    </div>
+                  )}
+                  <Select onValueChange={field.onChange} value={field.value || "UTC"}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select timezone" />

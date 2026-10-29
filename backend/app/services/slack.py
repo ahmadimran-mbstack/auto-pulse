@@ -498,18 +498,19 @@ def notify_slack_approval(db: Any, post: Any) -> Optional[str]:
         from sqlalchemy.dialects.postgresql import insert as pg_insert
         from sqlalchemy import text
 
-        # 1. Verify profile has Slack approval enabled
-        profile = db.query(Profile).filter(Profile.user_id == post.user_id).first()
-        if not profile or not profile.slack_approval_enabled:
-            return None
-
-        # 2. Verify Slack integration is connected
+        # 1. Verify Slack integration is connected
         integration = db.query(SlackIntegration).filter(
             SlackIntegration.user_id == post.user_id,
             SlackIntegration.status == "connected",
         ).first()
         if not integration or not integration.dm_channel_id or not integration.bot_token_encrypted:
             return None
+
+        # 2. Verify profile has Slack approval enabled (auto-sync if integration is connected)
+        profile = db.query(Profile).filter(Profile.user_id == post.user_id).first()
+        if profile and not profile.slack_approval_enabled:
+            profile.slack_approval_enabled = True
+            db.commit()
 
         # 3. Atomically claim the dispatch
         insert_stmt = (

@@ -55,15 +55,56 @@ export function TimezoneSelect({
     return FALLBACK_TIMEZONES;
   })();
 
+  const detectedTz = (() => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch {
+      return null;
+    }
+  })();
+
+  const currentTimeInTz = (() => {
+    try {
+      return new Date().toLocaleTimeString("en-US", {
+        timeZone: value || "UTC",
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      });
+    } catch {
+      return null;
+    }
+  })();
+
   return (
-    <div className="space-y-1.5 text-left">
-      <Label htmlFor={id}>
-        Timezone <span className="text-primary">*</span>
-      </Label>
+    <div className="space-y-2 text-left">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <Label htmlFor={id}>
+          Timezone <span className="text-primary">*</span>
+        </Label>
+        {currentTimeInTz && (
+          <span className="text-[11px] text-muted-foreground font-mono">
+            Current time: <span className="font-semibold text-foreground">{currentTimeInTz}</span>
+          </span>
+        )}
+      </div>
 
       <p id={`${id}-hint`} className="text-caption text-muted-foreground">
-        Select your local timezone so we schedule drafts at the right time.
+        Select your local timezone so AutoPulse creates and publishes your posts at your desired local hours.
       </p>
+
+      {detectedTz && detectedTz !== value && (
+        <div className="flex items-center gap-2 p-2 rounded-md bg-muted/60 border border-border text-xs">
+          <span className="text-muted-foreground">Detected device timezone:</span>
+          <button
+            type="button"
+            onClick={() => onChange(detectedTz)}
+            className="font-medium text-primary hover:underline cursor-pointer"
+          >
+            Switch to {detectedTz}
+          </button>
+        </div>
+      )}
 
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger

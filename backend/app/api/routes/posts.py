@@ -48,7 +48,12 @@ def compute_publish_at(
     except Exception:
         user_tz = datetime.timezone.utc
     local_dt = datetime.datetime.combine(run_date, target_time, tzinfo=user_tz)
-    return local_dt.astimezone(datetime.timezone.utc)
+    publish_dt = local_dt.astimezone(datetime.timezone.utc)
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    # If the scheduled time for today has already passed, give a 30-minute review window from now
+    if publish_dt <= now_utc:
+        publish_dt = now_utc + datetime.timedelta(minutes=30)
+    return publish_dt
 
 
 # Helper to compute upcoming post and draft timestamps in user timezone
@@ -418,13 +423,6 @@ def generate_draft_now(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> PostDetail:
-    # Development only guard
-    if settings.ENV != "development":
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "not_found", "message": "Not found in production"},
-        )
-
     # Verify generation is enabled
     if not settings.GENERATION_ENABLED:
         raise HTTPException(
