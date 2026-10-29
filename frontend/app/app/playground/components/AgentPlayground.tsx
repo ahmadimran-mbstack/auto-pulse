@@ -401,10 +401,30 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
         <Alert variant="destructive">
           <AlertCircle className="size-4" />
           <AlertTitle>Agent Run Failed</AlertTitle>
-          <AlertDescription className="text-xs mt-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <span>
-              {runErrorObj?.message || "The agent run encountered an error while writing or evaluating the post."}
-            </span>
+          <AlertDescription className="text-xs mt-1 flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+            <div className="flex flex-col gap-1">
+              <span>
+                {(runData?.result as any)?.error_detail ||
+                  (runData?.result as any)?.message ||
+                  runErrorObj?.message ||
+                  "The agent run encountered an error while writing or evaluating the post."}
+              </span>
+              {(((runData?.result as any)?.error_detail || "").includes("billing") ||
+                ((runData?.result as any)?.error_detail || "").includes("PERMISSION_DENIED")) && (
+                <span className="text-muted-foreground mt-0.5">
+                  Tip: Google requires billing to use this project key. Set up billing at{" "}
+                  <a
+                    href="https://aistudio.google.com/billing"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline font-medium text-foreground hover:text-primary"
+                  >
+                    aistudio.google.com/billing
+                  </a>{" "}
+                  or generate a fresh free-tier key.
+                </span>
+              )}
+            </div>
             <Button
               variant="outline"
               size="sm"
