@@ -219,6 +219,10 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
           sessionStorage.removeItem("linkedin_playground_draft");
         }
       } catch (err: unknown) {
+        // Even if publishing to LinkedIn was rejected by rate limits, the draft was preserved
+        queryClient.invalidateQueries({ queryKey: ["posts"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+
         if (err instanceof ApiClientError) {
           if (
             err.code === "LINKEDIN_NOT_CONNECTED" ||
@@ -229,11 +233,13 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
             return;
           }
 
-          toast.error(err.message || "Failed to publish post to LinkedIn.");
+          toast.error(err.message || "Failed to publish post to LinkedIn.", {
+            duration: 10000,
+          });
         } else if (err instanceof Error) {
-          toast.error(err.message);
+          toast.error(err.message, { duration: 10000 });
         } else {
-          toast.error("An unexpected error occurred while posting.");
+          toast.error("An unexpected error occurred while posting.", { duration: 10000 });
         }
       }
     },

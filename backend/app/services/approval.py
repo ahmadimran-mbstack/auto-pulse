@@ -72,14 +72,14 @@ def request_approval(
 ) -> bool:
     now_utc = datetime.datetime.now(datetime.timezone.utc)
 
-    # If post has no publish_at or it has already passed, expire the post
+    # If post has no publish_at or it has already passed, ensure a minimum 30-minute review window
     if not post.publish_at or post.publish_at <= now_utc:
+        post.publish_at = now_utc + datetime.timedelta(minutes=30)
         db.execute(
-            text("UPDATE posts SET status = 'expired', updated_at = now() WHERE id = :id AND status IN ('draft', 'awaiting_approval')"),
-            {"id": post.id},
+            text("UPDATE posts SET publish_at = :new_pub, updated_at = now() WHERE id = :id"),
+            {"new_pub": post.publish_at, "id": post.id},
         )
         db.commit()
-        return False
 
     # Do not attempt send if publication window has fully expired (older than 6 hours)
     if post.publish_at and post.publish_at < now_utc - datetime.timedelta(hours=6):

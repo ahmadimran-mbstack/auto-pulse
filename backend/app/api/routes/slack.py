@@ -1,6 +1,7 @@
+import json
 import logging
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -303,5 +304,43 @@ def disconnect_slack(
 ) -> Response:
     slack_repo.disconnect_slack_integration(db, user_id=user.id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# 6. Interactivity webhook endpoint (handles Slack Block Kit button clicks like approve_post / reject_post)
+@router.post("/actions")
+@integrations_router.post("/actions")
+@api_router.post("/actions")
+@api_integrations_router.post("/actions")
+async def handle_slack_interactive_actions(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> Response:
+    content_type = request.headers.get("content-type", "")
+    payload_dict = None
+    if "application/x-www-form-urlencoded" in content_type:
+        form_data = await request.form()
+        payload_raw = form_data.get("payload")
+        if payload_raw:
+            try:
+                payload_dict = json.loads(str(payload_raw))
+            except Exception as exc:
+                logger.warning(f"Failed to parse Slack interactive payload: {exc}")
+    elif "application/json" in content_type:
+        try:
+            payload_dict = await request.json()
+        except Exception:
+            payload_dict = None
+
+    if not payload_dict:
+        return Response(status_code=status.HTTP_200_OK)
+
+    if payload_dict.get("type") == "block_actions":
+        try:
+            slack_service.handle_block_action(payload_dict, db=db)
+        except Exception as exc:
+            logger.error(f"Error executing handle_block_action: {exc}")
+
+    return Response(status_code=status.HTTP_200_OK)
+
 
 

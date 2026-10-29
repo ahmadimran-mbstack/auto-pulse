@@ -431,11 +431,20 @@ def generate_draft_now(
         )
 
     profile = profile_repo.get_profile(db=db, user_id=user.id)
-    if not profile or not profile.onboarding_complete:
+    if not profile:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": "onboarding_incomplete", "message": "Please finish setup before generating drafts"},
+            detail={"code": "profile_not_found", "message": "Profile not found"},
         )
+    if not profile.onboarding_complete:
+        if profile.timezone and profile.post_time:
+            profile.onboarding_completed_at = datetime.datetime.now(datetime.timezone.utc)
+            db.commit()
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "onboarding_incomplete", "message": "Please finish setup before generating drafts"},
+            )
 
     try:
         user_tz = zoneinfo.ZoneInfo(profile.timezone or "UTC")
@@ -447,10 +456,10 @@ def generate_draft_now(
     if replace:
         post_repo.delete_draft_and_run_for_date(db=db, user_id=user.id, run_date=today_local)
 
-    # Check if a draft or post already exists for today
+    # Check if a non-playground draft or post already exists for today
     existing = post_repo.get_caller_posts(db=db, user_id=user.id, limit=50)
     for p in existing:
-        if p.run_date == today_local:
+        if p.run_date == today_local and getattr(p, "approval_source", None) != "playground":
             return PostDetail(
                 id=p.id,
                 status=p.status,

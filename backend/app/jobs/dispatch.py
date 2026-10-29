@@ -277,13 +277,20 @@ def run_dispatch(db: Session) -> None:
 
     active_profiles = (
         db.query(Profile)
-        .filter(Profile.onboarding_completed_at.is_not(None))
+        .filter(
+            Profile.timezone.is_not(None),
+            Profile.post_time.is_not(None),
+        )
         .all()
     )
 
     for profile in active_profiles:
         if not profile.timezone or not profile.post_time or not profile.post_days:
             continue
+
+        if profile.onboarding_completed_at is None:
+            profile.onboarding_completed_at = datetime.datetime.now(datetime.timezone.utc)
+            db.commit()
 
         try:
             user_tz = zoneinfo.ZoneInfo(profile.timezone)
@@ -308,10 +315,14 @@ def run_dispatch(db: Session) -> None:
             should_generate = True
 
         if should_generate:
-            # Check if post already created for today
+            # Check if post already created for today (excluding manual playground test posts)
             existing_post = (
                 db.query(Post)
-                .filter(Post.user_id == profile.user_id, Post.run_date == today_local)
+                .filter(
+                    Post.user_id == profile.user_id,
+                    Post.run_date == today_local,
+                    Post.approval_source != "playground",
+                )
                 .first()
             )
             if not existing_post:

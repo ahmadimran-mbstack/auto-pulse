@@ -148,6 +148,10 @@ async def _execute_direct_post(
         )
 
     # 6. Publish immediately to LinkedIn
+    post_urn = None
+    publish_error_msg = None
+    publish_status_code = None
+
     try:
         post_urn = linkedin_publisher.publish_direct_post(
             access_token=access_token,
@@ -164,18 +168,23 @@ async def _execute_direct_post(
             status_code=status.HTTP_409_CONFLICT,
             detail={
                 "error": "LINKEDIN_TOKEN_EXPIRED",
-                "message": "LinkedIn access token is expired or was revoked.",
+                "message": "LinkedIn access token is expired or was revoked. Please reconnect your account.",
             },
         )
     except LinkedInApiError as exc:
         logger.error(f"LinkedIn publishing API call failed: {exc}")
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={
-                "error": "LINKEDIN_API_ERROR",
-                "message": "LinkedIn API returned an error during publishing.",
-            },
-        )
+        if exc.status_code == 429:
+            publish_status_code = status.HTTP_429_TOO_MANY_REQUESTS
+            publish_error_msg = (
+                "LinkedIn share limit reached: LinkedIn blocked posting because the share limit for unverified member accounts has been reached. "
+                "Your post has been saved as a draft in AutoPulse."
+            )
+        elif exc.status_code == 403:
+            publish_status_code = status.HTTP_403_FORBIDDEN
+            publish_error_msg = "LinkedIn permissions error: Your LinkedIn account does not have permission to publish posts. Please reconnect LinkedIn."
+        else:
+            publish_status_code = status.HTTP_502_BAD_GATEWAY
+            publish_error_msg = f"LinkedIn API returned an error: {str(exc)}"
 
     now_utc = datetime.datetime.now(datetime.timezone.utc)
     posted_at = now_utc.isoformat()
@@ -237,13 +246,16 @@ async def _execute_direct_post(
         "template_version": "v1",
     }
 
-    # Persist the published post in posts table
+    # Persist post: published if LinkedIn succeeded, or draft if LinkedIn rejected
+    post_status = "published" if post_urn else "draft"
+    post_topic_url = f"https://www.linkedin.com/feed/update/{post_urn}/" if post_urn else ""
+
     post = Post(
         user_id=user.id,
         run_date=today_local,
-        status="published",
+        status=post_status,
         topic_title=clean_title,
-        topic_url=f"https://www.linkedin.com/feed/update/{post_urn}/",
+        topic_url=post_topic_url,
         angle=angle,
         hook_type="direct_post",
         post_format="image" if image_bytes else "text",
@@ -264,21 +276,39 @@ async def _execute_direct_post(
     db.add(post)
     db.flush()
 
-    # Persist the publication record
+    # Persist publication record
+    pub_status = "published" if post_urn else "failed"
+    err_code = None
+    if not post_urn:
+        err_code = "rate_limited" if publish_status_code == status.HTTP_429_TOO_MANY_REQUESTS else "api_error"
+
     publication = PostPublication(
         user_id=user.id,
         post_id=post.id,
         platform="linkedin",
-        status="published",
+        status=pub_status,
         attempts=1,
         external_id=post_urn,
-        published_at=now_utc,
+        error_code=err_code,
+        error_detail=publish_error_msg,
+        published_at=now_utc if post_urn else None,
         created_at=now_utc,
         updated_at=now_utc,
     )
     db.add(publication)
     db.commit()
     db.refresh(post)
+
+    # If publishing failed, raise with preserved draft id and clear message
+    if publish_error_msg:
+        raise HTTPException(
+            status_code=publish_status_code or status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "error": "LINKEDIN_API_ERROR",
+                "message": publish_error_msg,
+                "post_id": str(post.id),
+            },
+        )
 
     return LinkedInPostResponse(
         id=post_urn,

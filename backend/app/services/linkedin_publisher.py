@@ -233,9 +233,15 @@ class LinkedInReconnectRequiredError(Exception):
 
 class LinkedInApiError(Exception):
     # Raised when LinkedIn returns an error during upload or post creation
-    def __init__(self, message: str, status_code: Optional[int] = None):
+    def __init__(
+        self,
+        message: str,
+        status_code: Optional[int] = None,
+        response_text: Optional[str] = None,
+    ):
         super().__init__(message)
         self.status_code = status_code
+        self.response_text = response_text
 
 
 def publish_direct_post(
@@ -250,6 +256,12 @@ def publish_direct_post(
     # Publishes commentary and optional image directly to LinkedIn
     # Follows the register upload, binary PUT, and create post sequence
     # Never logs raw tokens or codes
+    person_urn = (
+        provider_account_id
+        if provider_account_id.startswith("urn:li:")
+        else f"urn:li:person:{provider_account_id}"
+    )
+
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Linkedin-Version": settings.LINKEDIN_API_VERSION,
@@ -267,7 +279,7 @@ def publish_direct_post(
             init_url = "https://api.linkedin.com/rest/images?action=initializeUpload"
             init_body = {
                 "initializeUploadRequest": {
-                    "owner": f"urn:li:person:{provider_account_id}"
+                    "owner": person_urn
                 }
             }
             try:
@@ -287,6 +299,7 @@ def publish_direct_post(
                 raise LinkedInApiError(
                     f"LinkedIn image initialization failed with status {init_res.status_code}",
                     status_code=init_res.status_code,
+                    response_text=init_res.text[:500],
                 )
 
             init_data = init_res.json()
@@ -319,11 +332,12 @@ def publish_direct_post(
                 raise LinkedInApiError(
                     f"LinkedIn image binary upload failed with status {put_res.status_code}",
                     status_code=put_res.status_code,
+                    response_text=put_res.text[:500],
                 )
 
         # Step 3: Create post
         post_body = {
-            "author": f"urn:li:person:{provider_account_id}",
+            "author": person_urn,
             "commentary": commentary,
             "visibility": visibility,
             "distribution": {
@@ -367,9 +381,18 @@ def publish_direct_post(
         logger.error(
             f"LinkedIn post creation failed: status={post_res.status_code} body={post_res.text[:200]}"
         )
+        error_msg = f"LinkedIn post creation failed with status {post_res.status_code}"
+        try:
+            err_json = post_res.json()
+            if "message" in err_json:
+                error_msg = err_json["message"]
+        except Exception:
+            pass
+
         raise LinkedInApiError(
-            f"LinkedIn post creation failed with status {post_res.status_code}",
+            error_msg,
             status_code=post_res.status_code,
+            response_text=post_res.text[:500],
         )
 
     finally:

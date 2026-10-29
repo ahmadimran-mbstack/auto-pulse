@@ -85,6 +85,11 @@ def patch_caller_profile(
     if payload.post_days is not None:
         profile.post_days = payload.post_days
 
+    # Ensure profile is marked active for scheduled generation if scheduling parameters are present
+    if profile.timezone and profile.post_time and profile.post_days and profile.onboarding_completed_at is None:
+        import datetime as dt_mod
+        profile.onboarding_completed_at = dt_mod.datetime.now(dt_mod.timezone.utc)
+
     db.commit()
     db.refresh(profile)
     return profile_repo.format_profile_response(profile, db=db)
