@@ -250,6 +250,7 @@ def run_finder_agent(
     candidates: List[Dict[str, Any]],
     history: List[Dict[str, Any]],
     model: BaseChatModel,
+    topic_hint: Optional[str] = None,
 ) -> Tuple[Optional[FinderOutput], List[str]]:
     """Runs the Post Finder Agent with retry on validation failure.
     Returns (finder_output, warnings).
@@ -257,16 +258,20 @@ def run_finder_agent(
     history_text = format_history_block(history)
     candidates_text = format_candidates_block(candidates)
 
+    topics_include_list = list(profile.get("topics_include") or [])
+    if topic_hint:
+        topics_include_list.insert(0, topic_hint)
+
     prompt_input = {
         "role_title": profile.get("role_title") or "Professional",
         "industry": profile.get("industry") or "Technology",
         "niche_description": profile.get("niche_description") or "",
         "audience": profile.get("audience") or "Peers",
-        "topics_include": ", ".join(profile.get("topics_include") or []),
+        "topics_include": ", ".join(topics_include_list),
         "topics_avoid": ", ".join(profile.get("topics_avoid") or []),
         "history_text": history_text,
         "candidates_text": candidates_text,
-        "feedback_block": "",
+        "feedback_block": f"\nPRIORITY CREATOR TOPIC HINT: Focus strictly on this angle/topic: '{topic_hint}'" if topic_hint else "",
     }
 
     structured_model = model.with_structured_output(FinderOutput, include_raw=True)

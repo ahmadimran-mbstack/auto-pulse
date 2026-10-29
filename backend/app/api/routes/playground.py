@@ -93,6 +93,7 @@ def run_playground_pipeline_task(run_id: uuid.UUID, user_id: str, topic_hint: Op
                 history=history,
                 search_tool=search_tool,
                 step_callback=_step_callback,
+                topic_hint=topic_hint,
             )
 
             err_code = final_state.get("error_code")
