@@ -1,12 +1,18 @@
 import datetime
+import json
 import logging
+import re
 from typing import Optional
+import zoneinfo
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import User, current_user
 from app.db.session import get_db
+from app.models.post import Post
+from app.models.publication import PostPublication
 from app.repositories import connection as connection_repo
+from app.repositories import profile as profile_repo
 from app.schemas.linkedin import LinkedInPostResponse, LinkedInStatusResponse
 from app.services import linkedin_publisher
 from app.services.content_sanitizer import sanitize_linkedin_content
@@ -37,6 +43,11 @@ async def _execute_direct_post(
     image: Optional[UploadFile],
     user: User,
     db: Session,
+    topic_title: Optional[str] = None,
+    angle: Optional[str] = None,
+    ai_score: Optional[int] = None,
+    image_headline: Optional[str] = None,
+    sources_json: Optional[str] = None,
 ) -> LinkedInPostResponse:
     # 1. Validate content presence
     if not content or not content.strip():
@@ -166,14 +177,112 @@ async def _execute_direct_post(
             },
         )
 
-    # Note on Rule 6: The existing posts table has unique constraint (user_id, run_date)
-    # and strictly requires LLM prompt version, grounding sources, and image specs.
-    # Therefore, manual instant posts skip database insertion into scheduled drafts
-    # and return the published post details directly to the client.
-    posted_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    posted_at = now_utc.isoformat()
+
+    # Determine topic title
+    clean_title = (topic_title or "").strip()
+    if not clean_title:
+        # Extract first non-empty line of content as the title/hook
+        lines = [line.strip() for line in sanitized_content.splitlines() if line.strip()]
+        if lines:
+            first_line = lines[0]
+            # Strip leading markdown headers, bullet symbols, quotes
+            first_line = re.sub(r'^[#*>\-\s"]+|["]+$', '', first_line).strip()
+            clean_title = first_line[:120].strip() if first_line else "LinkedIn Post"
+        else:
+            clean_title = "LinkedIn Post"
+
+    # Extract hashtags
+    tags = re.findall(r"#(\w+)", sanitized_content)
+    seen_tags = set()
+    deduped_tags = []
+    for tag in tags:
+        lower = tag.lower()
+        if lower not in seen_tags:
+            seen_tags.add(lower)
+            deduped_tags.append(tag)
+        if len(deduped_tags) >= 3:
+            break
+
+    # Parse sources if provided
+    sources_list = []
+    if sources_json:
+        try:
+            parsed = json.loads(sources_json)
+            if isinstance(parsed, list):
+                sources_list = parsed
+        except Exception:
+            pass
+
+    # Read profile for branding specs and local run date
+    profile = profile_repo.get_profile(db=db, user_id=user.id)
+    today_local = now_utc.date()
+    if profile and profile.timezone:
+        try:
+            user_tz = zoneinfo.ZoneInfo(profile.timezone)
+            today_local = datetime.datetime.now(user_tz).date()
+        except Exception:
+            pass
+
+    brand_name = (profile.brand_name if profile and profile.brand_name else "AutoPulse")
+    brand_primary_hex = (profile.brand_primary_hex if profile and profile.brand_primary_hex else "#0F172A")
+    brand_accent_hex = (profile.brand_accent_hex if profile and profile.brand_accent_hex else "#38BDF8")
+
+    image_spec = {
+        "headline": (image_headline or clean_title)[:120],
+        "brand_name": brand_name,
+        "brand_primary_hex": brand_primary_hex,
+        "brand_accent_hex": brand_accent_hex,
+        "template_version": "v1",
+    }
+
+    # Persist the published post in posts table
+    post = Post(
+        user_id=user.id,
+        run_date=today_local,
+        status="published",
+        topic_title=clean_title,
+        topic_url=f"https://www.linkedin.com/feed/update/{post_urn}/",
+        angle=angle,
+        hook_type="direct_post",
+        post_format="image" if image_bytes else "text",
+        ai_score=ai_score,
+        needs_review=False,
+        sources=sources_list,
+        caption=sanitized_content,
+        hashtags=deduped_tags,
+        image_spec=image_spec,
+        publish_at=now_utc,
+        llm_model="playground",
+        prompt_version="v1.0",
+        approval_source="playground",
+        decided_at=now_utc,
+        created_at=now_utc,
+        updated_at=now_utc,
+    )
+    db.add(post)
+    db.flush()
+
+    # Persist the publication record
+    publication = PostPublication(
+        user_id=user.id,
+        post_id=post.id,
+        platform="linkedin",
+        status="published",
+        attempts=1,
+        external_id=post_urn,
+        published_at=now_utc,
+        created_at=now_utc,
+        updated_at=now_utc,
+    )
+    db.add(publication)
+    db.commit()
+    db.refresh(post)
 
     return LinkedInPostResponse(
         id=post_urn,
+        post_id=str(post.id),
         linkedin_post_id=post_urn,
         posted_at=posted_at,
         visibility=normalized_visibility,
@@ -190,6 +299,11 @@ async def post_to_linkedin_api(
     content: str = Form(...),
     visibility: str = Form(...),
     image: Optional[UploadFile] = File(None),
+    topic_title: Optional[str] = Form(None),
+    angle: Optional[str] = Form(None),
+    ai_score: Optional[int] = Form(None),
+    image_headline: Optional[str] = Form(None),
+    sources_json: Optional[str] = Form(None),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> LinkedInPostResponse:
@@ -199,6 +313,11 @@ async def post_to_linkedin_api(
         image=image,
         user=user,
         db=db,
+        topic_title=topic_title,
+        angle=angle,
+        ai_score=ai_score,
+        image_headline=image_headline,
+        sources_json=sources_json,
     )
 
 
@@ -212,6 +331,11 @@ async def post_to_linkedin_connections(
     content: str = Form(...),
     visibility: str = Form(...),
     image: Optional[UploadFile] = File(None),
+    topic_title: Optional[str] = Form(None),
+    angle: Optional[str] = Form(None),
+    ai_score: Optional[int] = Form(None),
+    image_headline: Optional[str] = Form(None),
+    sources_json: Optional[str] = Form(None),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> LinkedInPostResponse:
@@ -221,6 +345,11 @@ async def post_to_linkedin_connections(
         image=image,
         user=user,
         db=db,
+        topic_title=topic_title,
+        angle=angle,
+        ai_score=ai_score,
+        image_headline=image_headline,
+        sources_json=sources_json,
     )
 
 

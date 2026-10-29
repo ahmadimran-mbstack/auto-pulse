@@ -29,6 +29,7 @@ export type ConnectionDisplayState =
 
 export interface LinkedInPostResponse {
   id: string;
+  post_id?: string | null;
   linkedin_post_id?: string | null;
   posted_at: string;
   visibility: "PUBLIC" | "CONNECTIONS";

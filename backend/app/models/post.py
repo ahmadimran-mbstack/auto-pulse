@@ -101,8 +101,6 @@ class Post(Base):
             "status IN ('draft', 'awaiting_approval', 'approved', 'rejected', 'publishing', 'published', 'failed', 'expired')",
             name="ck_posts_status",
         ),
-        # Exactly one post per user per scheduled date
-        UniqueConstraint("user_id", "run_date", name="uq_posts_user_id_run_date"),
         # Index for querying user post history sorted by creation time
         Index("ix_posts_user_id_created_at", "user_id", "created_at"),
     )

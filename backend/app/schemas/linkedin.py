@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict
 class LinkedInPostResponse(BaseModel):
     # Response model returned on successful direct publication to LinkedIn
     id: str
+    post_id: Optional[str] = None
     linkedin_post_id: Optional[str] = None
     posted_at: str
     visibility: str

@@ -44,9 +44,17 @@ import { PostTraceSheet } from "@/components/app/PostTraceSheet";
 import { useCreatePlaygroundRunMutation, useRunQuery } from "@/lib/queries";
 import type { AgentTrace } from "@/types/posts";
 
+export interface AgentDraftMetadata {
+  topic_title?: string;
+  angle?: string;
+  ai_score?: number;
+  image_headline?: string;
+  sources?: any[];
+}
+
 interface AgentPlaygroundProps {
   userId: string;
-  onUseInComposer?: (text: string) => void;
+  onUseInComposer?: (text: string, metadata?: AgentDraftMetadata) => void;
 }
 
 interface SubstepItem {
@@ -1086,7 +1094,17 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
                 <Button
                   variant="default"
                   size="sm"
-                  onClick={() => onUseInComposer(postText)}
+                  onClick={() => {
+                    const finalAny = trace?.final as any;
+                    const finderAny = trace?.finder as any;
+                    onUseInComposer(postText, {
+                      topic_title: finalAny?.topic || finderAny?.topic,
+                      angle: finalAny?.angle || finderAny?.angle,
+                      ai_score: finalAny?.score ?? finalAny?.ai_score ?? trace?.final_score,
+                      image_headline: finalAny?.image_headline,
+                      sources: finderAny?.sources,
+                    });
+                  }}
                   className="h-9 text-xs gap-1.5 w-full sm:w-auto font-medium shadow-xs"
                 >
                   <span>Send to composer</span>

@@ -8,6 +8,8 @@ from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.crypto import encrypt_text
+from app.models.post import Post
+from app.models.publication import PostPublication
 from app.models.social_connection import SocialConnection
 from app.services import linkedin as linkedin_service
 from app.services import linkedin_publisher
@@ -403,3 +405,93 @@ def test_401_when_unauthenticated(client):
 
     res_status = client.get("/api/linkedin/status")
     assert res_status.status_code == 401
+
+
+# 10. Direct publish persists Post and PostPublication to database and appears in posts and dashboard
+def test_published_post_persisted_to_database_and_appears_in_posts_and_dashboard(
+    client, db_test_schema, auth_headers_user_a, monkeypatch
+):
+    SessionLocal = db_test_schema["SessionLocal"]
+    schema = db_test_schema["schema_name"]
+    with SessionLocal() as db:
+        db.execute(text(f'SET search_path TO "{schema}"'))
+        seed_connection(db, user_id="user-a-111", provider_account_id="person-001")
+
+    call_count = 0
+
+    def mock_post(self, url, *args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        mock_resp = MagicMock(spec=httpx.Response)
+        mock_resp.status_code = 201
+        mock_resp.headers = {"x-restli-id": f"urn:li:share:test-{call_count}"}
+        return mock_resp
+
+    monkeypatch.setattr(httpx.Client, "post", mock_post)
+
+    # First post: published directly
+    res1 = client.post(
+        "/api/linkedin/post",
+        headers=auth_headers_user_a,
+        data={
+            "content": "Why backend from first principles matters in AI.\n\nGreat systems are predictable.\n#engineering #ai",
+            "visibility": "PUBLIC",
+            "topic_title": "Why backend from first principles matters",
+            "angle": "First-principles engineering vs superficial hype",
+            "ai_score": 92,
+        },
+    )
+    assert res1.status_code == 201
+    data1 = res1.json()
+    assert "post_id" in data1
+    post_id_1 = data1["post_id"]
+
+    # Second post on the same day: verify unique constraint does not block multiple posts
+    res2 = client.post(
+        "/api/linkedin/post",
+        headers=auth_headers_user_a,
+        data={
+            "content": "Second post today about database indexing and caching.\n#databases",
+            "visibility": "CONNECTIONS",
+        },
+    )
+    assert res2.status_code == 201
+    data2 = res2.json()
+    post_id_2 = data2["post_id"]
+    assert post_id_1 != post_id_2
+
+    # Verify database state
+    with SessionLocal() as db:
+        db.execute(text(f'SET search_path TO "{schema}"'))
+        p1 = db.query(Post).filter(Post.id == post_id_1).first()
+        assert p1 is not None
+        assert p1.status == "published"
+        assert p1.topic_title == "Why backend from first principles matters"
+        assert p1.angle == "First-principles engineering vs superficial hype"
+        assert p1.ai_score == 92
+        assert p1.approval_source == "playground"
+        assert "engineering" in p1.hashtags
+
+        pub1 = db.query(PostPublication).filter(PostPublication.post_id == post_id_1).first()
+        assert pub1 is not None
+        assert pub1.status == "published"
+        assert pub1.platform == "linkedin"
+        assert pub1.external_id == "urn:li:share:test-1"
+
+    # Verify GET /posts lists both posts
+    res_posts = client.get("/posts", headers=auth_headers_user_a)
+    assert res_posts.status_code == 200
+    posts_items = res_posts.json()["items"]
+    assert len(posts_items) >= 2
+    listed_ids = [str(item["id"]) for item in posts_items]
+    assert post_id_1 in listed_ids
+    assert post_id_2 in listed_ids
+
+    # Verify GET /dashboard includes recent posts and published count
+    res_dash = client.get("/dashboard", headers=auth_headers_user_a)
+    assert res_dash.status_code == 200
+    dash_data = res_dash.json()
+    assert dash_data["stats"]["published_30d"] >= 2
+    recent_ids = [str(p["id"]) for p in dash_data["recent_posts"]]
+    assert post_id_2 in recent_ids
+

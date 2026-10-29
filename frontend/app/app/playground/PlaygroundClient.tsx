@@ -2,7 +2,9 @@
 
 import * as React from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Image as ImageIcon,
   Loader2,
@@ -124,11 +126,23 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
   const [showClearDialog, setShowClearDialog] = React.useState(false);
   const [isStartingOAuth, setIsStartingOAuth] = React.useState(false);
   const [publishedPost, setPublishedPost] = React.useState<LinkedInPostResponse | null>(null);
+  const [draftMeta, setDraftMeta] = React.useState<{
+    topic_title?: string;
+    angle?: string;
+    ai_score?: number;
+    image_headline?: string;
+    sources?: any[];
+  } | null>(null);
 
-  const handleUseInComposer = (text: string) => {
+  const queryClient = useQueryClient();
+
+  const handleUseInComposer = (text: string, meta?: any) => {
     setPlainText(text);
     const htmlFormatted = `<p>${text.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br/>")}</p>`;
     setContentHtml(htmlFormatted);
+    if (meta) {
+      setDraftMeta(meta);
+    }
     setActiveTab("composer");
     toast.success("Draft transferred to LinkedIn composer");
   };
@@ -176,10 +190,28 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
       if (imageFile) {
         formData.append("image", imageFile);
       }
+      if (draftMeta?.topic_title) {
+        formData.append("topic_title", draftMeta.topic_title);
+      }
+      if (draftMeta?.angle) {
+        formData.append("angle", draftMeta.angle);
+      }
+      if (draftMeta?.ai_score !== undefined && draftMeta?.ai_score !== null) {
+        formData.append("ai_score", String(draftMeta.ai_score));
+      }
+      if (draftMeta?.image_headline) {
+        formData.append("image_headline", draftMeta.image_headline);
+      }
+      if (draftMeta?.sources && draftMeta.sources.length > 0) {
+        formData.append("sources_json", JSON.stringify(draftMeta.sources));
+      }
 
       try {
         const response = await postMutation.mutateAsync(formData);
         setPublishedPost(response);
+        // Refresh posts and dashboard cache so published post displays immediately
+        queryClient.invalidateQueries({ queryKey: ["posts"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard"] });
         toast.success("Post published to LinkedIn successfully!");
 
         // Clean up local draft in sessionStorage
@@ -205,7 +237,7 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
         }
       }
     },
-    [contentHtml, visibility, plainText, statusData?.connected, imageFile, postMutation]
+    [contentHtml, visibility, plainText, statusData?.connected, imageFile, draftMeta, postMutation, queryClient]
   );
 
   // Handle OAuth return redirect and draft auto-publishing
@@ -392,7 +424,18 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                variant="default"
+                size="sm"
+                asChild
+                className="h-8 gap-1.5 text-xs font-medium shadow-xs"
+              >
+                <Link href={publishedPost.post_id ? `/app/posts/${publishedPost.post_id}` : "/app/posts"}>
+                  <span>View in Dashboard</span>
+                  <ExternalLink className="size-3" />
+                </Link>
+              </Button>
               {publishedPost.linkedin_post_id && (
                 <Button
                   variant="outline"
@@ -407,7 +450,7 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    <span>View post</span>
+                    <span>View on LinkedIn</span>
                     <ExternalLink className="size-3" />
                   </a>
                 </Button>
