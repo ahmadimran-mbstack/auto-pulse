@@ -51,11 +51,12 @@ from app.core.timing import request_metrics
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # CORS middleware configuration
-# Allows origins configured in FRONTEND_URL and local dev URLs
+# Allows origins configured in FRONTEND_URL, local dev URLs, and any Vercel domain via regex
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_credentials=False,
+    allow_origin_regex=settings.CORS_ORIGIN_REGEX,
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
     expose_headers=["X-Request-ID", "Server-Timing"],
@@ -189,9 +190,9 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     logger.exception(f"Unhandled error processing request: {request.method} {request.url.path}")
     origin = request.headers.get("origin")
     resp_headers = {}
-    if origin and (origin in settings.cors_origins or "*" in settings.cors_origins):
+    if origin and settings.is_origin_allowed(origin):
         resp_headers["Access-Control-Allow-Origin"] = origin
-        resp_headers["Access-Control-Allow-Credentials"] = "false"
+        resp_headers["Access-Control-Allow-Credentials"] = "true"
         resp_headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
         resp_headers["Access-Control-Allow-Headers"] = "*"
     return JSONResponse(

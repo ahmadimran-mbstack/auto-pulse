@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     # Allowed frontend origin or comma-separated origins for CORS
     FRONTEND_URL: str
 
+    # Regex pattern for allowed origins (e.g. Vercel preview and production deployments)
+    CORS_ORIGIN_REGEX: Optional[str] = r"^https:\/\/(?:[a-zA-Z0-9-]+\.)*vercel\.app$"
+
     # Application environment: must be 'development' or 'production'
     ENV: str
 
@@ -170,12 +173,34 @@ class Settings(BaseSettings):
     # Split comma-separated frontend URLs into a clean list of origins for CORS
     @property
     def cors_origins(self) -> List[str]:
-        origins = [origin.strip() for origin in self.FRONTEND_URL.split(",") if origin.strip()]
+        origins = [
+            origin.strip().rstrip("/")
+            for origin in self.FRONTEND_URL.split(",")
+            if origin.strip()
+        ]
+        # Always allow primary production and preview Vercel domains
+        for vercel_domain in ("https://autopulse-three.vercel.app", "https://autopulse.vercel.app"):
+            if vercel_domain not in origins:
+                origins.append(vercel_domain)
         if self.ENV == "development":
             for local_origin in ("http://localhost:3000", "http://127.0.0.1:3000"):
                 if local_origin not in origins:
                     origins.append(local_origin)
         return origins
+
+    def is_origin_allowed(self, origin: Optional[str]) -> bool:
+        if not origin:
+            return False
+        if "*" in self.cors_origins:
+            return True
+        clean_origin = origin.strip().rstrip("/")
+        if clean_origin in self.cors_origins:
+            return True
+        if self.CORS_ORIGIN_REGEX:
+            import re
+            if re.fullmatch(self.CORS_ORIGIN_REGEX, origin) or re.fullmatch(self.CORS_ORIGIN_REGEX, clean_origin):
+                return True
+        return False
 
     # Neon tokens use the scheme + host of NEON_AUTH_BASE_URL as both issuer and audience
     # Reference: https://neon.com/docs/auth/guides/plugins/jwt
