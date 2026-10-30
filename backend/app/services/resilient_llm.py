@@ -39,34 +39,57 @@ def generate_fallback_plan_output(input_text: str) -> Any:
             f"{hint} architecture benchmarks 2026",
             f"{hint} engineering tradeoffs production",
             f"{hint} practical implementation lessons",
+            f"{hint} real world case study 2026",
         ])
 
-    # Attempt to extract explicit topics from the input block
+    # Extract user content profile fields from input block
     topics_match = re.search(r"Topics to Include:\s*([^\n\r<]+)", input_text, re.IGNORECASE)
     role_match = re.search(r"Role Title:\s*([^\n\r<]+)", input_text, re.IGNORECASE)
     industry_match = re.search(r"Industry:\s*([^\n\r<]+)", input_text, re.IGNORECASE)
+    niche_match = re.search(r"Niche Description:\s*([^\n\r<]+)", input_text, re.IGNORECASE)
+    audience_match = re.search(r"Audience:\s*([^\n\r<]+)", input_text, re.IGNORECASE)
+    goals_match = re.search(r"Goals:\s*([^\n\r<]+)", input_text, re.IGNORECASE)
 
     role = role_match.group(1).strip() if role_match else "Technology Leader"
     industry = industry_match.group(1).strip() if industry_match else "Software Engineering"
+    niche = niche_match.group(1).strip() if niche_match else ""
+    audience = audience_match.group(1).strip() if audience_match else "Practitioners"
     raw_topics = topics_match.group(1).strip() if topics_match else ""
-
     topics = [t.strip() for t in raw_topics.split(",") if t.strip()] if raw_topics else []
 
     queries: List[str] = []
-    if len(topics) >= 2:
+    # Query 1: Rooted in primary topic or niche
+    if topics:
         queries.append(f"{topics[0]} production architecture benchmarks 2026")
-        queries.append(f"{topics[1]} scaling and latency optimization")
-        queries.append(f"{industry} engineering best practices lessons")
-    elif len(topics) == 1:
-        queries.append(f"{topics[0]} production reliability benchmarks 2026")
-        queries.append(f"{topics[0]} performance tradeoffs under load")
-        queries.append(f"{industry} architectural trends")
+    elif niche:
+        # Use first 35 chars of niche
+        clean_niche = re.sub(r"[^\w\s]", "", niche)[:35].strip()
+        queries.append(f"{clean_niche} fresh developments 2026")
     else:
-        queries.append(f"{industry} architecture benchmarks 2026")
-        queries.append(f"{role} production reliability tradeoffs")
-        queries.append(f"{industry} latency and throughput patterns")
+        queries.append(f"{industry} production benchmarks 2026")
 
-    return PlanOutput(queries=queries[:3])
+    # Query 2: Audience and industry trade-offs
+    if len(topics) >= 2:
+        queries.append(f"{topics[1]} scaling and latency optimization 2026")
+    elif audience and len(audience) < 40:
+        queries.append(f"{industry} practical lessons for {audience[:25]}")
+    else:
+        queries.append(f"{industry} engineering tradeoffs under load")
+
+    # Query 3: Real-world operational breakdowns
+    if niche:
+        clean_niche = re.sub(r"[^\w\s]", "", niche)[:40].strip()
+        queries.append(f"{clean_niche} real world implementation patterns")
+    else:
+        queries.append(f"{role} architectural insights and best practices")
+
+    # Query 4: Emerging trends and case studies
+    if topics and len(topics) >= 3:
+        queries.append(f"{topics[2]} failure modes and recovery case study")
+    else:
+        queries.append(f"{industry} case studies and incident post-mortems 2026")
+
+    return PlanOutput(queries=queries[:4])
 
 
 def generate_fallback_finder_output(input_text: str) -> Any:
@@ -79,16 +102,19 @@ def generate_fallback_finder_output(input_text: str) -> Any:
         clean_hint = hint_topic[:90]
         return FinderOutput(
             topic=clean_hint,
-            angle=f"Why first-principles engineering in {clean_hint[:40]} separates resilient systems from fragile AI code abstractions",
+            angle=f"Why first-principles execution in {clean_hint[:40]} separates resilient systems from fragile abstractions",
             post_format="observer take",
-            hook_type="defensible contrarian claim",
-            why_now="The rapid proliferation of AI-generated code is exposing hidden architectural bottlenecks in production",
+            hook_type="number-led specific result",
+            why_now="Recent production benchmark releases and shifts across modern infrastructure",
             sources=[FinderSource(title=clean_hint, url="https://example.com/editorial/engineering-insights-2026")],
             avoided=[],
         )
 
+    # Extract past topics from history to avoid repeating any of them
+    past_titles = re.findall(r"Title:\s*\"?([^\r\n\"\|]+)", input_text, re.IGNORECASE)
+    past_titles_lower = [t.strip().lower() for t in past_titles if t.strip()]
+
     # Extract candidate articles from candidate block
-    # Matches patterns like: [1] Title: ... \nURL: ...
     candidates: List[Dict[str, str]] = []
     cand_matches = re.findall(
         r"Title:\s*(.+?)\r?\nURL:\s*(https?://[^\s\r\n]+)", input_text, re.IGNORECASE
@@ -99,17 +125,28 @@ def generate_fallback_finder_output(input_text: str) -> Any:
         if clean_title and clean_url:
             candidates.append({"title": clean_title, "url": clean_url})
 
-    # Pick candidate
-    if candidates:
-        chosen = candidates[0]
-    else:
-        chosen = {
-            "title": "Modern Distributed System Performance Patterns in 2026",
-            "url": "https://example.com/modern-distributed-systems-2026",
-        }
+    # Pick first candidate that doesn't repeat past titles
+    chosen = None
+    for cand in candidates:
+        cand_lower = cand["title"].lower()
+        if not any(cand_lower in past or past in cand_lower for past in past_titles_lower if len(past) > 10):
+            chosen = cand
+            break
+
+    if not chosen:
+        if candidates:
+            chosen = candidates[0]
+        else:
+            # Generate a grounded topic based on profile industry if candidates are empty
+            ind_match = re.search(r"Industry:\s*([^\n\r<]+)", input_text, re.IGNORECASE)
+            ind_name = ind_match.group(1).strip() if ind_match else "Engineering"
+            chosen = {
+                "title": f"Modern Reliability and Scale Patterns in {ind_name} 2026",
+                "url": f"https://example.com/{ind_name.lower().replace(' ', '-')}-patterns-2026",
+            }
 
     # Format rotation: avoid formats found in history block
-    formats_pool = ["observer take", "news with a take", "comparison with a verdict", "build log", "myth vs reality"]
+    formats_pool = ["observer take", "news with a take", "comparison with a verdict", "build log", "myth vs reality", "small how-to", "mistake and fix"]
     chosen_format = "observer take"
     for fmt in formats_pool:
         if fmt not in input_text.lower():
@@ -117,9 +154,10 @@ def generate_fallback_finder_output(input_text: str) -> Any:
             break
 
     topic = chosen["title"]
-    angle = f"Why production resilience in {chosen['title'][:40]} beats raw peak throughput"
+    clean_title = re.sub(r"[^\w\s]", "", topic)[:45].strip()
+    angle = f"Why production resilience in {clean_title} beats theoretical peak throughput"
     hook_type = "number-led specific result"
-    why_now = "Fresh industry benchmarks and production data published this week"
+    why_now = "Fresh industry benchmarks and production post-mortems published this week"
     sources = [FinderSource(title=chosen["title"], url=chosen["url"])]
 
     return FinderOutput(
@@ -129,57 +167,58 @@ def generate_fallback_finder_output(input_text: str) -> Any:
         hook_type=hook_type,
         why_now=why_now,
         sources=sources,
-        avoided=[],
+        avoided=past_titles[:5],
     )
 
 
 def generate_fallback_gtm_brief_output(input_text: str) -> Any:
     from app.agents.gtm import GTMBriefOutput
+    from app.agents.knowledge.hook_library import get_hooks_by_style, HOOK_STYLES
 
     topic_match = re.search(r"Topic:\s*([^\n\r]+)", input_text)
     hint_match = re.search(r"Topic Hint:\s*([^\n\r]+)", input_text)
-    raw_topic = hint_match.group(1).strip() if hint_match else (topic_match.group(1).strip() if topic_match else "Distributed Systems Engineering")
+    raw_topic = hint_match.group(1).strip() if hint_match else (topic_match.group(1).strip() if topic_match else "Modern Systems Engineering")
 
-    is_ai_backend = any(k in raw_topic.lower() for k in ["ai", "first principles", "principles", "backend", "code"])
+    # Extract allowed hook styles from prompt
+    styles_match = re.search(r"Allowed Hook Styles[^:]*:\s*([^\n\r<]+)", input_text, re.IGNORECASE)
+    allowed_styles = []
+    if styles_match:
+        raw_styles = styles_match.group(1).strip()
+        allowed_styles = [s.strip() for s in raw_styles.split(",") if s.strip()]
 
-    if is_ai_backend:
-        hook_1 = "AI can generate 500 lines of backend boilerplate in 10 seconds. It still cannot reason about distributed state under network partitions."
-        hook_2 = "Most engineering teams believe AI code generation eliminates the need for backend fundamentals. Production outage data proves the exact opposite."
-        hook_3 = "Why backend engineering from first principles is quietly becoming the highest-leverage skill in the AI era."
-        chosen_hook = hook_1
-        structure_lines = [
-            "1. The illusion: AI code generation solves the engineering bottleneck by writing boilerplate instantly.",
-            "2. The reality in production: AI models cannot predict race conditions, connection starvation, or cascade failures.",
-            "3. The first-principles requirement: deep understanding of database isolation, memory limits, and network boundaries.",
-            "4. The strategic takeaway: the more code AI generates, the more valuable foundational backend expertise becomes.",
-        ]
-        ending_strategy = "Targeted question to engineering leaders on auditing AI-generated backend architecture"
-        notes = [
-            "Direct contrarian angle contrasting AI generation velocity with first-principles system resilience [HOOK-02]",
-            "Strictly 850-1200 character balanced narrative depth [BODY-02]",
-            "Zero generic platitudes, grounded in production reliability realities [STRAT-04]",
-        ]
-    else:
-        clean_topic = raw_topic[:50]
-        hook_1 = f"Most engineering teams look at {clean_topic} the wrong way. Here is what production data proves."
-        hook_2 = f"We spent three weeks measuring production behavior on {clean_topic}. The bottleneck surprised us."
-        hook_3 = f"Why {clean_topic} is quietly reshaping modern technical architecture this year."
-        chosen_hook = hook_1
-        structure_lines = [
-            f"1. The baseline assumption: standard approaches to {clean_topic} hold under normal conditions.",
-            "2. What the operational data reveals: saturation breaks unexpected downstream boundaries.",
-            "3. The architectural change: tuning core primitives yields immediate stability under stress.",
-            "4. The takeaway: predictable worst-case behavior beats theoretical peak capacity every time.",
-        ]
-        ending_strategy = f"Open practitioner question on managing {clean_topic} in production environments"
-        notes = [
-            "Grounded in verified operational standards [STRAT-04]",
-            "Zero AI slop, no corporate buzzwords [HOOK-03]",
-            "Single core thesis maintained throughout post body [BODY-01]",
-        ]
+    if not allowed_styles:
+        allowed_styles = HOOK_STYLES
+
+    chosen_style = allowed_styles[0]
+    templates = get_hooks_by_style(chosen_style)
+
+    clean_topic = raw_topic[:50].strip()
+    hook_options = []
+    for t in templates[:3]:
+        rendered = t["template"].replace("{topic}", clean_topic)
+        hook_options.append(rendered)
+
+    while len(hook_options) < 3:
+        hook_options.append(f"Why {clean_topic} is quietly reshaping how top engineering teams build systems.")
+
+    chosen_hook = hook_options[0]
+
+    structure_lines = [
+        f"1. Context and trigger: Why {clean_topic} matters right now.",
+        "2. The core shift or measurement observed in production.",
+        "3. Operational breakdown: Before vs after trade-offs.",
+        "4. Key takeaway for engineering practitioners.",
+    ]
+    ending_strategy = f"Open practitioner question on managing {clean_topic} in production environments"
+    notes = [
+        f"[HOOK-01] Selected personalized hook style '{chosen_style}' tailored to creator profile.",
+        "[BODY-01] Single core thesis maintained throughout post body.",
+        "[END-01] Clean close without engagement bait.",
+    ]
 
     return GTMBriefOutput(
-        hook_options=[hook_1, hook_2, hook_3],
+        hook_style=chosen_style,
+        hook_options=hook_options,
         chosen_hook=chosen_hook,
         structure_lines=structure_lines,
         ending_strategy=ending_strategy,

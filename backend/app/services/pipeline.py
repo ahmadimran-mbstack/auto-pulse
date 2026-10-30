@@ -11,14 +11,17 @@ from app.agents.detector import DetectionResult, VerifiedFinding, evaluate_post
 from app.agents.drafter import DrafterOutput, draft_initial_post, rewrite_post_spans
 from app.agents.finder import FinderOutput, run_finder_agent
 from app.agents.gtm import GTMBriefOutput, GTMReviewOutput, run_gtm_brief, run_gtm_review
+from app.agents.knowledge.hook_library import get_available_hook_styles
 from app.core.config import settings
 from app.services.checks import run_all_checks
+from app.services.content_profile import get_content_profile
 from app.services.prompts import PLAN_PROMPT, PlanOutput
 from app.services.search import (
     Candidate,
     SearchError,
     get_search_adapter,
 )
+from app.services.search_cache import get_cached_search, set_cached_search
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +42,7 @@ class PipelineState(TypedDict, total=False):
     chosen: Optional[Dict[str, Any]]
     angle: Optional[str]
     hook_type: Optional[str]
+    hook_style: Optional[str]
     post_format: Optional[str]
     why_now: Optional[str]
 
@@ -179,7 +183,7 @@ def build_graph(
             except Exception as exc:
                 logger.debug(f"Step callback error for {step_name}: {exc}")
 
-    # Node 1: PLAN (Generate 3 short queries with fast model)
+    # Node 1: PLAN (Generate 3 to 5 personalized queries with fast model)
     def plan_node(state: PipelineState) -> Dict[str, Any]:
         _notify_step("plan", state.get("round", 0), state)
         start_t = time.perf_counter()
@@ -192,10 +196,11 @@ def build_graph(
                 f"{topic_hint} architecture benchmarks 2026",
                 f"{topic_hint} engineering tradeoffs production",
                 f"{topic_hint} practical lessons 2026",
+                f"{topic_hint} real world case study 2026",
             ]
             seconds["plan"] = round(time.perf_counter() - start_t, 3)
             return {
-                "queries": queries[:3],
+                "queries": queries[:4],
                 "counters": counters,
                 "seconds_per_node": seconds,
             }
@@ -209,6 +214,8 @@ def build_graph(
             "industry": profile.get("industry") or "General Business",
             "niche_description": profile.get("niche_description") or "",
             "audience": profile.get("audience") or "Industry Peers",
+            "goals": profile.get("goals") or "Build thought leadership and share practical insights",
+            "tone": profile.get("tone") or "direct",
             "topics_include": ", ".join(profile.get("topics_include") or []),
             "topics_avoid": ", ".join(profile.get("topics_avoid") or []),
         }
@@ -249,7 +256,7 @@ def build_graph(
             queries = fallback_plan.queries
 
         return {
-            "queries": queries[:3],
+            "queries": queries[:5],
             "counters": counters,
             "seconds_per_node": seconds,
         }
@@ -266,12 +273,21 @@ def build_graph(
         topics_avoid = profile.get("topics_avoid", [])
         lookback_days = settings.SEARCH_LOOKBACK_DAYS
 
+        user_id = state.get("user_id") or "default_user"
         adapter = search_tool or get_search_adapter(settings.SEARCH_PROVIDER)
         all_candidates: List[Candidate] = []
         try:
-            for q in queries[:3]:
+            for q in queries[:5]:
+                # 1. Check personalized search cache
+                cached_res = get_cached_search(user_id=user_id, query=q)
+                if cached_res is not None:
+                    all_candidates.extend(cached_res)
+                    continue
+
+                # 2. Execute fresh web search and cache results
                 counters["search_calls"] = counters.get("search_calls", 0) + 1
                 results = adapter.search(q, lookback_days=lookback_days, max_results=10)
+                set_cached_search(user_id=user_id, query=q, candidates=results)
                 all_candidates.extend(results)
         except SearchError as err:
             seconds["search"] = round(time.perf_counter() - start_t, 3)
@@ -426,6 +442,7 @@ def build_graph(
         profile = state.get("profile", {})
         chosen = state.get("chosen", {})
         candidates = state.get("candidates", [])
+        history = state.get("history", [])
 
         topic = finder_dict.get("topic") or chosen.get("title") or "Industry Development"
         angle = state.get("angle") or "Technical analysis"
@@ -434,6 +451,14 @@ def build_graph(
         why_now = state.get("why_now") or "Recent production updates"
 
         sources = finder_dict.get("sources") or candidates[:2]
+
+        # Filter out hook styles used in user's last 5 posts
+        last_5_styles = [
+            p.get("hook_style") or p.get("hook_type")
+            for p in history[:5]
+            if p.get("hook_style") or p.get("hook_type")
+        ]
+        allowed_styles = get_available_hook_styles(last_5_styles)
 
         counters["llm_calls"] = counters.get("llm_calls", 0) + 1
         try:
@@ -446,16 +471,23 @@ def build_graph(
                 sources=sources,
                 profile=profile,
                 model=_gtm_brief_model,
+                allowed_hook_styles=allowed_styles,
             )
         except Exception as exc:
             logger.warning(f"GTM brief node error: {exc}. Using fallback brief.")
             from app.services.resilient_llm import generate_fallback_gtm_brief_output
-            brief = generate_fallback_gtm_brief_output(f"Topic: {topic}\nAngle: {angle}")
+            styles_str = ", ".join(allowed_styles)
+            brief = generate_fallback_gtm_brief_output(
+                f"Topic: {topic}\nAngle: {angle}\nAllowed Hook Styles: {styles_str}"
+            )
 
+        chosen_hook_style = getattr(brief, "hook_style", None) or allowed_styles[0]
         seconds["gtm_brief"] = round(time.perf_counter() - start_t, 3)
 
         return {
             "gtm_brief": brief.model_dump(),
+            "hook_style": chosen_hook_style,
+            "hook_type": chosen_hook_style,
             "counters": counters,
             "seconds_per_node": seconds,
         }
@@ -795,6 +827,17 @@ def execute_pipeline(
     topic_hint: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Single unified entrypoint for both daily content generation runs and playground runs."""
+    # Ensure profile_dict has full personalized content profile fields
+    if not profile_dict or not profile_dict.get("goals"):
+        try:
+            cached_profile = get_content_profile(user_id=user_id)
+            # Merge with passed profile_dict taking precedence
+            merged_profile = dict(cached_profile)
+            merged_profile.update({k: v for k, v in profile_dict.items() if v is not None})
+            profile_dict = merged_profile
+        except Exception as exc:
+            logger.warning(f"Could not load content profile for user {user_id}: {exc}")
+
     recent_titles = [p.get("topic_title") for p in history if p.get("topic_title")]
     recent_captions = [p.get("caption_preview", "") for p in history if p.get("caption_preview")]
 
@@ -820,4 +863,18 @@ def execute_pipeline(
     )
 
     final_state = app.invoke(initial_state)
+
+    chosen = final_state.get("chosen") or {}
+    finder_out = final_state.get("finder_output") or {}
+    chosen_topic = finder_out.get("topic") or chosen.get("title") or "Unknown"
+    chosen_hook_style = final_state.get("hook_style") or final_state.get("hook_type") or "Unknown"
+    queries_used = final_state.get("queries") or []
+
+    logger.info(
+        f"[PIPELINE RUN] user_id={user_id} | "
+        f"chosen_topic='{chosen_topic}' | "
+        f"hook_style='{chosen_hook_style}' | "
+        f"queries={queries_used}"
+    )
+
     return final_state

@@ -21,6 +21,7 @@ class PostListItem(BaseModel):
     approval: Optional[PostApprovalInfo] = None
     angle: Optional[str] = None
     hook_type: Optional[str] = None
+    hook_style: Optional[str] = None
     post_format: Optional[str] = None
     ai_score: Optional[int] = None
     needs_review: Optional[bool] = None
@@ -55,6 +56,7 @@ class PostDetail(BaseModel):
     publications: List[PostPublicationInfo] = []
     angle: Optional[str] = None
     hook_type: Optional[str] = None
+    hook_style: Optional[str] = None
     post_format: Optional[str] = None
     ai_score: Optional[int] = None
     needs_review: Optional[bool] = None

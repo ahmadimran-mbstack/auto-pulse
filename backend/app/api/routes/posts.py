@@ -28,6 +28,7 @@ from app.schemas.post import (
     ScheduleResponse,
 )
 from app.services.approval import decide_approval, request_approval
+from app.services.content_profile import get_content_profile
 from app.services.image import build_image_etag, render_post_image
 from app.services.pipeline import execute_pipeline
 from app.services.prompts import PROMPT_VERSION
@@ -161,6 +162,7 @@ def list_posts(
                 approval=appr_info,
                 angle=p.angle,
                 hook_type=p.hook_type,
+                hook_style=getattr(p, "hook_style", None) or p.hook_type,
                 post_format=p.post_format,
                 ai_score=p.ai_score,
                 needs_review=p.needs_review,
@@ -264,6 +266,7 @@ def get_post(
         publications=publication_infos,
         angle=p.angle,
         hook_type=p.hook_type,
+        hook_style=getattr(p, "hook_style", None) or p.hook_type,
         post_format=p.post_format,
         ai_score=p.ai_score,
         needs_review=p.needs_review,
@@ -470,6 +473,10 @@ def generate_draft_now(
                 caption=p.caption,
                 hashtags=p.hashtags,
                 created_at=p.created_at.isoformat(),
+                angle=p.angle,
+                hook_type=p.hook_type,
+                hook_style=getattr(p, "hook_style", None) or p.hook_type,
+                post_format=p.post_format,
             )
 
     # Record or claim generation run safely avoiding duplicate key conflicts
@@ -501,21 +508,7 @@ def generate_draft_now(
     # Prepare pipeline inputs
     search_tool = get_search_adapter(settings.SEARCH_PROVIDER)
     history = post_repo.get_user_post_history(db, user.id, limit=30)
-
-    profile_dict = {
-        "role_title": profile.role_title,
-        "industry": profile.industry,
-        "niche_description": profile.niche_description,
-        "audience": profile.audience,
-        "topics_include": profile.topics_include,
-        "topics_avoid": profile.topics_avoid,
-        "tone": profile.tone,
-        "voice_notes": profile.voice_notes,
-        "sample_posts": profile.sample_posts,
-        "brand_name": profile.brand_name,
-        "brand_primary_hex": profile.brand_primary_hex,
-        "brand_accent_hex": profile.brand_accent_hex,
-    }
+    profile_dict = get_content_profile(user_id=user.id, db=db)
 
     def _step_callback(step_name: str, round_num: int, state: dict):
         run.current_step = step_name
@@ -583,6 +576,7 @@ def generate_draft_now(
         topic_url=chosen.get("url") or "",
         angle=final_state.get("angle"),
         hook_type=final_state.get("hook_type"),
+        hook_style=final_state.get("hook_style") or final_state.get("hook_type"),
         post_format=final_state.get("post_format"),
         ai_score=final_state.get("ai_score"),
         needs_review=final_state.get("needs_review", False),
@@ -619,6 +613,7 @@ def generate_draft_now(
         created_at=post.created_at.isoformat(),
         angle=post.angle,
         hook_type=post.hook_type,
+        hook_style=post.hook_style or post.hook_type,
         post_format=post.post_format,
         ai_score=post.ai_score,
         needs_review=post.needs_review,

@@ -14,6 +14,7 @@ from app.models.post import PlaygroundRun
 from app.models.profile import Profile
 from app.repositories import post as post_repo
 from app.schemas.post import PlaygroundRunCreateResponse, PlaygroundRunDetail
+from app.services.content_profile import get_content_profile
 from app.services.pipeline import execute_pipeline
 from app.services.search import get_search_adapter
 
@@ -45,25 +46,9 @@ def run_playground_pipeline_task(run_id: uuid.UUID, user_id: str, topic_hint: Op
             return
 
         try:
-            profile = db.query(Profile).filter(Profile.user_id == user_id).first()
             history = post_repo.get_user_post_history(db, user_id, limit=30)
             search_tool = get_search_adapter(settings.SEARCH_PROVIDER)
-
-            profile_dict = (
-                {
-                    "role_title": profile.role_title,
-                    "industry": profile.industry,
-                    "niche_description": profile.niche_description,
-                    "audience": profile.audience,
-                    "topics_include": profile.topics_include,
-                    "topics_avoid": profile.topics_avoid,
-                    "tone": profile.tone,
-                    "voice_notes": profile.voice_notes,
-                    "sample_posts": profile.sample_posts,
-                }
-                if profile
-                else {}
-            )
+            profile_dict = get_content_profile(user_id=user_id, db=db)
 
             def _step_callback(step_name: str, round_num: int, state: Dict[str, Any]):
                 run = db.query(PlaygroundRun).filter(PlaygroundRun.id == run_id).first()

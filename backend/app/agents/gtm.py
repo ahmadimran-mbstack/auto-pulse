@@ -5,6 +5,12 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
+from app.agents.knowledge.hook_library import (
+    HOOK_LIBRARY,
+    HOOK_STYLES,
+    get_hooks_by_style,
+    normalize_hook_style,
+)
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -30,8 +36,12 @@ def load_playbook_content() -> str:
 
 
 class GTMBriefOutput(BaseModel):
+    hook_style: str = Field(
+        default="observation",
+        description="The chosen hook style from the allowed styles (story, contrarian_opinion, number_result, question, mistake, how_to, observation)",
+    )
     hook_options: List[str] = Field(
-        description="Exactly 3 distinct opening hook variations matching the chosen hook_type and playbook rules",
+        description="Exactly 3 distinct opening hook variations matching the chosen hook_style and playbook rules",
         min_length=3,
         max_length=3,
     )
@@ -75,7 +85,9 @@ CRITICAL SECURITY & INTEGRITY RULES:
 5. Playbook Citation: In your notes, actively cite the relevant rule IDs from the LinkedIn Content Playbook (e.g., [HOOK-01], [HOOK-02], [BODY-01], [BODY-03], [END-01], [STRAT-01]).
 
 HOOK CREATION REQUIREMENTS:
-- Produce exactly 3 distinct hook variations matching the chosen hook_type: {hook_type}.
+- You MUST choose a hook_style strictly from the Allowed Hook Styles list: {allowed_hook_styles}. (Styles used in the user's last 5 posts have been excluded).
+- Produce exactly 3 distinct opening hook variations matching that chosen hook_style.
+- Each hook must be tailored specifically to {topic} and the creator's audience/goals.
 - Each hook must stand on its own in the first 2-3 lines (before 'see more' cutoff per [HOOK-01]).
 - Forbidden hooks [HOOK-03]: Never use "I'm excited to share", "I'm thrilled to announce", vague teasers, or synthetic drama.
 - Avoid preamble or throat-clearing [HOOK-04].
@@ -96,15 +108,18 @@ GTM_BRIEF_HUMAN_PROMPT = """Generate the GTM Content Brief for this topic:
 - Topic: {topic}
 - Angle: {angle}
 - Post Format: {post_format}
-- Hook Type: {hook_type}
 - Why Now: {why_now}
 
-# Untrusted User Profile:
+# Allowed Hook Styles (filtered to exclude user's last 5 posts):
+{allowed_hook_styles}
+
+# Untrusted User Content Profile:
 <<<UNTRUSTED_PROFILE_DATA>>>
 Role: {role_title}
 Industry: {industry}
 Niche: {niche_description}
 Audience: {audience}
+Goals: {goals}
 Tone: {tone}
 Voice Notes: {voice_notes}
 Topics to Include: {topics_include}
@@ -120,7 +135,7 @@ Topics to Avoid: {topics_avoid}
 {playbook_rules}
 
 {feedback_block}
-Provide the structured GTM brief.
+Provide the structured GTM brief selecting one of the allowed hook styles and generating 3 tailored hooks.
 """
 
 GTM_BRIEF_PROMPT = ChatPromptTemplate.from_messages(
@@ -224,6 +239,7 @@ def run_gtm_brief(
     sources: Optional[List[Any]] = None,
     profile: Optional[Dict[str, Any]] = None,
     model: Optional[BaseChatModel] = None,
+    allowed_hook_styles: Optional[List[str]] = None,
 ) -> GTMBriefOutput:
     """Generates the GTM Content Brief before drafting begins.
     Retries once on parsing/schema error.
@@ -235,16 +251,27 @@ def run_gtm_brief(
     playbook_text = load_playbook_content()
     sources_text = _format_sources_block(sources)
 
+    allowed_styles = allowed_hook_styles or [
+        "story",
+        "contrarian_opinion",
+        "number_result",
+        "question",
+        "mistake",
+        "how_to",
+        "observation",
+    ]
+
     prompt_input = {
         "topic": topic,
         "angle": angle,
         "post_format": post_format,
-        "hook_type": hook_type,
         "why_now": why_now,
+        "allowed_hook_styles": ", ".join(allowed_styles),
         "role_title": profile_dict.get("role_title") or "Professional",
         "industry": profile_dict.get("industry") or "Technology",
         "niche_description": profile_dict.get("niche_description") or "",
         "audience": profile_dict.get("audience") or "Peers and practitioners",
+        "goals": profile_dict.get("goals") or "Build domain authority and share practical engineering insights",
         "tone": profile_dict.get("tone") or "direct, insightful, practitioner-first",
         "voice_notes": profile_dict.get("voice_notes") or "",
         "topics_include": ", ".join(profile_dict.get("topics_include") or []),
@@ -270,7 +297,7 @@ def run_gtm_brief(
                 last_error = str(res.get("parsing_error"))
                 prompt_input["feedback_block"] = (
                     f"\nValidation Error on previous attempt: {last_error}\n"
-                    "Ensure hook_options has exactly 3 distinct items and structure_lines has 4 to 6 lines."
+                    f"Ensure hook_style is one of: {allowed_styles}, hook_options has exactly 3 distinct items and structure_lines has 4 to 6 lines."
                 )
         except Exception as exc:
             last_error = str(exc)
@@ -280,30 +307,45 @@ def run_gtm_brief(
             )
 
     if parsed_output is None:
-        logger.error(f"GTM Brief generation failed after {attempts} attempts: {last_error}")
-        # Safe fallback brief
+        logger.error(f"GTM Brief generation failed after {attempts} attempts: {last_error}. Using personalized hook library fallback.")
+        # Select first allowed hook style
+        chosen_style = allowed_styles[0] if allowed_styles else "observation"
+        templates = get_hooks_by_style(chosen_style)
+
+        clean_topic = topic[:55].strip()
+        hook_options = []
+        for t in templates[:3]:
+            raw_tmpl = t["template"]
+            rendered = raw_tmpl.replace("{topic}", clean_topic)
+            hook_options.append(rendered)
+
+        while len(hook_options) < 3:
+            hook_options.append(f"Why {clean_topic} is quietly reshaping modern technical systems.")
+
+        chosen_hook = hook_options[0]
+
         return GTMBriefOutput(
-            hook_options=[
-                f"Most teams struggle with {topic}. Here is what changed.",
-                f"Why {topic} is quietly reshaping how we build systems today.",
-                f"The real bottleneck with {topic} is not what most assume.",
-            ],
-            chosen_hook=f"Why {topic} is quietly reshaping how we build systems today.",
+            hook_style=chosen_style,
+            hook_options=hook_options,
+            chosen_hook=chosen_hook,
             structure_lines=[
-                f"1. Context and trigger: Why {topic} matters right now.",
+                f"1. Context and trigger: Why {clean_topic} matters right now.",
                 "2. The core shift or measurement observed in production.",
                 "3. Operational breakdown: Before vs after trade-offs.",
                 "4. Key takeaway for engineering practitioners.",
             ],
             ending_strategy="Decisive operational summary with no engagement bait [END-01].",
             notes=[
-                "[HOOK-01] Strong opening hook before the see-more fold.",
+                f"[HOOK-01] Selected personalized hook style: {chosen_style}.",
                 "[BODY-01] Focus on a single core thesis.",
                 "[END-01] Clean close without engagement bait.",
             ],
         )
 
-    # Ensure chosen_hook is populated
+    # Ensure chosen_hook and hook_style are populated
+    if not parsed_output.hook_style or parsed_output.hook_style not in allowed_styles:
+        parsed_output.hook_style = allowed_styles[0] if allowed_styles else "observation"
+
     if not parsed_output.chosen_hook and parsed_output.hook_options:
         parsed_output.chosen_hook = parsed_output.hook_options[0]
 

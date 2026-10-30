@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import User, current_user
 from app.db.session import get_db, get_readonly_db
 from app.repositories import profile as profile_repo
+from app.services.content_profile import invalidate_content_profile_cache
 from app.schemas.profile import (
     OnboardingStep1Request,
     OnboardingStep2Request,
@@ -92,6 +93,7 @@ def patch_caller_profile(
 
     db.commit()
     db.refresh(profile)
+    invalidate_content_profile_cache(user.id)
     return profile_repo.format_profile_response(profile, db=db)
 
 
@@ -108,6 +110,7 @@ def save_onboarding_step_1(
         data=payload,
         display_name=user.name,
     )
+    invalidate_content_profile_cache(user.id)
     return profile_repo.format_profile_response(profile, db=db)
 
 
@@ -124,6 +127,7 @@ def save_onboarding_step_2(
         data=payload,
         display_name=user.name,
     )
+    invalidate_content_profile_cache(user.id)
     return profile_repo.format_profile_response(profile, db=db)
 
 
@@ -140,6 +144,7 @@ def save_onboarding_step_3(
         data=payload,
         display_name=user.name,
     )
+    invalidate_content_profile_cache(user.id)
     return profile_repo.format_profile_response(profile, db=db)
 
 
@@ -156,6 +161,7 @@ def save_onboarding_step_4(
         data=payload,
         display_name=user.name,
     )
+    invalidate_content_profile_cache(user.id)
     return profile_repo.format_profile_response(profile, db=db)
 
 
@@ -181,4 +187,5 @@ def finish_onboarding(
             },
         )
 
+    invalidate_content_profile_cache(user.id)
     return profile_repo.format_profile_response(profile, db=db)

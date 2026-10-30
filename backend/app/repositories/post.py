@@ -83,6 +83,7 @@ def get_user_post_history(
             "sources": p.sources or [],
             "angle": p.angle,
             "hook_type": p.hook_type,
+            "hook_style": getattr(p, "hook_style", None) or p.hook_type,
             "post_format": p.post_format,
             "caption_preview": (p.caption[:200] if p.caption else ""),
         })

@@ -51,6 +51,7 @@ class Post(Base):
     # Editorial metadata from Post Finder agent (nullable)
     angle: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     hook_type: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    hook_style: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     post_format: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Quality scores and human review flag from AI-Slop Detector loop

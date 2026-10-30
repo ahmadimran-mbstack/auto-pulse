@@ -12,6 +12,7 @@ from app.models.post import GenerationRun, Post
 from app.models.profile import Profile
 from app.repositories import post as post_repo
 from app.services.approval import request_approval
+from app.services.content_profile import get_content_profile
 from app.services.pipeline import build_graph, create_chat_model
 from app.services.prompts import PROMPT_VERSION
 from app.services.search import get_search_adapter
@@ -132,20 +133,7 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
         search_tool = get_search_adapter(settings.SEARCH_PROVIDER)
         history = post_repo.get_user_post_history(db, profile.user_id, limit=30)
 
-        profile_dict = {
-            "role_title": profile.role_title,
-            "industry": profile.industry,
-            "niche_description": profile.niche_description,
-            "audience": profile.audience,
-            "topics_include": profile.topics_include,
-            "topics_avoid": profile.topics_avoid,
-            "tone": profile.tone,
-            "voice_notes": profile.voice_notes,
-            "sample_posts": profile.sample_posts,
-            "brand_name": profile.brand_name,
-            "brand_primary_hex": profile.brand_primary_hex,
-            "brand_accent_hex": profile.brand_accent_hex,
-        }
+        profile_dict = get_content_profile(user_id=profile.user_id, db=db)
 
         def _step_callback(step_name: str, round_num: int, state: dict):
             run.current_step = step_name
@@ -221,6 +209,7 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
             topic_url=chosen.get("url") or "",
             angle=final_state.get("angle"),
             hook_type=final_state.get("hook_type"),
+            hook_style=final_state.get("hook_style") or final_state.get("hook_type"),
             post_format=final_state.get("post_format"),
             ai_score=final_state.get("ai_score"),
             needs_review=final_state.get("needs_review", False),
