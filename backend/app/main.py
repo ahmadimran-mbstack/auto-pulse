@@ -18,6 +18,7 @@ from app.api.routes.playground import router as playground_router
 from app.api.routes.runs import router as runs_router
 from app.api.routes.public import posts_public_router, router as public_router
 from app.api.routes.dashboard import router as dashboard_router
+from app.api.routes.analytics import router as analytics_router
 from app.api.routes.linkedin import router as linkedin_router
 from app.api.routes.slack import (
     integrations_router as slack_integrations_router,
@@ -219,6 +220,7 @@ app.include_router(runs_router)
 app.include_router(public_router)
 app.include_router(posts_public_router)
 app.include_router(dashboard_router)
+app.include_router(analytics_router)
 app.include_router(linkedin_router)
 app.include_router(slack_router)
 app.include_router(slack_integrations_router)

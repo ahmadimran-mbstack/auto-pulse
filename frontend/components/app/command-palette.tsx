@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Search, LayoutDashboard, FileText, Share2, Settings, ArrowRight, PenSquare } from "lucide-react";
+import { Search, LayoutDashboard, FileText, Share2, Settings, ArrowRight, PenSquare, BarChart3 } from "lucide-react";
 import { usePostsQuery } from "@/lib/queries";
 import { useUser } from "@/components/providers/user-provider";
 import { cn } from "@/lib/utils";
@@ -30,6 +30,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 
   const pages = [
     { title: "Overview", url: "/app", icon: LayoutDashboard },
+    { title: "Analytics", url: "/app/analytics", icon: BarChart3 },
     { title: "Posts", url: "/app/posts", icon: FileText },
     { title: "Playground", url: "/app/playground", icon: PenSquare },
     { title: "Connections", url: "/app/connections", icon: Share2 },

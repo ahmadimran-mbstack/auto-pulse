@@ -164,6 +164,8 @@ def request_approval(
             {"id": post.id},
         )
         db.commit()
+        from app.services.analytics import invalidate_analytics_cache
+        invalidate_analytics_cache(str(post.user_id))
         return True
     else:
         approval.send_attempts += 1
@@ -271,6 +273,9 @@ def decide_approval(
                     )
         except Exception as update_exc:
             logger.debug(f"Slack message update after decision skipped: {update_exc}")
+
+        from app.services.analytics import invalidate_analytics_cache
+        invalidate_analytics_cache(str(claimed_user_id))
 
         return {"status": "ok", "decision": decision}
 

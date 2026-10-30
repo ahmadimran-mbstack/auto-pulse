@@ -2,6 +2,7 @@ import { authClient } from "./auth/client";
 import { env } from "./env";
 import { tokenCache } from "./token-cache";
 import type { DashboardData } from "../types/dashboard";
+import type { AnalyticsDashboardData, AnalyticsRange } from "../types/analytics";
 import type {
   ApiError,
   Profile,
@@ -533,6 +534,23 @@ export async function getPostAgentTrace(postId: string): Promise<{ trace: AgentT
     trace: data.trace ?? data.agent_trace ?? null,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Analytics API Endpoints
+// ---------------------------------------------------------------------------
+
+// Fetches SQL-aggregated analytics for the signed-in user and range (7d, 30d, 90d)
+export async function getAnalytics(
+  range: AnalyticsRange = "30d"
+): Promise<AnalyticsDashboardData> {
+  return apiCall<AnalyticsDashboardData>(
+    `/analytics?range=${encodeURIComponent(range)}`,
+    {
+      method: "GET",
+    }
+  );
+}
+
 
 
 

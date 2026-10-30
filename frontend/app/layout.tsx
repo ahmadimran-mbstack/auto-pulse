@@ -1,9 +1,16 @@
 import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
+import { Manrope } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
+
+const manrope = Manrope({
+  subsets: ["latin"],
+  variable: "--font-manrope",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "AutoPulse: Daily LinkedIn posts. You approve each one.",
@@ -28,7 +35,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={GeistSans.variable}
+      className={`${GeistSans.variable} ${manrope.variable}`}
       suppressHydrationWarning
       data-scroll-behavior="smooth"
     >

@@ -41,7 +41,9 @@ export function SiteHeader() {
 
   // Derive human-readable page title based on path
   let pageTitle = "Overview";
-  if (pathname.startsWith("/app/posts")) {
+  if (pathname.startsWith("/app/analytics")) {
+    pageTitle = "Analytics";
+  } else if (pathname.startsWith("/app/posts")) {
     pageTitle = "Posts";
   } else if (pathname.startsWith("/app/playground")) {
     pageTitle = "Post to LinkedIn";

@@ -26,8 +26,10 @@ import {
   createPlaygroundRun,
   getRun,
   getPostAgentTrace,
+  getAnalytics,
 } from "./api";
 import type { DashboardData } from "../types/dashboard";
+import type { AnalyticsDashboardData, AnalyticsRange } from "../types/analytics";
 import type {
   GetPostsParams,
   PaginatedPosts,
@@ -97,6 +99,8 @@ export const queryKeys = {
     ["autopulse", userId || "anonymous", "run", runId] as const,
   postTrace: (userId: string, postId: string) =>
     ["autopulse", userId || "anonymous", "post-trace", postId] as const,
+  analytics: (userId: string, range: AnalyticsRange = "30d") =>
+    ["autopulse", userId || "anonymous", "analytics", range] as const,
 };
 
 
@@ -165,6 +169,16 @@ export function useConnectionsQuery(userId: string) {
   });
 }
 
+// 7. Analytics Dashboard Query (Freshness: 60s)
+export function useAnalyticsQuery(userId: string, range: AnalyticsRange = "30d") {
+  return useQuery<AnalyticsDashboardData>({
+    queryKey: queryKeys.analytics(userId, range),
+    queryFn: () => getAnalytics(range),
+    staleTime: 60_000,
+    enabled: !!userId,
+  });
+}
+
 // Prefetch helpers for fast hover / keyboard focus navigation
 export async function prefetchDashboard(userId: string): Promise<void> {
   if (!userId) return;
@@ -214,6 +228,18 @@ export async function prefetchConnections(userId: string): Promise<void> {
     queryKey: queryKeys.connections(userId),
     queryFn: () => getConnections(),
     staleTime: 30_000,
+  });
+}
+
+export async function prefetchAnalytics(
+  userId: string,
+  range: AnalyticsRange = "30d"
+): Promise<void> {
+  if (!userId) return;
+  await queryClient.prefetchQuery({
+    queryKey: queryKeys.analytics(userId, range),
+    queryFn: () => getAnalytics(range),
+    staleTime: 60_000,
   });
 }
 

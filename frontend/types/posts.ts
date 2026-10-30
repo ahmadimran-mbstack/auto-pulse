@@ -8,6 +8,7 @@ export type PostStatus =
   | "publishing"
   | "published"
   | "failed"
+  | "outcome_unknown"
   | "expired";
 
 export interface PostSource {

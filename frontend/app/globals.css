@@ -77,6 +77,13 @@
   --status-neutral-bg: #eef2ff;
   --status-neutral-arc: #6366f1;
 
+  /* Chart series tokens: light mode */
+  --chart-1: #0072f5;
+  --chart-2: #46a758;
+  --chart-3: #6366f1;
+  --chart-4: #d97706;
+  --chart-5: #e5484d;
+
   /* Radius rules: 8px for cards, inputs, menus; 6px for small buttons and keys */
   --radius: 8px;
 
@@ -154,6 +161,13 @@
   --status-neutral-arc: #6366f1;
   --status-neutral-bg: color-mix(in srgb, var(--status-neutral-arc) 14%, var(--card));
 
+  /* Chart series tokens: dark mode */
+  --chart-1: #52a9ff;
+  --chart-2: #62c073;
+  --chart-3: #818cf8;
+  --chart-4: #ffca16;
+  --chart-5: #ff6369;
+
   /* No shadows in dark mode for cards */
   --card-shadow: none;
   --elevation-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
@@ -208,12 +222,18 @@
   --color-status-neutral-bg: var(--status-neutral-bg);
   --color-status-neutral-arc: var(--status-neutral-arc);
 
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
 
   --font-sans: var(--font-geist-sans), "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-display: var(--font-geist-sans), "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: var(--font-manrope), "Manrope", var(--font-geist-sans), "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 /* Base typography and body reset: Geist Sans with font-normal body text */
@@ -236,8 +256,11 @@ body {
 }
 
 /* Display font class for headings */
-.font-display {
-  font-family: var(--font-sans);
+.font-display,
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
   font-weight: 600;
   letter-spacing: -0.025em;
 }

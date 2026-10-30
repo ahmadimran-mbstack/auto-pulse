@@ -17,9 +17,10 @@ import {
   Calendar,
   Shield,
   PenSquare,
+  BarChart3,
 } from "lucide-react";
 
-import { useDashboardQuery, prefetchDashboard, prefetchPosts, prefetchConnections, prefetchProfile } from "@/lib/queries";
+import { useDashboardQuery, prefetchDashboard, prefetchPosts, prefetchConnections, prefetchProfile, prefetchAnalytics } from "@/lib/queries";
 import { SidebarNoticeCard } from "@/components/app/sidebar-notice-card";
 import { SidebarUserRow } from "@/components/app/sidebar-user-row";
 import { CommandPalette } from "@/components/app/command-palette";
@@ -71,6 +72,7 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
   // Prefetch cache on hover or focus
   const handlePrefetch = (url: string) => {
     if (url === "/app") prefetchDashboard(user.id);
+    else if (url === "/app/analytics") prefetchAnalytics(user.id);
     else if (url === "/app/posts") prefetchPosts(user.id);
     else if (url === "/app/connections") prefetchConnections(user.id);
     else if (url === "/app/settings") prefetchProfile(user.id);
@@ -78,6 +80,7 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
 
   const navItems = [
     { title: "Overview", url: "/app", icon: LayoutDashboard, exact: true },
+    { title: "Analytics", url: "/app/analytics", icon: BarChart3, exact: false },
     { title: "Posts", url: "/app/posts", icon: FileText, exact: false },
     { title: "Playground", url: "/app/playground", icon: PenSquare, exact: false },
     { title: "Connections", url: "/app/connections", icon: Share2, exact: false },

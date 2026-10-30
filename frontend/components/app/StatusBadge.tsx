@@ -1,6 +1,7 @@
 import * as React from "react";
-import { CheckIcon, Loader2Icon, ClockIcon, AlertCircleIcon } from "lucide-react";
+import { CheckIcon, Loader2Icon, ClockIcon, AlertCircleIcon, HelpCircleIcon } from "lucide-react";
 import { Badge, type badgeVariants } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { VariantProps } from "class-variance-authority";
 import type { PostStatus } from "@/types/posts";
 
@@ -53,6 +54,11 @@ const statusMap: Record<string, StatusConfig> = {
     label: "Failed",
     icon: <AlertCircleIcon className="size-3 text-status-danger-fg" />,
   },
+  outcome_unknown: {
+    variant: "warning",
+    label: "Outcome unknown",
+    icon: <HelpCircleIcon className="size-3 text-status-warning-fg" />,
+  },
   expired: {
     variant: "warning",
     label: "Expired",
@@ -78,10 +84,25 @@ export function StatusBadge({ status, className }: StatusBadgeProps) {
     label: status.replace(/_/g, " "),
   };
 
-  return (
+  const badge = (
     <Badge variant={config.variant} className={className}>
       {config.icon}
       <span>{config.label}</span>
     </Badge>
   );
+
+  if (normalized === "outcome_unknown") {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex cursor-help">{badge}</span>
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          LinkedIn may have posted this. Check your profile.
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return badge;
 }

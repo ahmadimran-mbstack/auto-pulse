@@ -299,6 +299,9 @@ async def _execute_direct_post(
     db.commit()
     db.refresh(post)
 
+    from app.services.analytics import invalidate_analytics_cache
+    invalidate_analytics_cache(str(user.id))
+
     # If publishing failed, raise with preserved draft id and clear message
     if publish_error_msg:
         raise HTTPException(
