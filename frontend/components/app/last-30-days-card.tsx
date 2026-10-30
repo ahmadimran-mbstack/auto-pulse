@@ -79,10 +79,10 @@ export function Last30DaysCard({ stats, connections }: Last30DaysCardProps) {
           Last 30 days
         </h3>
         <Link
-          href="/app/posts"
+          href="/app/analytics"
           className="flex h-6 items-center rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors duration-150 ease-in-out"
         >
-          View posts
+          View Analytics
         </Link>
       </div>
 
