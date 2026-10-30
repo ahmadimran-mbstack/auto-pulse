@@ -70,9 +70,9 @@
   --status-danger-bg: #ffeeef;
   --status-danger-arc: #e5484d;
 
-  --status-neutral-fg: #4d4d4d;
-  --status-neutral-bg: #e6e6e6;
-  --status-neutral-arc: #666666;
+  --status-neutral-fg: #4338ca;
+  --status-neutral-bg: #eef2ff;
+  --status-neutral-arc: #6366f1;
 
   /* Radius rules: 8px for cards, inputs, menus; 6px for small buttons and keys */
   --radius: 8px;
@@ -146,8 +146,8 @@
   --status-danger-arc: #e5484d;
   --status-danger-bg: color-mix(in srgb, var(--status-danger-arc) 14%, var(--card));
 
-  --status-neutral-fg: #a1a1a1;
-  --status-neutral-arc: #a1a1a1;
+  --status-neutral-fg: #a5b4fc;
+  --status-neutral-arc: #6366f1;
   --status-neutral-bg: color-mix(in srgb, var(--status-neutral-arc) 14%, var(--card));
 
   /* No shadows in dark mode for cards */

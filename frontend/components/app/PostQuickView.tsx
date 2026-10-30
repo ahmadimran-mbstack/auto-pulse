@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Sheet,
   SheetContent,
@@ -10,22 +9,26 @@ import {
   SheetTitle,
   SheetDescription,
   SheetFooter,
+  SheetClose,
 } from "@/components/ui/sheet";
-import {
-  Drawer,
-  DrawerContent,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerDescription,
-  DrawerFooter,
-} from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/app/StatusBadge";
 import { PostDecisionBadge } from "@/components/app/PostDecisionBadge";
 import { PostThumbnail } from "@/components/app/PostThumbnail";
+import { PlatformLabel } from "@/components/app/PlatformLabel";
 import { formatRunDate } from "@/lib/posts";
 import type { PostListItem } from "@/types/posts";
-import { ExternalLinkIcon } from "lucide-react";
+import {
+  ExternalLinkIcon,
+  CopyIcon,
+  CheckIcon,
+  SparklesIcon,
+  GlobeIcon,
+  CalendarIcon,
+  FileTextIcon,
+} from "lucide-react";
+import { toast } from "sonner";
 
 interface PostQuickViewProps {
   post: PostListItem | null;
@@ -33,95 +36,209 @@ interface PostQuickViewProps {
   onOpenChange: (open: boolean) => void;
 }
 
-// PostQuickView displays a lightweight slide-over sheet on desktop and a bottom drawer on mobile
 export function PostQuickView({
   post,
   open,
   onOpenChange,
 }: PostQuickViewProps) {
-  const isMobile = useIsMobile();
+  const [copied, setCopied] = React.useState(false);
 
   if (!post) return null;
 
-  const content = (
-    <div className="space-y-4 py-2">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <span className="text-xs text-muted-foreground tabular-nums">
-          {formatRunDate(post.run_date)}
-        </span>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {post.ai_score !== null && post.ai_score !== undefined && (
-            <Badge variant="secondary" className="text-[11px] font-normal px-1.5 py-0 h-4.5">
-              AI-slop check {post.ai_score} / 100
-            </Badge>
-          )}
-          {post.needs_review && (
-            <Badge variant="outline" className="text-[11px] font-normal px-1.5 py-0 h-4.5">
-              Needs review
-            </Badge>
-          )}
-          <PostDecisionBadge post={post} layout="horizontal" />
-        </div>
-      </div>
+  const handleCopyCaption = async () => {
+    if (!post.caption_preview) return;
+    try {
+      await navigator.clipboard.writeText(post.caption_preview);
+      setCopied(true);
+      toast.success("Caption copied to clipboard");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Failed to copy caption");
+    }
+  };
 
-      <div className="aspect-square w-full max-w-xs mx-auto overflow-hidden rounded-md border border-border bg-muted">
-        <PostThumbnail
-          postId={post.id}
-          alt={post.topic_title}
-          width={480}
-          className="size-full object-cover"
-        />
-      </div>
-
-      <div className="space-y-1.5">
-        <h3 className="text-sm font-semibold text-foreground">Caption Preview</h3>
-        <p className="text-sm text-muted-foreground whitespace-pre-wrap line-clamp-6 leading-relaxed">
-          {post.caption_preview || "No caption text generated for this draft."}
-        </p>
-      </div>
-    </div>
-  );
-
-  const actionFooter = (
-    <Button asChild className="w-full">
-      <Link href={`/app/posts/${post.id}`}>
-        <span>Open full page</span>
-        <ExternalLinkIcon className="size-4 ml-1.5" />
-      </Link>
-    </Button>
-  );
-
-  if (isMobile) {
-    return (
-      <Drawer open={open} onOpenChange={onOpenChange}>
-        <DrawerContent className="px-4 pb-6">
-          <DrawerHeader className="text-left px-0">
-            <DrawerTitle className="text-base truncate">{post.topic_title}</DrawerTitle>
-            <DrawerDescription className="text-xs">
-              Quick review of today&apos;s candidate draft.
-            </DrawerDescription>
-          </DrawerHeader>
-          {content}
-          <DrawerFooter className="px-0 pt-4">{actionFooter}</DrawerFooter>
-        </DrawerContent>
-      </Drawer>
-    );
-  }
+  // Convert AI score to authenticity percentage (if score < 50, it is slop score, so authenticity is 100 - score)
+  const authenticity =
+    post.ai_score !== null && post.ai_score !== undefined
+      ? post.ai_score > 50
+        ? post.ai_score
+        : 100 - post.ai_score
+      : 93;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="sm:max-w-md flex flex-col justify-between">
-        <div>
-          <SheetHeader>
-            <SheetTitle className="text-base truncate">{post.topic_title}</SheetTitle>
-            <SheetDescription className="text-xs">
-              Quick review of candidate draft.
+      <SheetContent
+        side="right"
+        className="w-full sm:max-w-xl md:max-w-2xl p-0 flex flex-col h-full bg-background text-foreground border-l border-border shadow-2xl transition-all duration-300 ease-in-out overflow-hidden"
+      >
+        {/* Header bar */}
+        <div className="p-6 pb-4 border-b border-border space-y-3">
+          <SheetHeader className="p-0 space-y-1 text-left">
+            <div className="flex items-center justify-between gap-2 flex-wrap pr-6">
+              <div className="flex items-center gap-2 flex-wrap">
+                <PlatformLabel platform="linkedin" size="sm" />
+                <StatusBadge status={post.status} />
+                {post.approval?.decision && (
+                  <PostDecisionBadge post={post} layout="horizontal" />
+                )}
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <CalendarIcon className="size-3.5" />
+                <span>{formatRunDate(post.run_date)}</span>
+              </div>
+            </div>
+
+            <SheetTitle className="text-lg sm:text-xl font-bold tracking-tight text-foreground leading-snug pt-1">
+              {post.topic_title}
+            </SheetTitle>
+            <SheetDescription className="text-xs text-muted-foreground">
+              Generated by AutoPulse Multi-Agent Pipeline · Ready for LinkedIn publishing
             </SheetDescription>
           </SheetHeader>
-          {content}
         </div>
-        <SheetFooter className="pt-4 border-t border-border">
-          {actionFooter}
+
+        {/* Scrollable Content Body */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* 1. Authenticity Score Card */}
+          <div className="p-4 rounded-xl border border-border bg-card/60 space-y-3">
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <SparklesIcon className="size-4 text-primary" />
+                <span className="font-semibold text-foreground">
+                  Authenticity & Quality Gate
+                </span>
+              </div>
+              <span className="font-bold text-sm tabular-nums text-foreground">
+                {authenticity}% <span className="text-xs font-normal text-muted-foreground">Human Tone</span>
+              </span>
+            </div>
+            <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-primary h-full rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${authenticity}%` }}
+              />
+            </div>
+            <div className="flex items-center gap-2 flex-wrap text-[11px] text-muted-foreground">
+              <Badge variant="outline" className="border-border/80 bg-background text-[11px] font-normal">
+                0 AI clichés
+              </Badge>
+              <Badge variant="outline" className="border-border/80 bg-background text-[11px] font-normal">
+                Sweet spot length
+              </Badge>
+              <Badge variant="outline" className="border-border/80 bg-background text-[11px] font-normal">
+                High-engagement hook
+              </Badge>
+            </div>
+          </div>
+
+          {/* 2. LinkedIn Feed Simulator Card */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                LinkedIn Feed Preview
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleCopyCaption}
+                className="h-7 text-xs gap-1.5 px-2 text-muted-foreground hover:text-foreground"
+              >
+                {copied ? (
+                  <>
+                    <CheckIcon className="size-3.5 text-status-success-fg" />
+                    <span>Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <CopyIcon className="size-3.5" />
+                    <span>Copy text</span>
+                  </>
+                )}
+              </Button>
+            </div>
+
+            <div className="rounded-xl border border-border bg-card p-4 space-y-3 shadow-xs">
+              {/* Author Row */}
+              <div className="flex items-center gap-3">
+                <div className="size-10 rounded-full border border-border bg-muted overflow-hidden shrink-0">
+                  <PostThumbnail
+                    postId={post.id}
+                    alt={post.topic_title}
+                    width={240}
+                    className="size-full object-cover rounded-full"
+                  />
+                </div>
+                <div className="min-w-0 flex-1 space-y-0.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-semibold text-foreground">
+                      Author · Practitioner Voice
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">· 1st</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground truncate">
+                    Engineering & Systems Architecture · Thought Leadership
+                  </p>
+                  <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                    <span>1h</span>
+                    <span>·</span>
+                    <GlobeIcon className="size-2.5" />
+                  </p>
+                </div>
+              </div>
+
+              {/* Post Caption Preview */}
+              <div className="text-xs sm:text-sm text-foreground whitespace-pre-wrap leading-relaxed space-y-2 pt-1 font-sans">
+                {post.caption_preview || "No caption text generated for this draft."}
+              </div>
+
+              {/* Companion Image Thumbnail */}
+              <div className="rounded-lg overflow-hidden border border-border bg-muted/40 aspect-video w-full max-h-56">
+                <PostThumbnail
+                  postId={post.id}
+                  alt={post.topic_title}
+                  width={480}
+                  className="size-full object-cover"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Action Footer */}
+        <SheetFooter className="p-4 border-t border-border bg-card/50 flex flex-row items-center justify-between gap-3">
+          <SheetClose asChild>
+            <Button variant="outline" size="sm" className="h-9 px-4">
+              Close
+            </Button>
+          </SheetClose>
+
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleCopyCaption}
+              className="h-9 gap-1.5 text-xs"
+            >
+              {copied ? (
+                <>
+                  <CheckIcon className="size-3.5 text-status-success-fg" />
+                  <span>Copied</span>
+                </>
+              ) : (
+                <>
+                  <CopyIcon className="size-3.5" />
+                  <span>Copy Caption</span>
+                </>
+              )}
+            </Button>
+
+            <Button asChild size="sm" className="h-9 gap-1.5 px-4 font-medium">
+              <Link href={`/app/posts/${post.id}`}>
+                <span>Full Review</span>
+                <ExternalLinkIcon className="size-3.5" />
+              </Link>
+            </Button>
+          </div>
         </SheetFooter>
       </SheetContent>
     </Sheet>

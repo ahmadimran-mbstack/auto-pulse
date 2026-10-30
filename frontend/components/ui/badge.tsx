@@ -18,7 +18,7 @@ const badgeVariants = cva(
         success: "border-transparent bg-status-success-bg text-status-success-fg",
         warning: "border-transparent bg-status-warning-bg text-status-warning-fg",
         danger: "border-transparent bg-status-danger-bg text-status-danger-fg",
-        neutral: "border-transparent bg-status-neutral-bg text-status-neutral-fg",
+        neutral: "border-transparent bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300",
         // Backward compatibility mappings
         draft: "border-transparent bg-status-warning-bg text-status-warning-fg",
         approved: "border-transparent bg-status-success-bg text-status-success-fg",

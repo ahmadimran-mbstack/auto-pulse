@@ -1,6 +1,8 @@
+import { Suspense } from "react";
 import { auth } from "@/lib/auth/server";
 import { redirect } from "next/navigation";
 import { PostsClient } from "./PostsClient";
+import { PostsSkeleton } from "@/components/app/PostsSkeleton";
 
 export const dynamic = "force-dynamic";
 
@@ -17,5 +19,9 @@ export default async function PostsPage() {
     email: session.user.email,
   };
 
-  return <PostsClient user={user} />;
+  return (
+    <Suspense fallback={<PostsSkeleton />}>
+      <PostsClient user={user} />
+    </Suspense>
+  );
 }
