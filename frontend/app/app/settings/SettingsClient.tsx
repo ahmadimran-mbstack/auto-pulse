@@ -1114,12 +1114,13 @@ function ScheduleTabForm({
                         <PlatformLabel platform="email" size="sm" />
                       </div>
                       {emailApprovalEnabled ? (
-                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40">
-                          <span className="size-1.5 rounded-full bg-emerald-500" />
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200/80 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-700/50">
+                          <span className="size-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 shrink-0" />
                           Active
                         </span>
                       ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium text-muted-foreground bg-muted/40 border border-border/50">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40">
+                          <span className="size-1.5 rounded-full bg-amber-500 dark:bg-amber-400 shrink-0" />
                           Disabled
                         </span>
                       )}
@@ -1199,28 +1200,30 @@ function ScheduleTabForm({
                       {isSlackConnected ? (
                         <div className="flex items-center gap-2 flex-wrap">
                           {slackStatus?.team_name && (
-                            <span className="text-xs text-muted-foreground font-medium hidden sm:inline">
+                            <span className="text-xs text-muted-foreground font-medium hidden sm:inline px-1.5 py-0.5 rounded bg-muted/60 border border-border/60">
                               {slackStatus.team_name}
                             </span>
                           )}
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40">
-                            <span className="size-1.5 rounded-full bg-emerald-500" />
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200/80 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-700/50">
+                            <span className="size-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 shrink-0" />
                             Connected
                           </span>
                           {slackApprovalEnabled ? (
-                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40">
-                              <span className="size-1.5 rounded-full bg-emerald-500" />
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200/80 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-700/50">
+                              <span className="size-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 shrink-0" />
                               Active
                             </span>
                           ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium text-muted-foreground bg-muted/40 border border-border/50">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40">
+                              <span className="size-1.5 rounded-full bg-amber-500 dark:bg-amber-400 shrink-0" />
                               Disabled
                             </span>
                           )}
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium text-muted-foreground bg-muted/40 border border-border/50">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40">
+                            <span className="size-1.5 rounded-full bg-amber-500 dark:bg-amber-400 shrink-0" />
                             Not connected
                           </span>
                           <Button
