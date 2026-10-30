@@ -98,7 +98,11 @@ export function SiteHeader() {
             <SheetHeader className="sr-only">
               <SheetTitle>Navigation Menu</SheetTitle>
             </SheetHeader>
-            <AppSidebar user={user} className="w-full h-full border-r-0" />
+            <AppSidebar
+              user={user}
+              className="w-full h-full border-r-0"
+              onNavigate={() => setMobileOpen(false)}
+            />
           </SheetContent>
         </Sheet>
 

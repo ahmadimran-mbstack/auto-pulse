@@ -32,9 +32,10 @@ interface AppSidebarProps {
     email: string;
   };
   className?: string;
+  onNavigate?: () => void;
 }
 
-export function AppSidebar({ user, className }: AppSidebarProps) {
+export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentTab = searchParams.get("tab") || "profile";
@@ -141,6 +142,7 @@ export function AppSidebar({ user, className }: AppSidebarProps) {
                 <Link
                   key={item.title}
                   href={item.url}
+                  onClick={() => onNavigate?.()}
                   onMouseEnter={() => handlePrefetch(item.url)}
                   onFocus={() => handlePrefetch(item.url)}
                   className={cn(
@@ -173,6 +175,7 @@ export function AppSidebar({ user, className }: AppSidebarProps) {
                   onClick={() => {
                     // Let row toggle expand or navigate
                     setUserSettingsExpanded(true);
+                    onNavigate?.();
                   }}
                 >
                   <Settings className="size-4 shrink-0" strokeWidth={1.5} />
@@ -213,6 +216,7 @@ export function AppSidebar({ user, className }: AppSidebarProps) {
                       <Link
                         key={sub.tab}
                         href={`/app/settings?tab=${sub.tab}`}
+                        onClick={() => onNavigate?.()}
                         className={cn(
                           "flex h-8 items-center gap-2.5 rounded-md px-2.5 text-xs transition-colors duration-200 ease-in-out",
                           isSubActive

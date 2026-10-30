@@ -1,4 +1,6 @@
+import { Suspense } from "react";
 import { SettingsClient } from "./SettingsClient";
+import { SettingsSkeleton } from "@/components/app/SettingsSkeleton";
 
 export const metadata = {
   title: "Settings - AutoPulse",
@@ -6,5 +8,9 @@ export const metadata = {
 };
 
 export default function SettingsPage() {
-  return <SettingsClient />;
+  return (
+    <Suspense fallback={<SettingsSkeleton />}>
+      <SettingsClient />
+    </Suspense>
+  );
 }

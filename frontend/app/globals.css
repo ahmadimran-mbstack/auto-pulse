@@ -353,6 +353,23 @@ textarea {
   animation-duration: 200ms !important;
 }
 
+/* Tab content transition: smooth ease-in and ease-out */
+@keyframes tabFadeSlide {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-tab-transition {
+  animation: tabFadeSlide 240ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  will-change: opacity, transform;
+}
+
 /* Motion preference override */
 @media (prefers-reduced-motion: reduce) {
   *,

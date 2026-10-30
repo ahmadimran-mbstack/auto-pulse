@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, useWatch, type Path } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import type { Profile } from "@/types/profile";
@@ -76,7 +76,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import {
   profileFormSchema,
@@ -113,11 +112,17 @@ const DAY_OPTIONS = [
 
 export function SettingsClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, refreshUser } = useUser();
   const { data: profile, isLoading } = useProfileQuery(user.id);
   const patchProfileMutation = usePatchProfileMutation(user.id);
 
-  const [activeTab, setActiveTab] = React.useState<SettingsTab>("profile");
+  const tabParam = searchParams.get("tab") as SettingsTab | null;
+  const activeTab: SettingsTab =
+    tabParam && ["profile", "content", "brand", "schedule", "account"].includes(tabParam)
+      ? tabParam
+      : "profile";
+
   const [pendingTab, setPendingTab] = React.useState<SettingsTab | null>(null);
   const [showDiscardDialog, setShowDiscardDialog] = React.useState(false);
 
@@ -143,14 +148,14 @@ export function SettingsClient() {
       setPendingTab(nextTab);
       setShowDiscardDialog(true);
     } else {
-      setActiveTab(nextTab);
+      router.push(`/app/settings?tab=${nextTab}`);
     }
   };
 
   const confirmDiscardTabChange = () => {
     if (pendingTab) {
-      setActiveTab(pendingTab);
       setActiveTabDirty(false);
+      router.push(`/app/settings?tab=${pendingTab}`);
     }
     setShowDiscardDialog(false);
     setPendingTab(null);
@@ -161,107 +166,58 @@ export function SettingsClient() {
   }
 
   return (
-    <div className="p-6 md:p-8 space-y-8 max-w-5xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-3xl w-full min-w-0">
       <PageHeader
         title="Settings"
         description="Manage your profile, content preferences, brand styling, schedule, and account."
       />
 
-      <div className="flex flex-col md:flex-row gap-8 items-start">
-        {/* Desktop Vertical Sub-navigation */}
-        <aside className="hidden md:block w-52 shrink-0">
-          <nav aria-label="Settings sections" className="flex flex-col space-y-1">
-            {TABS.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => handleTabChange(tab.id)}
-                  className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium transition-colors text-left w-full cursor-pointer ${
-                    isActive
-                      ? "bg-secondary text-foreground font-semibold"
-                      : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
-                  }`}
-                  aria-current={isActive ? "page" : undefined}
-                >
-                  <Icon className="size-4 shrink-0" />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </nav>
-        </aside>
+      {/* Tab Content Panel with smooth ease-in and ease-out transitions */}
+      <div key={activeTab} className="animate-tab-transition w-full min-w-0">
+        {activeTab === "profile" && (
+          <ProfileTabForm
+            key={`profile-${profile.updated_at || profile.created_at}`}
+            profile={profile}
+            initialName={user.name || ""}
+            onDirtyChange={setActiveTabDirty}
+            refreshUser={refreshUser}
+            patchProfileMutation={patchProfileMutation}
+          />
+        )}
 
-        {/* Mobile Horizontal Tabs List */}
-        <div className="md:hidden w-full">
-          <Tabs
-            value={activeTab}
-            onValueChange={(val) => handleTabChange(val as SettingsTab)}
-            className="w-full"
-          >
-            <TabsList className="w-full grid grid-cols-5 h-auto p-1">
-              {TABS.map((tab) => (
-                <TabsTrigger
-                  key={tab.id}
-                  value={tab.id}
-                  className="text-xs py-2 px-1 truncate"
-                >
-                  {tab.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        </div>
+        {activeTab === "content" && (
+          <ContentTabForm
+            key={`content-${profile.updated_at || profile.created_at}`}
+            profile={profile}
+            onDirtyChange={setActiveTabDirty}
+            patchProfileMutation={patchProfileMutation}
+          />
+        )}
 
-        {/* Tab Content Panel */}
-        <div className="flex-1 w-full max-w-2xl">
-          {activeTab === "profile" && (
-            <ProfileTabForm
-              key={`profile-${profile.updated_at || profile.created_at}`}
-              profile={profile}
-              initialName={user.name || ""}
-              onDirtyChange={setActiveTabDirty}
-              refreshUser={refreshUser}
-              patchProfileMutation={patchProfileMutation}
-            />
-          )}
+        {activeTab === "brand" && (
+          <BrandTabForm
+            key={`brand-${profile.updated_at || profile.created_at}`}
+            profile={profile}
+            onDirtyChange={setActiveTabDirty}
+            patchProfileMutation={patchProfileMutation}
+          />
+        )}
 
-          {activeTab === "content" && (
-            <ContentTabForm
-              key={`content-${profile.updated_at || profile.created_at}`}
-              profile={profile}
-              onDirtyChange={setActiveTabDirty}
-              patchProfileMutation={patchProfileMutation}
-            />
-          )}
+        {activeTab === "schedule" && (
+          <ScheduleTabForm
+            key={`schedule-${profile.updated_at || profile.created_at}`}
+            profile={profile}
+            onDirtyChange={setActiveTabDirty}
+            patchProfileMutation={patchProfileMutation}
+          />
+        )}
 
-          {activeTab === "brand" && (
-            <BrandTabForm
-              key={`brand-${profile.updated_at || profile.created_at}`}
-              profile={profile}
-              onDirtyChange={setActiveTabDirty}
-              patchProfileMutation={patchProfileMutation}
-            />
-          )}
-
-          {activeTab === "schedule" && (
-            <ScheduleTabForm
-              key={`schedule-${profile.updated_at || profile.created_at}`}
-              profile={profile}
-              onDirtyChange={setActiveTabDirty}
-              patchProfileMutation={patchProfileMutation}
-            />
-          )}
-
-          {activeTab === "account" && (
-            <AccountTabPanel
-              email={user.email}
-              router={router}
-            />
-          )}
-        </div>
+        {activeTab === "account" && (
+          <AccountTabPanel
+            email={user.email}
+            router={router}
+          />
+        )}
       </div>
 
       {/* Unsaved Changes Confirmation Dialog */}
@@ -854,7 +810,16 @@ function ScheduleTabForm({
   const isSlackConnected = slackStatus?.status === "connected";
 
   // Lazily compute timezone list only on settings schedule tab
-  const timezones = React.useMemo(() => getTimezonesLazy(), []);
+  const timezones = React.useMemo(() => {
+    const list = [...getTimezonesLazy()];
+    if (profile.timezone && !list.some((t) => t.value === profile.timezone)) {
+      list.unshift({
+        value: profile.timezone,
+        label: profile.timezone.replace(/_/g, " "),
+      });
+    }
+    return list;
+  }, [profile.timezone]);
   const detectedTz = React.useMemo(() => {
     try {
       return Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -1000,11 +965,11 @@ function ScheduleTabForm({
                   )}
                   <Select onValueChange={field.onChange} value={field.value || "UTC"}>
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger className="w-full h-10 bg-background border-input text-sm">
                         <SelectValue placeholder="Select timezone" />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent className="max-h-60">
+                    <SelectContent position="popper" className="max-h-72 w-[var(--radix-select-trigger-width)]">
                       {timezones.map((tz) => (
                         <SelectItem key={tz.value} value={tz.value}>
                           {tz.label}
@@ -1111,10 +1076,10 @@ function ScheduleTabForm({
                     });
                   }}
                   className={cn(
-                    "p-3.5 rounded-lg border transition-all cursor-pointer flex items-start gap-3.5 select-none",
+                    "p-4 rounded-lg border transition-all cursor-pointer flex items-start gap-3.5 select-none",
                     emailApprovalEnabled
-                      ? "border-primary/50 bg-primary/5 shadow-xs"
-                      : "border-border bg-card/60 hover:bg-muted/40"
+                      ? "border-zinc-300 dark:border-zinc-700 bg-[#f9fafb] dark:bg-zinc-900/50 shadow-xs"
+                      : "border-border/70 bg-white dark:bg-zinc-950 hover:bg-[#f9fafb] dark:hover:bg-zinc-900/30"
                   )}
                 >
                   <Checkbox
@@ -1153,8 +1118,8 @@ function ScheduleTabForm({
                         className={cn(
                           "text-xs font-normal",
                           emailApprovalEnabled
-                            ? "border-primary/30 text-primary bg-primary/10"
-                            : "text-muted-foreground"
+                            ? "border-zinc-300 text-foreground bg-white dark:bg-zinc-800 dark:border-zinc-700"
+                            : "text-muted-foreground bg-transparent border-transparent"
                         )}
                       >
                         {emailApprovalEnabled ? "Active" : "Disabled"}
@@ -1193,10 +1158,10 @@ function ScheduleTabForm({
                     });
                   }}
                   className={cn(
-                    "p-3.5 rounded-lg border transition-all cursor-pointer flex items-start gap-3.5 select-none",
+                    "p-4 rounded-lg border transition-all cursor-pointer flex items-start gap-3.5 select-none",
                     slackApprovalEnabled
-                      ? "border-primary/50 bg-primary/5 shadow-xs"
-                      : "border-border bg-card/60 hover:bg-muted/40"
+                      ? "border-zinc-300 dark:border-zinc-700 bg-[#f9fafb] dark:bg-zinc-900/50 shadow-xs"
+                      : "border-border/70 bg-white dark:bg-zinc-950 hover:bg-[#f9fafb] dark:hover:bg-zinc-900/30"
                   )}
                 >
                   <Checkbox
@@ -1244,6 +1209,17 @@ function ScheduleTabForm({
                             className="border-status-success-fg/30 bg-status-success-bg text-status-success-fg text-xs font-normal"
                           >
                             Connected
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-xs font-normal",
+                              slackApprovalEnabled
+                                ? "border-zinc-300 text-foreground bg-white dark:bg-zinc-800 dark:border-zinc-700"
+                                : "text-muted-foreground bg-transparent border-transparent"
+                            )}
+                          >
+                            {slackApprovalEnabled ? "Active" : "Disabled"}
                           </Badge>
                         </div>
                       ) : (
