@@ -118,7 +118,7 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
             <button
               type="button"
               onClick={() => setCommandOpen(true)}
-              className="flex h-9 w-full items-center justify-between rounded-lg border border-card-border bg-card px-3 text-sm text-muted-foreground transition-colors hover:text-foreground hover:border-border"
+              className="flex h-9 w-full items-center justify-between rounded-lg border border-card-border bg-card px-3 text-sm text-muted-foreground transition-[border-color] duration-200 ease-in-out hover:text-foreground hover:border-input-focus focus:outline-none focus:border-input-focus focus-visible:border-input-focus focus-visible:ring-0"
             >
               <div className="flex items-center gap-2">
                 <Search className="size-4 text-muted-foreground" />

@@ -71,7 +71,10 @@ export function OverviewToolsRow({
   return (
     <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 w-full min-w-0">
       {/* Search Input: fills width */}
-      <div className="relative flex-1 min-w-0 h-9 rounded-lg border border-card-border bg-card px-3 flex items-center gap-2">
+      <div
+        data-input-wrapper
+        className="relative flex-1 min-w-0 h-9 rounded-lg border border-card-border bg-card px-3 flex items-center gap-2 transition-[border-color] duration-200 ease-in-out focus-within:border-input-focus"
+      >
         <Search className="size-4 shrink-0 text-muted-foreground" />
         <input
           ref={searchInputRef}
@@ -79,7 +82,7 @@ export function OverviewToolsRow({
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           placeholder="Search posts"
-          className="flex-1 min-w-0 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+          className="flex-1 min-w-0 bg-transparent text-sm text-foreground placeholder:text-muted-foreground border-none outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 shadow-none focus:shadow-none"
         />
         <kbd
           aria-hidden="true"

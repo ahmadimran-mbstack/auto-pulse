@@ -42,6 +42,7 @@
   --border: #ebebeb; /* dividers, table borders, and edges */
   --card-border: #ebebeb; /* card outlines and inputs */
   --input: #ebebeb;
+  --input-focus: #666666; /* darker gray focus indicator */
   --ring: #0072f5;
 
   /* Sidebar tokens */
@@ -119,6 +120,7 @@
   --border: #242424; /* dividers, table borders, and edges */
   --card-border: #242424; /* card outlines and inputs */
   --input: #242424;
+  --input-focus: #808080; /* lighter gray focus indicator against dark canvas */
   --ring: #3291ff;
 
   /* Sidebar tokens */
@@ -178,6 +180,7 @@
   --color-border: var(--border);
   --color-card-border: var(--card-border);
   --color-input: var(--input);
+  --color-input-focus: var(--input-focus);
   --color-ring: var(--ring);
 
   --color-sidebar: var(--sidebar);
@@ -382,4 +385,62 @@ textarea {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/*
+  Input Focus System:
+  - Eliminates browser default blue outline, ring, and box-shadow.
+  - Smooth 0.2s ease border-color transition on focus and blur.
+  - Automatically adapts for light mode (darker gray) and dark mode (lighter gray).
+  - Keeps identical border width to prevent layout shifts.
+*/
+input,
+textarea,
+select {
+  outline: none;
+}
+
+input:focus,
+input:focus-visible,
+textarea:focus,
+textarea:focus-visible,
+select:focus,
+select:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Standalone inputs, textareas, and select triggers */
+[data-slot="input"],
+[data-slot="textarea"],
+[data-slot="select-trigger"] {
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+[data-slot="input"]:focus,
+[data-slot="input"]:focus-visible,
+[data-slot="textarea"]:focus,
+[data-slot="textarea"]:focus-visible,
+[data-slot="select-trigger"]:focus,
+[data-slot="select-trigger"]:focus-visible,
+[data-slot="select-trigger"][data-state="open"] {
+  border-color: var(--input-focus) !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Input wrappers (e.g. search bars with icons, tags inputs, filter bars) */
+[data-input-wrapper] {
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+[data-input-wrapper]:focus-within {
+  border-color: var(--input-focus) !important;
+}
+
+[data-input-wrapper] input {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background-color: transparent !important;
 }

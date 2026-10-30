@@ -88,7 +88,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         </DialogHeader>
 
         {/* Search input bar */}
-        <div className="flex items-center border-b border-border px-3.5 h-12 gap-2.5">
+        <div
+          data-input-wrapper
+          className="flex items-center border-b border-border px-3.5 h-12 gap-2.5 transition-[border-color] duration-200 ease-in-out focus-within:border-input-focus"
+        >
           <Search className="size-4 shrink-0 text-muted-foreground" />
           <input
             autoFocus
@@ -97,7 +100,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search pages or recent posts..."
-            className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+            className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground border-none outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 shadow-none focus:shadow-none"
           />
           <kbd className="hidden sm:inline-flex h-5 items-center rounded border border-border bg-secondary px-1.5 text-xs font-mono text-muted-foreground">
             ESC
