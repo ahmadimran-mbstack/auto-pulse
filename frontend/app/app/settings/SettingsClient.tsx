@@ -944,8 +944,8 @@ function ScheduleTabForm({
                   <div className="flex items-center justify-between flex-wrap gap-2">
                     <FormLabel>Timezone</FormLabel>
                     {currentTimeInSelectedTz && (
-                      <span className="text-xs text-muted-foreground font-mono">
-                        Current time: <span className="font-semibold text-foreground">{currentTimeInSelectedTz}</span>
+                      <span className="text-xs text-muted-foreground font-mono" suppressHydrationWarning>
+                        Current time: <span className="font-semibold text-foreground" suppressHydrationWarning>{currentTimeInSelectedTz}</span>
                       </span>
                     )}
                   </div>

@@ -30,8 +30,12 @@ export default function RootLayout({
       lang="en"
       className={GeistSans.variable}
       suppressHydrationWarning
+      data-scroll-behavior="smooth"
     >
-      <body className="min-h-screen bg-background text-foreground font-sans antialiased flex flex-col font-normal">
+      <body
+        className="min-h-screen bg-background text-foreground font-sans antialiased flex flex-col font-normal"
+        suppressHydrationWarning
+      >
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
