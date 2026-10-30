@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { ChevronsUpDown, Plus, Loader2, Menu } from "lucide-react";
+import { ChevronsUpDown, Plus, Loader2, Menu, PanelLeft } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,9 +10,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AppSidebar } from "@/components/app-sidebar";
 import { useUser } from "@/components/providers/user-provider";
+import { useAppSidebarState } from "@/components/providers/sidebar-provider";
 import { useDashboardQuery, useGenerateDraftMutation } from "@/lib/queries";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -31,8 +33,7 @@ export function SiteHeader() {
   const searchParams = useSearchParams();
   const currentStatus = searchParams.get("status") || "all";
   const { user } = useUser();
-
-  const [mobileOpen, setMobileOpen] = React.useState(false);
+  const { open, mobileOpen, setMobileOpen, toggle } = useAppSidebarState();
 
   // Retrieve dashboard data to check for pending approvals
   const { data: dashboardData } = useDashboardQuery(user.id);
@@ -81,19 +82,26 @@ export function SiteHeader() {
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-4 md:px-6 sticky top-0 z-20 w-full max-w-full overflow-hidden">
-      {/* Left: Mobile trigger & Status filter dropdown */}
+      {/* Left: Sidebar slide toggle & Status filter dropdown */}
       <div className="flex items-center gap-2">
-        {/* Mobile sidebar sheet trigger for screens < 1024px */}
-        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-          <SheetTrigger asChild>
+        {/* Sidebar slide toggle button for desktop & mobile */}
+        <Tooltip>
+          <TooltipTrigger asChild>
             <button
               type="button"
-              aria-label="Open mobile menu"
-              className="lg:hidden flex size-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent"
+              aria-label="Toggle navigation sidebar"
+              aria-expanded={mobileOpen || open}
+              onClick={toggle}
+              className="flex size-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             >
-              <Menu className="size-4" />
+              <PanelLeft className="size-4" />
             </button>
-          </SheetTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Toggle sidebar (Ctrl+B)</TooltipContent>
+        </Tooltip>
+
+        {/* Mobile sidebar overlay drawer for screens < 1024px */}
+        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
           <SheetContent side="left" className="p-0 w-64 border-r border-border bg-sidebar">
             <SheetHeader className="sr-only">
               <SheetTitle>Navigation Menu</SheetTitle>

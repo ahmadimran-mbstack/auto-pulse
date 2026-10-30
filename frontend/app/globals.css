@@ -491,3 +491,201 @@ body,
   height: 0 !important;
 }
 
+/*
+  Sidebar & Drawer Slide Animations
+  - Smooth opening: 280ms cubic-bezier(0.32, 0.72, 0, 1)
+  - Smooth closing: 220ms cubic-bezier(0.4, 0, 0.2, 1)
+  - Full GPU transform translateX/translateY
+*/
+
+/* Backdrop Fade */
+@keyframes sheetOverlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes sheetOverlayFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+[data-slot="sheet-overlay"][data-state="open"] {
+  animation: sheetOverlayFadeIn 280ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
+  will-change: opacity;
+}
+
+[data-slot="sheet-overlay"][data-state="closed"] {
+  animation: sheetOverlayFadeOut 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  will-change: opacity;
+}
+
+/* Left Sidebar / Mobile Drawer: Slide in from left */
+@keyframes sheetSlideInLeft {
+  from {
+    transform: translate3d(-100%, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes sheetSlideOutLeft {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-100%, 0, 0);
+  }
+}
+
+[data-slot="sheet-content"][data-side="left"][data-state="open"] {
+  animation: sheetSlideInLeft 280ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
+  will-change: transform;
+}
+
+[data-slot="sheet-content"][data-side="left"][data-state="closed"] {
+  animation: sheetSlideOutLeft 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  will-change: transform;
+}
+
+/* Right Sidebar / Quick View / Trace Panels: Slide in from right */
+@keyframes sheetSlideInRight {
+  from {
+    transform: translate3d(100%, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes sheetSlideOutRight {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(100%, 0, 0);
+  }
+}
+
+[data-slot="sheet-content"][data-side="right"][data-state="open"] {
+  animation: sheetSlideInRight 280ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
+  will-change: transform;
+}
+
+[data-slot="sheet-content"][data-side="right"][data-state="closed"] {
+  animation: sheetSlideOutRight 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  will-change: transform;
+}
+
+/* Top Sheet */
+@keyframes sheetSlideInTop {
+  from {
+    transform: translate3d(0, -100%, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes sheetSlideOutTop {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(0, -100%, 0);
+  }
+}
+
+[data-slot="sheet-content"][data-side="top"][data-state="open"] {
+  animation: sheetSlideInTop 280ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
+  will-change: transform;
+}
+
+[data-slot="sheet-content"][data-side="top"][data-state="closed"] {
+  animation: sheetSlideOutTop 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  will-change: transform;
+}
+
+/* Bottom Sheet */
+@keyframes sheetSlideInBottom {
+  from {
+    transform: translate3d(0, 100%, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes sheetSlideOutBottom {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 100%, 0);
+  }
+}
+
+[data-slot="sheet-content"][data-side="bottom"][data-state="open"] {
+  animation: sheetSlideInBottom 280ms cubic-bezier(0.32, 0.72, 0, 1) forwards;
+  will-change: transform;
+}
+
+[data-slot="sheet-content"][data-side="bottom"][data-state="closed"] {
+  animation: sheetSlideOutBottom 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  will-change: transform;
+}
+
+/*
+  Desktop Persistent Sidebar & Synchronized Content Shift
+  - Grid-based synchronized sliding layout: sidebar GPU transforms while grid column resizes.
+  - Zero initial load slide animation (only animates on user toggle).
+  - Closed sidebar is hidden from accessibility tree and keyboard Tab navigation.
+*/
+.app-shell-grid {
+  display: flex;
+}
+
+@media (min-width: 1024px) {
+  .app-shell-grid {
+    display: grid;
+    grid-template-columns: 16rem 1fr;
+    transition: none;
+  }
+
+  .app-shell-grid[data-sidebar-ready="true"] {
+    transition: grid-template-columns 280ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .app-shell-grid[data-sidebar-ready="true"][data-sidebar-state="closed"] {
+    grid-template-columns: 0rem 1fr;
+    transition: grid-template-columns 220ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .app-desktop-sidebar {
+    position: relative;
+    overflow: hidden;
+    height: 100vh;
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
+  }
+
+  .app-shell-grid[data-sidebar-ready="true"] .app-desktop-sidebar {
+    transition: transform 280ms cubic-bezier(0.32, 0.72, 0, 1), visibility 0s 0s;
+  }
+
+  .app-shell-grid[data-sidebar-ready="true"][data-sidebar-state="closed"] .app-desktop-sidebar {
+    transform: translate3d(-100%, 0, 0);
+    visibility: hidden;
+    transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1), visibility 0s 220ms;
+  }
+}
+
+
