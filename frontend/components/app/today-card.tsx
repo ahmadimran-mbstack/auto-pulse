@@ -6,6 +6,7 @@ import { Sparkles, Loader2, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { PostThumbnail } from "@/components/app/PostThumbnail";
+import { StatusBadge } from "@/components/app/StatusBadge";
 import { StatusRing } from "@/components/app/status-ring";
 import { Button } from "@/components/ui/button";
 import { formatNextDraftTime } from "@/lib/posts";
@@ -103,8 +104,9 @@ export function TodayCard({ today, schedule, timezone }: TodayCardProps) {
             </div>
           </div>
 
-          {/* Right action area: StatusRing and Button */}
-          <div className="flex items-center gap-3 shrink-0">
+          {/* Right action area: StatusBadge, StatusRing and Button */}
+          <div className="flex items-center gap-2.5 shrink-0">
+            <StatusBadge status={today.status} />
             <StatusRing status={today.status} size={32} />
             {today.status === "awaiting_approval" ? (
               <Button

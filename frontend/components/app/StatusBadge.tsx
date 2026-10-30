@@ -14,26 +14,27 @@ interface StatusConfig {
 
 const statusMap: Record<string, StatusConfig> = {
   draft: {
-    variant: "draft",
+    variant: "warning",
     label: "Draft",
   },
   awaiting_approval: {
-    variant: "draft",
+    variant: "warning",
     label: "Awaiting approval",
   },
   approved: {
-    variant: "approved",
+    variant: "success",
     label: "Approved",
+    icon: <CheckIcon className="size-3 text-status-success-fg" />,
   },
   publishing: {
-    variant: "neutral",
+    variant: "info",
     label: "Publishing",
-    icon: <Loader2Icon className="size-3 animate-spin" />,
+    icon: <Loader2Icon className="size-3 animate-spin text-status-info-fg" />,
   },
   published: {
-    variant: "published",
+    variant: "success",
     label: "Published",
-    icon: <CheckIcon className="size-3 text-primary" />,
+    icon: <CheckIcon className="size-3 text-status-success-fg" />,
   },
   rejected: {
     variant: "danger",
@@ -44,11 +45,11 @@ const statusMap: Record<string, StatusConfig> = {
     label: "Failed",
   },
   expired: {
-    variant: "neutral",
+    variant: "warning",
     label: "Expired",
   },
   pending: {
-    variant: "draft",
+    variant: "warning",
     label: "Pending",
   },
 };

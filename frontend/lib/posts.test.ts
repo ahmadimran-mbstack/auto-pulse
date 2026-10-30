@@ -25,12 +25,12 @@ describe("post status chip configuration", () => {
     expect(draftConfig.className).toContain("text-status-warning-fg");
 
     const approvedConfig = getStatusChipConfig("approved");
-    expect(approvedConfig.className).toContain("bg-status-info-bg");
-    expect(approvedConfig.className).toContain("text-status-info-fg");
+    expect(approvedConfig.className).toContain("bg-status-success-bg");
+    expect(approvedConfig.className).toContain("text-status-success-fg");
 
     const rejectedConfig = getStatusChipConfig("rejected");
-    expect(rejectedConfig.className).toContain("bg-status-neutral-bg");
-    expect(rejectedConfig.className).toContain("text-status-neutral-fg");
+    expect(rejectedConfig.className).toContain("bg-status-danger-bg");
+    expect(rejectedConfig.className).toContain("text-status-danger-fg");
 
     const failedConfig = getStatusChipConfig("failed");
     expect(failedConfig.className).toContain("bg-status-danger-bg");
@@ -38,11 +38,12 @@ describe("post status chip configuration", () => {
 
     const publishedConfig = getStatusChipConfig("published");
     expect(publishedConfig.hasCheckIcon).toBe(true);
-    expect(publishedConfig.className).toContain("text-foreground");
+    expect(publishedConfig.className).toContain("bg-status-success-bg");
+    expect(publishedConfig.className).toContain("text-status-success-fg");
 
     const expiredConfig = getStatusChipConfig("expired");
-    expect(expiredConfig.className).toContain("bg-status-neutral-bg");
-    expect(expiredConfig.className).toContain("text-status-neutral-fg");
+    expect(expiredConfig.className).toContain("bg-status-warning-bg");
+    expect(expiredConfig.className).toContain("text-status-warning-fg");
   });
 });
 

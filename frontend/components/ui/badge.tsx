@@ -21,8 +21,8 @@ const badgeVariants = cva(
         neutral: "border-transparent bg-status-neutral-bg text-status-neutral-fg",
         // Backward compatibility mappings
         draft: "border-transparent bg-status-warning-bg text-status-warning-fg",
-        approved: "border-transparent bg-status-info-bg text-status-info-fg",
-        published: "border-border bg-card text-foreground",
+        approved: "border-transparent bg-status-success-bg text-status-success-fg",
+        published: "border-transparent bg-status-success-bg text-status-success-fg",
       },
     },
     defaultVariants: {

@@ -46,13 +46,13 @@ export function StatusRing({
       break;
     case "awaiting_approval":
       arcFraction = 0.5;
-      arcColor = "var(--status-info-arc)";
+      arcColor = "var(--status-warning-arc)";
       label = "Awaiting approval";
       IconComponent = Clock;
       break;
     case "approved":
       arcFraction = 1.0;
-      arcColor = "var(--status-info-arc)";
+      arcColor = "var(--status-success-arc)";
       label = "Approved";
       IconComponent = Check;
       break;
@@ -71,13 +71,13 @@ export function StatusRing({
       break;
     case "rejected":
       arcFraction = 1.0;
-      arcColor = "var(--status-neutral-arc)";
+      arcColor = "var(--status-danger-arc)";
       label = "Rejected";
       IconComponent = X;
       break;
     case "expired":
       arcFraction = 1.0;
-      arcColor = "var(--status-neutral-arc)";
+      arcColor = "var(--status-warning-arc)";
       label = "Expired";
       IconComponent = Minus;
       break;
@@ -89,7 +89,7 @@ export function StatusRing({
       break;
     default:
       arcFraction = 0.25;
-      arcColor = "var(--status-neutral-arc)";
+      arcColor = "var(--status-warning-arc)";
       label = "Status";
       IconComponent = Clock;
       break;

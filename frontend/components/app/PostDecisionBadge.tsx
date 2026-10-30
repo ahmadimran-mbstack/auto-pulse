@@ -57,7 +57,7 @@ export function PostDecisionBadge({
     ? "Rejected via Slack"
     : "Rejected via Email";
 
-  const badgeVariant = isApproved ? "approved" : "danger";
+  const badgeVariant = isApproved ? "success" : "danger";
 
   const icon = isSlack ? (
     <PlatformLabel platform="slack" showName={false} size="xs" />

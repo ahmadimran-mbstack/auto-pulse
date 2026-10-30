@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { FileText, Link2, Loader2 } from "lucide-react";
 import { PostThumbnail } from "@/components/app/PostThumbnail";
+import { StatusBadge } from "@/components/app/StatusBadge";
 import { StatusRing } from "@/components/app/status-ring";
 import { Button } from "@/components/ui/button";
 import { formatRunDate } from "@/lib/posts";
@@ -98,7 +99,10 @@ export function OverviewPostsSection({
                     </div>
                   </div>
 
-                  <StatusRing status={post.status} size={32} />
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <StatusBadge status={post.status} />
+                    <StatusRing status={post.status} size={32} />
+                  </div>
                 </div>
 
                 {/* 12px below: Caption preview line with file-text icon */}
@@ -151,7 +155,10 @@ export function OverviewPostsSection({
                   </span>
                 </div>
 
-                <StatusRing status={post.status} size={28} />
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <StatusBadge status={post.status} />
+                  <StatusRing status={post.status} size={28} />
+                </div>
               </Link>
             );
           })}

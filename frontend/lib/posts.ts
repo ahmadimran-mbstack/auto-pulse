@@ -61,18 +61,18 @@ export function getStatusChipConfig(status: PostStatus): StatusChipConfig {
     case "approved":
       return {
         label: "Approved",
-        className: "bg-status-info-bg text-status-info-fg border-transparent",
+        className: "bg-status-success-bg text-status-success-fg border-transparent",
       };
     case "published":
       return {
         label: "Published",
-        className: "bg-card text-foreground border-border",
+        className: "bg-status-success-bg text-status-success-fg border-transparent",
         hasCheckIcon: true,
       };
     case "rejected":
       return {
         label: "Rejected",
-        className: "bg-status-neutral-bg text-status-neutral-fg border-transparent",
+        className: "bg-status-danger-bg text-status-danger-fg border-transparent",
       };
     case "failed":
       return {
@@ -87,7 +87,7 @@ export function getStatusChipConfig(status: PostStatus): StatusChipConfig {
     case "expired":
       return {
         label: "Expired",
-        className: "bg-status-neutral-bg text-status-neutral-fg border-transparent",
+        className: "bg-status-warning-bg text-status-warning-fg border-transparent",
       };
     default:
       return {
