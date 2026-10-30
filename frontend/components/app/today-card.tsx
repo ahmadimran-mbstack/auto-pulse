@@ -39,7 +39,7 @@ export function TodayCard({ today, schedule, timezone }: TodayCardProps) {
   };
 
   return (
-    <div data-slot="card" className="rounded-lg border border-card-border bg-card p-4">
+    <div data-slot="card" className="w-full min-w-0 overflow-hidden rounded-lg border border-card-border bg-card p-4">
       {!today ? (
         // Empty state with automated schedule details and instant draft generation trigger
         <div className="py-6 px-4 flex flex-col items-center justify-center text-center">
@@ -76,8 +76,8 @@ export function TodayCard({ today, schedule, timezone }: TodayCardProps) {
         </div>
       ) : (
         // Post for today row
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5 min-w-0">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 w-full min-w-0">
+          <div className="flex items-center gap-3.5 min-w-0 flex-1">
             {/* 56px Thumbnail */}
             <div className="size-14 shrink-0 rounded-md overflow-hidden border border-border bg-muted">
               <PostThumbnail
@@ -89,13 +89,13 @@ export function TodayCard({ today, schedule, timezone }: TodayCardProps) {
             </div>
 
             {/* Title and publish timing */}
-            <div className="min-w-0 space-y-0.5">
+            <div className="min-w-0 flex-1 space-y-0.5">
               <h4 className="text-sm font-semibold text-foreground truncate">
                 {today.topic_title}
               </h4>
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
                 <Clock className="size-3 shrink-0" />
-                <span>
+                <span className="truncate">
                   {today.publish_at
                     ? `Scheduled for ${new Date(today.publish_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}${timezone ? ` (${timezone})` : ""}`
                     : `Run date ${today.run_date}`}
@@ -105,7 +105,7 @@ export function TodayCard({ today, schedule, timezone }: TodayCardProps) {
           </div>
 
           {/* Right action area: StatusBadge, StatusRing and Button */}
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-auto">
             <StatusBadge status={today.status} />
             <StatusRing status={today.status} size={32} />
             {today.status === "awaiting_approval" ? (

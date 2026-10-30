@@ -19,16 +19,16 @@ export default async function AppShellLayout({
   return (
     <AppQueryProvider>
       <UserProvider initialUser={user}>
-        <div className="min-h-screen bg-background flex">
+        <div className="min-h-screen bg-background flex w-full max-w-full overflow-x-hidden">
           {/* Fixed 256px sidebar on desktop (1024px and wider) */}
           <div className="hidden lg:block w-64 shrink-0">
             <AppSidebar user={user} className="fixed inset-y-0 left-0 w-64" />
           </div>
 
           {/* Main content column with 56px top header */}
-          <div className="flex-1 flex flex-col min-w-0">
+          <div className="flex-1 flex flex-col min-w-0 w-full max-w-full overflow-x-hidden">
             <SiteHeader />
-            <main className="flex-1 w-full bg-background">
+            <main className="flex-1 w-full min-w-0 max-w-full bg-background overflow-x-hidden">
               {children}
             </main>
           </div>

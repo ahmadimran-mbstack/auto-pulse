@@ -62,7 +62,7 @@ export function OverviewPostsSection({
     <div className="space-y-6">
       {viewMode === "grid" ? (
         // Grid view: single column of cards 24px apart
-        <div className="space-y-6">
+        <div className="space-y-6 w-full min-w-0">
           {posts.map((post) => {
             const relTime = formatRelativeTime(post.created_at || post.run_date);
             const runDateFormatted = formatRunDate(post.run_date);
@@ -72,11 +72,11 @@ export function OverviewPostsSection({
                 key={post.id}
                 href={`/app/posts/${post.id}`}
                 data-slot="card"
-                className="group block rounded-lg border border-card-border bg-card p-4 transition-colors hover:border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="group block rounded-lg border border-card-border bg-card p-4 transition-colors hover:border-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring w-full min-w-0 overflow-hidden"
               >
-                {/* Top row: Avatar (32px round), Title in 16px Manrope, Run date, and StatusRing */}
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
+                {/* Top row: Avatar (32px round), Title, Run date, and StatusBadge + StatusRing */}
+                <div className="flex items-start sm:items-center justify-between gap-3 w-full min-w-0">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div
                       style={{ backgroundColor: brandPrimaryHex || "var(--muted)" }}
                       className="size-8 shrink-0 rounded-full overflow-hidden border border-border flex items-center justify-center text-xs font-semibold text-foreground"
@@ -89,7 +89,7 @@ export function OverviewPostsSection({
                       />
                     </div>
 
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <h4 className="font-sans text-base font-semibold tracking-tight text-foreground truncate group-hover:underline">
                         {post.topic_title}
                       </h4>
@@ -99,24 +99,22 @@ export function OverviewPostsSection({
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2.5 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
                     <StatusBadge status={post.status} />
                     <StatusRing status={post.status} size={32} />
                   </div>
                 </div>
 
                 {/* 12px below: Caption preview line with file-text icon */}
-                <div className="mt-3 flex items-center gap-2 text-sm text-foreground truncate">
+                <div className="mt-3 flex items-center gap-2 text-sm text-foreground w-full min-w-0">
                   <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-                  <span className="truncate">{post.caption_preview || "No caption preview available"}</span>
+                  <span className="truncate min-w-0 flex-1">{post.caption_preview || "No caption preview available"}</span>
                 </div>
 
                 {/* 4px below: Meta line with link icon, source name, dot, and relative time */}
-                <div className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground">
+                <div className="mt-1 flex items-center gap-1.5 text-sm text-muted-foreground w-full min-w-0 truncate">
                   <Link2 className="size-3.5 shrink-0" />
-                  <span>AutoPulse</span>
-                  <span>·</span>
-                  <span>{relTime}</span>
+                  <span className="truncate">AutoPulse · {relTime}</span>
                 </div>
               </Link>
             );
@@ -124,7 +122,7 @@ export function OverviewPostsSection({
         </div>
       ) : (
         // List view: compact 48px rows
-        <div className="space-y-2">
+        <div className="space-y-2 w-full min-w-0">
           {posts.map((post) => {
             const relTime = formatRelativeTime(post.created_at || post.run_date);
 
@@ -133,9 +131,9 @@ export function OverviewPostsSection({
                 key={post.id}
                 href={`/app/posts/${post.id}`}
                 data-slot="card"
-                className="flex h-12 items-center justify-between px-3.5 rounded-lg border border-card-border bg-card transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex h-12 items-center justify-between px-3.5 rounded-lg border border-card-border bg-card transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring w-full min-w-0 overflow-hidden"
               >
-                <div className="flex items-center gap-3 min-w-0 pr-4">
+                <div className="flex items-center gap-3 min-w-0 flex-1 pr-3">
                   <div
                     style={{ backgroundColor: brandPrimaryHex || "var(--muted)" }}
                     className="size-6 shrink-0 rounded-full overflow-hidden border border-border"
@@ -147,7 +145,7 @@ export function OverviewPostsSection({
                       className="size-full object-cover rounded-full"
                     />
                   </div>
-                  <span className="text-sm font-semibold text-foreground truncate max-w-md">
+                  <span className="text-sm font-semibold text-foreground truncate min-w-0 flex-1">
                     {post.topic_title}
                   </span>
                   <span className="text-xs text-muted-foreground shrink-0 hidden sm:inline">
@@ -155,7 +153,7 @@ export function OverviewPostsSection({
                   </span>
                 </div>
 
-                <div className="flex items-center gap-2.5 shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
                   <StatusBadge status={post.status} />
                   <StatusRing status={post.status} size={28} />
                 </div>

@@ -180,7 +180,7 @@ export function AppDashboardClient({ user }: AppDashboardClientProps) {
 
 
   return (
-    <div className="p-6 md:p-8 space-y-8 max-w-none">
+    <div className="w-full max-w-full min-w-0 overflow-x-hidden p-4 sm:p-6 lg:p-8 space-y-6 lg:space-y-8">
       <SlackDisconnectedBanner userId={user.id} />
 
       {/* Timezone alignment notice: alerts user when device timezone differs from profile schedule timezone */}
@@ -229,10 +229,10 @@ export function AppDashboardClient({ user }: AppDashboardClientProps) {
         connections={dashboardData.connections}
       />
 
-      {/* 2. Responsive Grid: 3fr 4fr on desktop, reordered on mobile */}
-      <div className="flex flex-col lg:grid lg:grid-cols-[3fr_4fr] gap-6">
+      {/* 2. Responsive Grid: 5fr 7fr on desktop (xl), stacked on mobile/tablet */}
+      <div className="flex flex-col xl:grid xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] xl:items-start gap-6 w-full min-w-0 max-w-full">
         {/* Section: Alerts (Mobile order 1, Desktop left column row 2) */}
-        <section className="order-1 lg:order-none lg:col-start-1 lg:row-start-2 space-y-5">
+        <section className="order-1 xl:order-none xl:col-start-1 xl:row-start-2 space-y-4 min-w-0 w-full overflow-hidden">
           <h2 className="font-sans text-base font-normal tracking-tight text-foreground">
             Alerts
           </h2>
@@ -240,7 +240,7 @@ export function AppDashboardClient({ user }: AppDashboardClientProps) {
         </section>
 
         {/* Section: Today (Mobile order 2, Desktop left column row 3) */}
-        <section className="order-2 lg:order-none lg:col-start-1 lg:row-start-3 space-y-5">
+        <section className="order-2 xl:order-none xl:col-start-1 xl:row-start-3 space-y-4 min-w-0 w-full overflow-hidden">
           <h2 className="font-sans text-base font-normal tracking-tight text-foreground">
             Today
           </h2>
@@ -252,7 +252,7 @@ export function AppDashboardClient({ user }: AppDashboardClientProps) {
         </section>
 
         {/* Section: Last 30 days (Mobile order 4, Desktop left column row 1) */}
-        <section className="order-4 lg:order-none lg:col-start-1 lg:row-start-1 space-y-5">
+        <section className="order-4 xl:order-none xl:col-start-1 xl:row-start-1 space-y-4 min-w-0 w-full overflow-hidden">
           <h2 className="font-sans text-base font-normal tracking-tight text-foreground">
             Analytics
           </h2>
@@ -263,7 +263,7 @@ export function AppDashboardClient({ user }: AppDashboardClientProps) {
         </section>
 
         {/* Section: Posts (Mobile order 3, Desktop right column spanning rows 1-3) */}
-        <section className="order-3 lg:order-none lg:col-start-2 lg:row-start-1 lg:row-span-3 space-y-5">
+        <section className="order-3 xl:order-none xl:col-start-2 xl:row-start-1 xl:row-span-3 space-y-4 min-w-0 w-full overflow-hidden">
           <h2 className="font-sans text-base font-normal tracking-tight text-foreground">
             Posts / Drafts
           </h2>

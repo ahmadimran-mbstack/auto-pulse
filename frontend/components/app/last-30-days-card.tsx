@@ -72,7 +72,7 @@ export function Last30DaysCard({ stats, connections }: Last30DaysCardProps) {
   });
 
   return (
-    <div data-slot="card" className="relative rounded-lg border border-card-border bg-card pb-4">
+    <div data-slot="card" className="relative w-full min-w-0 rounded-lg border border-card-border bg-card pb-4">
       {/* Header row: 56px high */}
       <div className="flex h-14 items-center justify-between px-4 border-b border-border">
         <h3 className="font-sans text-base font-semibold tracking-tight text-foreground">

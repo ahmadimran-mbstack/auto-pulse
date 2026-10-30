@@ -80,7 +80,7 @@ export function SiteHeader() {
   };
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-4 md:px-6 sticky top-0 z-20">
+    <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-4 md:px-6 sticky top-0 z-20 w-full max-w-full overflow-hidden">
       {/* Left: Mobile trigger & Status filter dropdown */}
       <div className="flex items-center gap-2">
         {/* Mobile sidebar sheet trigger for screens < 1024px */}
