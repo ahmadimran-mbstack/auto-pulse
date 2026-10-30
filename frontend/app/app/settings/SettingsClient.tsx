@@ -1076,10 +1076,10 @@ function ScheduleTabForm({
                     });
                   }}
                   className={cn(
-                    "p-4 rounded-lg border transition-all cursor-pointer flex items-start gap-3.5 select-none",
+                    "p-4 rounded-lg border transition-colors cursor-pointer flex items-start gap-3.5 select-none",
                     emailApprovalEnabled
-                      ? "border-zinc-300 dark:border-zinc-700 bg-[#f9fafb] dark:bg-zinc-900/50 shadow-xs"
-                      : "border-border/70 bg-white dark:bg-zinc-950 hover:bg-[#f9fafb] dark:hover:bg-zinc-900/30"
+                      ? "border-border bg-transparent shadow-2xs"
+                      : "border-border/60 bg-transparent hover:bg-muted/15"
                   )}
                 >
                   <Checkbox
@@ -1113,17 +1113,16 @@ function ScheduleTabForm({
                       <div className="flex items-center gap-2">
                         <PlatformLabel platform="email" size="sm" />
                       </div>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "text-xs font-normal",
-                          emailApprovalEnabled
-                            ? "border-zinc-300 text-foreground bg-white dark:bg-zinc-800 dark:border-zinc-700"
-                            : "text-muted-foreground bg-transparent border-transparent"
-                        )}
-                      >
-                        {emailApprovalEnabled ? "Active" : "Disabled"}
-                      </Badge>
+                      {emailApprovalEnabled ? (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40">
+                          <span className="size-1.5 rounded-full bg-emerald-500" />
+                          Active
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium text-muted-foreground bg-muted/40 border border-border/50">
+                          Disabled
+                        </span>
+                      )}
                     </div>
                     <p className="text-caption text-muted-foreground leading-relaxed">
                       You receive an email notification each morning with an instant one-click approval link.
@@ -1158,10 +1157,10 @@ function ScheduleTabForm({
                     });
                   }}
                   className={cn(
-                    "p-4 rounded-lg border transition-all cursor-pointer flex items-start gap-3.5 select-none",
+                    "p-4 rounded-lg border transition-colors cursor-pointer flex items-start gap-3.5 select-none",
                     slackApprovalEnabled
-                      ? "border-zinc-300 dark:border-zinc-700 bg-[#f9fafb] dark:bg-zinc-900/50 shadow-xs"
-                      : "border-border/70 bg-white dark:bg-zinc-950 hover:bg-[#f9fafb] dark:hover:bg-zinc-900/30"
+                      ? "border-border bg-transparent shadow-2xs"
+                      : "border-border/60 bg-transparent hover:bg-muted/15"
                   )}
                 >
                   <Checkbox
@@ -1198,40 +1197,37 @@ function ScheduleTabForm({
                         <PlatformLabel platform="slack" size="sm" />
                       </div>
                       {isSlackConnected ? (
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-2 flex-wrap">
                           {slackStatus?.team_name && (
                             <span className="text-xs text-muted-foreground font-medium hidden sm:inline">
                               {slackStatus.team_name}
                             </span>
                           )}
-                          <Badge
-                            variant="outline"
-                            className="border-status-success-fg/30 bg-status-success-bg text-status-success-fg text-xs font-normal"
-                          >
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40">
+                            <span className="size-1.5 rounded-full bg-emerald-500" />
                             Connected
-                          </Badge>
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "text-xs font-normal",
-                              slackApprovalEnabled
-                                ? "border-zinc-300 text-foreground bg-white dark:bg-zinc-800 dark:border-zinc-700"
-                                : "text-muted-foreground bg-transparent border-transparent"
-                            )}
-                          >
-                            {slackApprovalEnabled ? "Active" : "Disabled"}
-                          </Badge>
+                          </span>
+                          {slackApprovalEnabled ? (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/40">
+                              <span className="size-1.5 rounded-full bg-emerald-500" />
+                              Active
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium text-muted-foreground bg-muted/40 border border-border/50">
+                              Disabled
+                            </span>
+                          )}
                         </div>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-xs text-muted-foreground font-normal">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium text-muted-foreground bg-muted/40 border border-border/50">
                             Not connected
-                          </Badge>
+                          </span>
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="h-7 text-xs px-2.5 gap-1.5"
+                            className="h-7 text-xs px-2.5 gap-1.5 border-border hover:bg-accent"
                             onClick={(e) => {
                               e.stopPropagation();
                               router.push("/app/connections");

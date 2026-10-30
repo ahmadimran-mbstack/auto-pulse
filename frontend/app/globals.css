@@ -36,10 +36,10 @@
   --destructive: #cd2b31;
   --destructive-foreground: #ffffff;
 
-  /* Borders and controls */
-  --border: #d4d4d4; /* dividers and edges */
-  --card-border: #c8c8c8; /* card outlines and inputs */
-  --input: #c8c8c8;
+  /* Borders and controls: light, smooth, non-harsh */
+  --border: #ebebeb; /* dividers, table borders, and edges */
+  --card-border: #ebebeb; /* card outlines and inputs */
+  --input: #ebebeb;
   --ring: #0072f5;
 
   /* Sidebar tokens */
@@ -49,7 +49,7 @@
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #f0f0f0;
   --sidebar-accent-foreground: #171717;
-  --sidebar-border: #d4d4d4;
+  --sidebar-border: #ebebeb;
   --sidebar-ring: #0072f5;
   --sidebar-width: 256px;
 
@@ -113,10 +113,10 @@
   --destructive: #e5484d;
   --destructive-foreground: #ffffff;
 
-  /* Borders and controls */
-  --border: #2e2e2e;
-  --card-border: #2e2e2e;
-  --input: #2e2e2e;
+  /* Borders and controls: soft, smooth, non-harsh in dark mode */
+  --border: #242424; /* dividers, table borders, and edges */
+  --card-border: #242424; /* card outlines and inputs */
+  --input: #242424;
   --ring: #3291ff;
 
   /* Sidebar tokens */
@@ -126,7 +126,7 @@
   --sidebar-primary-foreground: #0a0a0a;
   --sidebar-accent: #ffffff0f;
   --sidebar-accent-foreground: #ededed;
-  --sidebar-border: #2e2e2e;
+  --sidebar-border: #242424;
   --sidebar-ring: #3291ff;
 
   /* Status tokens: dark mode */
