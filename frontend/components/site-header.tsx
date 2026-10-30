@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { ChevronsUpDown, Plus, Loader2, Menu, PanelLeft } from "lucide-react";
+import { ChevronsUpDown, Plus, PanelLeft } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,8 +16,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { AppSidebar } from "@/components/app-sidebar";
 import { useUser } from "@/components/providers/user-provider";
 import { useAppSidebarState } from "@/components/providers/sidebar-provider";
-import { useDashboardQuery, useGenerateDraftMutation } from "@/lib/queries";
-import { toast } from "sonner";
+import { useDashboardQuery } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 const statusFilterOptions = [
@@ -37,10 +37,7 @@ export function SiteHeader() {
 
   // Retrieve dashboard data to check for pending approvals
   const { data: dashboardData } = useDashboardQuery(user.id);
-  const generateMutation = useGenerateDraftMutation(user.id);
-
   const awaitingCount = dashboardData?.stats?.awaiting_approval ?? 0;
-  const isDev = process.env.NODE_ENV !== "production";
 
   // Derive human-readable page title based on path
   let pageTitle = "Overview";
@@ -54,7 +51,6 @@ export function SiteHeader() {
     pageTitle = "Settings";
   }
 
-
   const activeOption =
     statusFilterOptions.find((opt) => opt.value === currentStatus) ||
     statusFilterOptions[0];
@@ -67,17 +63,6 @@ export function SiteHeader() {
       params.set("status", val);
     }
     router.push(`${pathname}?${params.toString()}`);
-  };
-
-  const handleGenerate = async () => {
-    try {
-      await generateMutation.mutateAsync(true);
-      toast.success("New draft generated successfully.");
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Draft generation failed. Try again."
-      );
-    }
   };
 
   return (
@@ -149,24 +134,9 @@ export function SiteHeader() {
         {pageTitle}
       </div>
 
-      {/* Right: Ghost action buttons */}
+      {/* Right: Action buttons */}
       <div className="flex items-center gap-2">
-        {isDev ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleGenerate}
-            disabled={generateMutation.isPending}
-            className="h-8 gap-1.5 text-sm font-medium text-foreground hover:bg-accent"
-          >
-            {generateMutation.isPending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Plus className="size-4" />
-            )}
-            <span>Generate draft</span>
-          </Button>
-        ) : awaitingCount > 0 ? (
+        {awaitingCount > 0 && (
           <Button
             variant="ghost"
             size="sm"
@@ -176,7 +146,18 @@ export function SiteHeader() {
             <span className="size-1.5 rounded-full bg-status-info-fg" />
             <span>Review draft</span>
           </Button>
-        ) : null}
+        )}
+        <Button
+          variant="ghost"
+          size="sm"
+          asChild
+          className="h-8 gap-1.5 text-sm font-medium text-foreground hover:bg-accent"
+        >
+          <Link href="/app/playground">
+            <Plus className="size-4" />
+            <span>Generate draft</span>
+          </Link>
+        </Button>
       </div>
     </header>
   );

@@ -150,3 +150,4 @@ def test_topic_deduplication_against_last_30_posts():
     is_valid_fresh, violations_fresh = validate_finder_output(finder_output_fresh, candidates, history)
     assert is_valid_fresh is True
     assert len(violations_fresh) == 0
+

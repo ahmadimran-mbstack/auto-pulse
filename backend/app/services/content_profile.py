@@ -141,3 +141,4 @@ def invalidate_content_profile_cache(user_id: str) -> None:
             logger.info(f"Invalidated Redis cache for {cache_key}")
         except Exception as exc:
             logger.warning(f"Redis delete failed for {cache_key}: {exc}")
+

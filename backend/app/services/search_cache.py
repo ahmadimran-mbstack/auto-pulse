@@ -65,3 +65,4 @@ def set_cached_search(user_id: str, query: str, candidates: List[Candidate], dat
 
     # 2. Save to in-memory fallback
     _IN_MEMORY_SEARCH_CACHE[key] = serialized
+
