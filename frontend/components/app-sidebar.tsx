@@ -131,7 +131,7 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
           </div>
 
           {/* Navigation Items List */}
-          <nav className="mx-2 space-y-px overflow-y-auto max-h-[calc(100vh-280px)] scrollbar-thin">
+          <nav className="mx-2 space-y-px overflow-y-auto max-h-[calc(100vh-280px)] no-scrollbar">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = item.exact

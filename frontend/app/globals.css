@@ -444,3 +444,50 @@ select:focus-visible {
   box-shadow: none !important;
   background-color: transparent !important;
 }
+
+/*
+  Global Scrollbar Removal:
+  - Hides both horizontal and vertical web scrollbars across the entire app (dashboard, landing pages, sheets, modals).
+  - Preserves full scrolling functionality (mouse wheel, touch, keyboard, trackpad).
+  - Supports Chrome, Safari, Edge, Firefox, and Chromium-based browsers.
+*/
+html,
+body,
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+::-webkit-scrollbar,
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-thumb {
+  display: none !important;
+  background: transparent !important;
+}
+
+::-webkit-scrollbar-track,
+*::-webkit-scrollbar-track {
+  display: none !important;
+  background: transparent !important;
+}
+
+.no-scrollbar,
+.scrollbar-none {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-none::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
