@@ -7,6 +7,7 @@ export interface AppUser {
   id: string;
   name?: string | null;
   email: string;
+  image?: string | null;
 }
 
 const UserContext = React.createContext<{
@@ -43,6 +44,7 @@ export function UserProvider({
           id: u.id,
           name: u.name,
           email: u.email || initialUser.email,
+          image: u.image || null,
         });
       }
     } catch (err) {

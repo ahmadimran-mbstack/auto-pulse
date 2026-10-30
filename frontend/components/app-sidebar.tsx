@@ -31,6 +31,7 @@ interface AppSidebarProps {
     id: string;
     name?: string | null;
     email: string;
+    image?: string | null;
   };
   className?: string;
   onNavigate?: () => void;
@@ -99,12 +100,12 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
     <>
       <aside
         className={cn(
-          "w-64 flex flex-col justify-between border-r border-sidebar-border bg-sidebar select-none h-screen sticky top-0",
+          "w-64 flex flex-col h-full bg-sidebar select-none",
           className
         )}
       >
         {/* Top Header Block: 56px */}
-        <div>
+        <div className="shrink-0">
           <div className="flex h-14 items-center px-4">
             <Link href="/app" className="flex items-center gap-2">
               <div className="flex size-5 items-center justify-center rounded-sm bg-foreground text-background">
@@ -132,9 +133,10 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
               </kbd>
             </button>
           </div>
+        </div>
 
-          {/* Navigation Items List */}
-          <nav className="mx-2 space-y-px overflow-y-auto max-h-[calc(100vh-280px)] no-scrollbar">
+        {/* Navigation Items List */}
+        <nav className="flex-1 min-h-0 mx-2 space-y-px overflow-y-auto no-scrollbar">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = item.exact
@@ -236,10 +238,9 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
               </div>
             </div>
           </nav>
-        </div>
 
         {/* Pinned Bottom Notice Card and User Row */}
-        <div>
+        <div className="shrink-0 mt-auto">
           <SidebarNoticeCard connections={dashboardData?.connections} />
           <SidebarUserRow user={user} />
         </div>

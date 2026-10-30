@@ -89,7 +89,11 @@ export function SiteHeader() {
 
         {/* Mobile sidebar overlay drawer for screens < 1024px */}
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-          <SheetContent side="left" className="p-0 w-64 border-r border-border bg-sidebar">
+          <SheetContent
+            side="left"
+            showCloseButton={false}
+            className="p-0 w-64 border-r border-sidebar-border bg-sidebar h-[100dvh] overflow-hidden"
+          >
             <SheetHeader className="sr-only">
               <SheetTitle>Navigation Menu</SheetTitle>
             </SheetHeader>

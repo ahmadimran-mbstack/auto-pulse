@@ -28,12 +28,14 @@ interface SidebarUserRowProps {
     id: string;
     name?: string | null;
     email: string;
+    image?: string | null;
   };
 }
 
 export function SidebarUserRow({ user }: SidebarUserRowProps) {
   const displayName = user.name || user.email.split("@")[0] || "User";
   const avatarGradient = getDeterministicGradient(user.id);
+  const [imageError, setImageError] = React.useState(false);
 
   // Retrieve dashboard data to compute active alerts
   const { data: dashboardData } = useDashboardQuery(user.id);
@@ -91,14 +93,24 @@ export function SidebarUserRow({ user }: SidebarUserRowProps) {
   const hasAlerts = alerts.length > 0;
 
   return (
-    <div className="flex h-14 items-center justify-between px-3 border-t border-border bg-sidebar">
+    <div className="flex h-14 items-center justify-between px-3 border-t border-sidebar-border bg-sidebar">
       {/* User profile identifier */}
       <div className="flex items-center gap-2.5 min-w-0 pr-2">
-        <div
-          style={{ background: avatarGradient }}
-          className="size-5 shrink-0 rounded-full border border-border"
-          aria-hidden="true"
-        />
+        {user.image && !imageError ? (
+          <img
+            src={user.image}
+            alt={displayName}
+            className="size-5 shrink-0 rounded-full border border-sidebar-border object-cover"
+            referrerPolicy="no-referrer"
+            onError={() => setImageError(true)}
+          />
+        ) : (
+          <div
+            style={{ background: avatarGradient }}
+            className="size-5 shrink-0 rounded-full border border-sidebar-border"
+            aria-hidden="true"
+          />
+        )}
         <span className="text-sm font-normal text-foreground truncate max-w-32">
           {displayName}
         </span>

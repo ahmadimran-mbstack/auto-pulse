@@ -687,46 +687,51 @@ body,
 }
 
 /*
-  Desktop Persistent Sidebar & Synchronized Content Shift
-  - Grid-based synchronized sliding layout: sidebar GPU transforms while grid column resizes.
-  - Zero initial load slide animation (only animates on user toggle).
-  - Closed sidebar is hidden from accessibility tree and keyboard Tab navigation.
+  Desktop Persistent Fixed Sidebar & Synchronized Content Shift
+  - Sidebar is position: fixed at top: 0, bottom: 0, left: 0, height: 100dvh, z-index: 30.
+  - It NEVER moves when the page scrolls.
+  - Spacer in normal document flow holds 16rem width, collapsing to 0rem when closed.
+  - Sidebar GPU translates translateX(-100%) while spacer width resizes with identical duration and easing.
+  - Zero initial load animation (only animates on toggle when data-sidebar-ready="true").
+  - Closed sidebar is hidden from accessibility tree (inert, aria-hidden) and visibility: hidden.
 */
-.app-shell-grid {
-  display: flex;
-}
-
 @media (min-width: 1024px) {
-  .app-shell-grid {
-    display: grid;
-    grid-template-columns: 16rem 1fr;
-    transition: none;
-  }
-
-  .app-shell-grid[data-sidebar-ready="true"] {
-    transition: grid-template-columns 280ms cubic-bezier(0.32, 0.72, 0, 1);
-  }
-
-  .app-shell-grid[data-sidebar-ready="true"][data-sidebar-state="closed"] {
-    grid-template-columns: 0rem 1fr;
-    transition: grid-template-columns 220ms cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
   .app-desktop-sidebar {
-    position: relative;
-    overflow: hidden;
-    height: 100vh;
     will-change: transform;
     transform: translate3d(0, 0, 0);
   }
 
-  .app-shell-grid[data-sidebar-ready="true"] .app-desktop-sidebar {
+  .app-desktop-sidebar-spacer {
+    width: 16rem;
+  }
+
+  /* When sidebar is ready: animate transitions */
+  .app-shell[data-sidebar-ready="true"] .app-desktop-sidebar {
     transition: transform 280ms cubic-bezier(0.32, 0.72, 0, 1), visibility 0s 0s;
   }
 
-  .app-shell-grid[data-sidebar-ready="true"][data-sidebar-state="closed"] .app-desktop-sidebar {
+  .app-shell[data-sidebar-ready="true"] .app-desktop-sidebar-spacer {
+    transition: width 280ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  /* Closed state */
+  .app-shell[data-sidebar-state="closed"] .app-desktop-sidebar {
+    transform: translate3d(-100%, 0, 0);
+    visibility: hidden;
+  }
+
+  .app-shell[data-sidebar-state="closed"] .app-desktop-sidebar-spacer {
+    width: 0rem;
+  }
+
+  .app-shell[data-sidebar-ready="true"][data-sidebar-state="closed"] .app-desktop-sidebar {
     transform: translate3d(-100%, 0, 0);
     visibility: hidden;
     transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1), visibility 0s 220ms;
+  }
+
+  .app-shell[data-sidebar-ready="true"][data-sidebar-state="closed"] .app-desktop-sidebar-spacer {
+    width: 0rem;
+    transition: width 220ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 }

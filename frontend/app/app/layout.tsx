@@ -14,8 +14,13 @@ export default async function AppShellLayout({
 }) {
   const { data: session } = await auth.getSession();
   const user: AppUser = session?.user
-    ? { id: session.user.id, name: session.user.name, email: session.user.email }
-    : { id: "anonymous", name: "User", email: "user@example.com" };
+    ? {
+        id: session.user.id,
+        name: session.user.name,
+        email: session.user.email,
+        image: session.user.image ?? null,
+      }
+    : { id: "anonymous", name: "User", email: "user@example.com", image: null };
 
   const cookieStore = await cookies();
   const initialOpen = cookieStore.get("sidebar_state")?.value !== "false";
