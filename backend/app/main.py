@@ -40,7 +40,7 @@ logger = logging.getLogger("app.access")
 is_production = settings.ENV == "production"
 app = FastAPI(
     title="AutoPulse Backend",
-    version="0.1.0",
+    version="0.1.1",
     docs_url=None if is_production else "/docs",
     redoc_url=None if is_production else "/redoc",
     openapi_url=None if is_production else "/openapi.json",

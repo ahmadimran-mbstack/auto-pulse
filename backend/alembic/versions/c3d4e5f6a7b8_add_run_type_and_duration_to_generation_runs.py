@@ -4,6 +4,7 @@ Revision ID: c3d4e5f6a7b8
 Revises: b2c3d4e5f6a7
 Create Date: 2026-10-31 14:00:00.000000
 
+Schema migration to support manual and scheduled generation runs with duration tracking.
 """
 from typing import Sequence, Union
 from alembic import op
