@@ -24,7 +24,14 @@ interface AuthLayoutProps {
 // Layout wrapper for all /auth/* pages
 // Prevents authenticated and verified users from visiting auth screens
 export default async function AuthLayout({ children }: AuthLayoutProps) {
-  const { data: session } = await auth.getSession();
+  let session = null;
+  try {
+    const res = await auth.getSession();
+    session = res?.data;
+  } catch (err) {
+    // Gracefully handle session retrieval errors in layout (e.g. unauthenticated or cookie restrictions)
+  }
+
   const cookieStore = await cookies();
   const isOtpPending = cookieStore.get("autopulse_otp_pending")?.value === "true";
 

@@ -12,7 +12,14 @@ export default async function AppShellLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { data: session } = await auth.getSession();
+  let session = null;
+  try {
+    const res = await auth.getSession();
+    session = res?.data;
+  } catch (err) {
+    // Gracefully fallback to unauthenticated state if session retrieval fails
+  }
+
   const user: AppUser = session?.user
     ? {
         id: session.user.id,
