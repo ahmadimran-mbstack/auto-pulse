@@ -130,6 +130,7 @@ export async function apiCall<T>(
   let response: Response;
   try {
     response = await fetch(url, {
+      cache: "no-store",
       ...options,
       headers,
     });
@@ -503,18 +504,28 @@ export async function disconnectSlack(): Promise<import("@/types/connections").S
 // Writing Agents API Endpoints
 // ---------------------------------------------------------------------------
 
-// Enqueues an experimental playground run with writing agents
-export async function createPlaygroundRun(topicHint?: string): Promise<{ run_id: string }> {
-  return apiCall<{ run_id: string }>("/playground/runs", {
+// Enqueues an experimental playground run with writing agents (always uncached)
+export async function createPlaygroundRun(topicHint?: string): Promise<{ run_id: string; status?: string }> {
+  return apiCall<{ run_id: string; status?: string }>("/playground/runs", {
     method: "POST",
+    cache: "no-store",
+    headers: {
+      "Cache-Control": "no-cache, no-store",
+      "Pragma": "no-cache",
+    },
     body: JSON.stringify(topicHint ? { topic_hint: topicHint } : {}),
   });
 }
 
-// Retrieves status, step, round, and audit trace for a run (daily or playground)
+// Retrieves status, step, round, and audit trace for a run (daily or playground) (always uncached)
 export async function getRun(runId: string): Promise<RunResponse> {
   const data = await apiCall<RunResponse & { agent_trace?: AgentTrace | null }>(`/runs/${runId}`, {
     method: "GET",
+    cache: "no-store",
+    headers: {
+      "Cache-Control": "no-cache, no-store",
+      "Pragma": "no-cache",
+    },
   });
   if (!data.trace && data.agent_trace) {
     data.trace = data.agent_trace;

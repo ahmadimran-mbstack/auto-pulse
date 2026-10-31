@@ -27,6 +27,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,6 +85,8 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
   const [copied, setCopied] = React.useState(false);
   const [showTrace, setShowTrace] = React.useState(false);
   const [expandedStages, setExpandedStages] = React.useState<Record<number, boolean>>({});
+
+  const queryClient = useQueryClient();
 
   // Run creation mutation
   const createMutation = useCreatePlaygroundRunMutation();
@@ -420,6 +423,10 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
     e?.preventDefault();
     if (createMutation.isPending || isPolling) return;
 
+    if (runId) {
+      queryClient.removeQueries({ queryKey: ["run", userId, runId] });
+    }
+
     setTimedOut(false);
     setElapsedSeconds(0);
     setCopied(false);
@@ -428,6 +435,9 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
     try {
       const res = await createMutation.mutateAsync(topicHint.trim() || undefined);
       if (res && res.run_id) {
+        if (runId && runId !== res.run_id) {
+          queryClient.removeQueries({ queryKey: ["run", userId, runId] });
+        }
         setRunId(res.run_id);
         setIsPolling(true);
       } else {
@@ -441,6 +451,9 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
 
   // Reset state to start a new draft
   const handleReset = () => {
+    if (runId) {
+      queryClient.removeQueries({ queryKey: ["run", userId, runId] });
+    }
     setRunId(null);
     setIsPolling(false);
     setElapsedSeconds(0);

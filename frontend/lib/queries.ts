@@ -362,7 +362,7 @@ export function useRunQuery(
       }
       return pollInterval;
     },
-    staleTime: 1000,
+    staleTime: 0,
   });
 }
 
