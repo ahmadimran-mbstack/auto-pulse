@@ -83,7 +83,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl p-0 gap-0 overflow-hidden border border-border bg-card">
+      <DialogContent
+        closeButtonClassName="top-2 right-3"
+        className="max-w-xl p-0 gap-0 overflow-hidden border border-border bg-card"
+      >
         <DialogHeader className="sr-only">
           <DialogTitle>Quick Search and Commands</DialogTitle>
         </DialogHeader>
@@ -91,7 +94,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         {/* Search input bar */}
         <div
           data-input-wrapper
-          className="flex items-center border-b border-border px-3.5 h-12 gap-2.5 transition-[border-color] duration-200 ease-in-out focus-within:border-input-focus"
+          className="flex items-center border-b border-border pl-3.5 pr-12 h-12 gap-2.5 transition-[border-color] duration-200 ease-in-out focus-within:border-input-focus"
         >
           <Search className="size-4 shrink-0 text-muted-foreground" />
           <input
@@ -101,11 +104,8 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search pages or recent posts..."
-            className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground border-none outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 shadow-none focus:shadow-none"
+            className="flex-1 min-w-0 bg-transparent text-sm text-foreground placeholder:text-muted-foreground border-none outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 shadow-none focus:shadow-none"
           />
-          <kbd className="hidden sm:inline-flex h-5 items-center rounded border border-border bg-secondary px-1.5 text-xs font-mono text-muted-foreground">
-            ESC
-          </kbd>
         </div>
 
         {/* Search results list */}
