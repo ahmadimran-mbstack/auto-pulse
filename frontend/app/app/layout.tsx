@@ -22,11 +22,11 @@ export default async function AppShellLayout({
 
   const user: AppUser = session?.user
     ? {
-        id: session.user.id,
-        name: session.user.name,
-        email: session.user.email,
-        image: session.user.image ?? null,
-      }
+      id: session.user.id,
+      name: session.user.name,
+      email: session.user.email,
+      image: session.user.image ?? null,
+    }
     : { id: "anonymous", name: "User", email: "user@example.com", image: null };
 
   const cookieStore = await cookies();
@@ -44,3 +44,4 @@ export default async function AppShellLayout({
     </AppQueryProvider>
   );
 }
+
