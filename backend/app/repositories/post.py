@@ -56,7 +56,7 @@ def get_recent_titles_and_captions(
     return titles, captions
 
 
-# Retrieve last 30 posts for caller once per run for the Post Finder agent
+# Retrieve last 30 posts and recent manual runs for caller once per run for the Post Finder agent
 def get_user_post_history(
     db: Session, user_id: str, limit: int = 30
 ) -> List[dict]:
@@ -75,6 +75,7 @@ def get_user_post_history(
         is_recent = p.created_at >= cutoff_14d if p.created_at else False
         history.append({
             "id": str(p.id),
+            "created_at_dt": p.created_at or datetime.datetime.min.replace(tzinfo=datetime.timezone.utc),
             "run_date": p.run_date.isoformat() if p.run_date else None,
             "created_at": p.created_at.isoformat() if p.created_at else None,
             "is_last_14_days": is_recent,
@@ -87,7 +88,95 @@ def get_user_post_history(
             "post_format": p.post_format,
             "caption_preview": (p.caption[:200] if p.caption else ""),
         })
-    return history
+
+    # Include recent completed manual GenerationRuns so previous manual runs aren't repeated
+    try:
+        from app.models.post import GenerationRun
+        gen_runs = (
+            db.query(GenerationRun)
+            .filter(
+                GenerationRun.user_id == user_id,
+                GenerationRun.run_type == "manual",
+                GenerationRun.status.in_(["completed", "succeeded"]),
+            )
+            .order_by(desc(GenerationRun.started_at))
+            .limit(limit)
+            .all()
+        )
+        for gr in gen_runs:
+            trace = gr.agent_trace or {}
+            finder_info = trace.get("finder") or {}
+            gtm_info = trace.get("gtm_brief") or {}
+            topic_title = finder_info.get("topic") or (gr.result or {}).get("topic_title") or (gr.result or {}).get("title")
+            if topic_title:
+                gr_time = gr.finished_at or gr.started_at or now_utc
+                is_recent = gr_time >= cutoff_14d
+                history.append({
+                    "id": str(gr.id),
+                    "created_at_dt": gr_time,
+                    "run_date": gr.run_date.isoformat() if gr.run_date else None,
+                    "created_at": gr_time.isoformat() if hasattr(gr_time, "isoformat") else str(gr_time),
+                    "is_last_14_days": is_recent,
+                    "topic_title": topic_title,
+                    "topic_url": (finder_info.get("sources") or [{}])[0].get("url") if finder_info.get("sources") else None,
+                    "sources": finder_info.get("sources") or [],
+                    "angle": finder_info.get("angle"),
+                    "hook_type": finder_info.get("hook_type"),
+                    "hook_style": gtm_info.get("hook_style") or finder_info.get("hook_type"),
+                    "post_format": finder_info.get("post_format"),
+                    "caption_preview": ((gr.result or {}).get("post_text") or "")[:200],
+                })
+    except Exception as exc:
+        logger.debug(f"Could not load generation_runs history: {exc}")
+
+    # Also include completed PlaygroundRuns
+    try:
+        from app.models.post import PlaygroundRun
+        p_runs = (
+            db.query(PlaygroundRun)
+            .filter(
+                PlaygroundRun.user_id == user_id,
+                PlaygroundRun.status == "completed",
+            )
+            .order_by(desc(PlaygroundRun.created_at))
+            .limit(limit)
+            .all()
+        )
+        existing_ids = {h["id"] for h in history}
+        for pr in p_runs:
+            if str(pr.id) in existing_ids:
+                continue
+            trace = pr.trace or {}
+            finder_info = trace.get("finder") or {}
+            gtm_info = trace.get("gtm_brief") or {}
+            topic_title = finder_info.get("topic") or (pr.result or {}).get("topic_title") or (pr.result or {}).get("title")
+            if topic_title:
+                pr_time = pr.finished_at or pr.created_at or now_utc
+                is_recent = pr_time >= cutoff_14d
+                history.append({
+                    "id": str(pr.id),
+                    "created_at_dt": pr_time,
+                    "run_date": None,
+                    "created_at": pr_time.isoformat() if hasattr(pr_time, "isoformat") else str(pr_time),
+                    "is_last_14_days": is_recent,
+                    "topic_title": topic_title,
+                    "topic_url": (finder_info.get("sources") or [{}])[0].get("url") if finder_info.get("sources") else None,
+                    "sources": finder_info.get("sources") or [],
+                    "angle": finder_info.get("angle"),
+                    "hook_type": finder_info.get("hook_type"),
+                    "hook_style": gtm_info.get("hook_style") or finder_info.get("hook_type"),
+                    "post_format": finder_info.get("post_format"),
+                    "caption_preview": ((pr.result or {}).get("post_text") or (pr.result or {}).get("text") or "")[:200],
+                })
+    except Exception as exc:
+        logger.debug(f"Could not load playground_runs history: {exc}")
+
+    # Sort merged history strictly by execution timestamp descending
+    history.sort(key=lambda x: x.get("created_at_dt", now_utc), reverse=True)
+    for h in history:
+        h.pop("created_at_dt", None)
+
+    return history[:limit]
 
 
 # Delete draft and associated generation run for a specific date if status is draft

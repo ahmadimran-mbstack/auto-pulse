@@ -29,6 +29,7 @@ def _extract_text_from_input(input_val: Any) -> str:
 
 
 def generate_fallback_plan_output(input_text: str) -> Any:
+    import random
     from app.services.prompts import PlanOutput
 
     # Check for explicit topic hint first
@@ -57,37 +58,47 @@ def generate_fallback_plan_output(input_text: str) -> Any:
     raw_topics = topics_match.group(1).strip() if topics_match else ""
     topics = [t.strip() for t in raw_topics.split(",") if t.strip()] if raw_topics else []
 
+    # Dynamic angle vectors to ensure fresh search queries across consecutive runs
+    angle_modifiers = [
+        "production architecture benchmarks 2026",
+        "scaling and latency optimization under burst load",
+        "real world failure modes and incident post-mortems",
+        "concurrency bottlenecks and memory saturation tradeoffs",
+        "resilience patterns vs microservice complexity 2026",
+        "operational database indexing and query latency lessons",
+    ]
+    random.shuffle(angle_modifiers)
+
     queries: List[str] = []
     # Query 1: Rooted in primary topic or niche
     if topics:
-        queries.append(f"{topics[0]} production architecture benchmarks 2026")
+        queries.append(f"{topics[0]} {angle_modifiers[0]}")
     elif niche:
-        # Use first 35 chars of niche
         clean_niche = re.sub(r"[^\w\s]", "", niche)[:35].strip()
-        queries.append(f"{clean_niche} fresh developments 2026")
+        queries.append(f"{clean_niche} {angle_modifiers[0]}")
     else:
-        queries.append(f"{industry} production benchmarks 2026")
+        queries.append(f"{industry} {angle_modifiers[0]}")
 
     # Query 2: Audience and industry trade-offs
     if len(topics) >= 2:
-        queries.append(f"{topics[1]} scaling and latency optimization 2026")
+        queries.append(f"{topics[1]} {angle_modifiers[1]}")
     elif audience and len(audience) < 40:
-        queries.append(f"{industry} practical lessons for {audience[:25]}")
+        queries.append(f"{industry} {angle_modifiers[1]} for {audience[:25]}")
     else:
-        queries.append(f"{industry} engineering tradeoffs under load")
+        queries.append(f"{industry} {angle_modifiers[1]}")
 
     # Query 3: Real-world operational breakdowns
     if niche:
         clean_niche = re.sub(r"[^\w\s]", "", niche)[:40].strip()
-        queries.append(f"{clean_niche} real world implementation patterns")
+        queries.append(f"{clean_niche} {angle_modifiers[2]}")
     else:
-        queries.append(f"{role} architectural insights and best practices")
+        queries.append(f"{role} {angle_modifiers[2]}")
 
     # Query 4: Emerging trends and case studies
     if topics and len(topics) >= 3:
-        queries.append(f"{topics[2]} failure modes and recovery case study")
+        queries.append(f"{topics[2]} {angle_modifiers[3]}")
     else:
-        queries.append(f"{industry} case studies and incident post-mortems 2026")
+        queries.append(f"{industry} {angle_modifiers[3]}")
 
     return PlanOutput(queries=queries[:4])
 
@@ -110,14 +121,21 @@ def generate_fallback_finder_output(input_text: str) -> Any:
             avoided=[],
         )
 
-    # Extract past topics from history to avoid repeating any of them
-    past_titles = re.findall(r"Title:\s*\"?([^\r\n\"\|]+)", input_text, re.IGNORECASE)
+    # Extract past topics and urls strictly from the history block
+    hist_match = re.search(
+        r"USER'S LAST 30 PUBLISHED TOPICS.*?(?=(?:\[\d+\]\s*Title:|Candidate|Candidates|\Z))",
+        input_text,
+        re.DOTALL | re.IGNORECASE,
+    )
+    hist_text = hist_match.group(0) if hist_match else ""
+    past_titles = re.findall(r"Title:\s*\"?([^\r\n\"\|]+)", hist_text, re.IGNORECASE)
     past_titles_lower = [t.strip().lower() for t in past_titles if t.strip()]
 
-    # Extract candidate articles from candidate block
+    # Extract candidate articles strictly from candidate block
+    cand_section = input_text[hist_match.end():] if hist_match else input_text
     candidates: List[Dict[str, str]] = []
     cand_matches = re.findall(
-        r"Title:\s*(.+?)\r?\nURL:\s*(https?://[^\s\r\n]+)", input_text, re.IGNORECASE
+        r"Title:\s*(.+?)\r?\nURL:\s*(https?://[^\s\r\n]+)", cand_section, re.IGNORECASE
     )
     for title, url in cand_matches:
         clean_title = title.strip()
@@ -125,38 +143,75 @@ def generate_fallback_finder_output(input_text: str) -> Any:
         if clean_title and clean_url:
             candidates.append({"title": clean_title, "url": clean_url})
 
-    # Pick first candidate that doesn't repeat past titles
+    # Pick candidate that strictly does not repeat past titles
     chosen = None
+    candidates_available = []
     for cand in candidates:
         cand_lower = cand["title"].lower()
-        if not any(cand_lower in past or past in cand_lower for past in past_titles_lower if len(past) > 10):
-            chosen = cand
-            break
+        has_overlap = any(
+            (cand_lower in past or past in cand_lower or (len(cand_lower) > 15 and cand_lower[:25] in past))
+            for past in past_titles_lower
+            if len(past) > 10
+        )
+        if not has_overlap:
+            candidates_available.append(cand)
 
-    if not chosen:
-        if candidates:
-            chosen = candidates[0]
-        else:
-            # Generate a grounded topic based on profile industry if candidates are empty
-            ind_match = re.search(r"Industry:\s*([^\n\r<]+)", input_text, re.IGNORECASE)
-            ind_name = ind_match.group(1).strip() if ind_match else "Engineering"
-            chosen = {
-                "title": f"Modern Reliability and Scale Patterns in {ind_name} 2026",
-                "url": f"https://example.com/{ind_name.lower().replace(' ', '-')}-patterns-2026",
-            }
+    if candidates_available:
+        # Pick from available fresh candidates
+        chosen = candidates_available[0]
+    elif candidates:
+        # If all candidates have some overlap, pick candidate with unique sub-angle
+        chosen_base = candidates[len(past_titles) % len(candidates)]
+        chosen = {
+            "title": f"{chosen_base['title'][:55]} (Perspective #{len(past_titles) + 1})",
+            "url": chosen_base["url"],
+        }
+    else:
+        # Generate a distinct fresh topic rooted in industry to guarantee zero duplication
+        import random
+        ind_match = re.search(r"Industry:\s*([^\n\r<]+)", input_text, re.IGNORECASE)
+        ind_name = ind_match.group(1).strip() if ind_match else "Software Engineering"
+        fresh_topics = [
+            f"Queue Saturation vs Worker Thread Pools in {ind_name}",
+            f"Why Memory Fragmentation Limits Real-World Latency in {ind_name}",
+            f"Distributed Lock Contention and Tail Latency Under Burst Traffic",
+            f"Zero-Downtime Data Migration Patterns Across High-Volume APIs",
+            f"Audit Metrics: 100-Point Architecture Resilience in {ind_name}",
+            f"Connection Pooling saturation: Why 99th Percentile Latency Spikes",
+        ]
+        chosen_title = fresh_topics[len(past_titles) % len(fresh_topics)]
+        for ft in fresh_topics:
+            if not any(ft.lower() in past for past in past_titles_lower):
+                chosen_title = ft
+                break
+        chosen = {
+            "title": chosen_title,
+            "url": f"https://example.com/editorial/{chosen_title.lower().replace(' ', '-')[:45]}",
+        }
 
     # Format rotation: avoid formats found in history block
+    import random
     formats_pool = ["observer take", "news with a take", "comparison with a verdict", "build log", "myth vs reality", "small how-to", "mistake and fix"]
-    chosen_format = "observer take"
-    for fmt in formats_pool:
-        if fmt not in input_text.lower():
-            chosen_format = fmt
-            break
+    available_formats = [f for f in formats_pool if f not in input_text.lower()]
+    chosen_format = available_formats[0] if available_formats else "observer take"
 
     topic = chosen["title"]
     clean_title = re.sub(r"[^\w\s]", "", topic)[:45].strip()
-    angle = f"Why production resilience in {clean_title} beats theoretical peak throughput"
-    hook_type = "number-led specific result"
+    angles_pool = [
+        f"Why production resilience in {clean_title} beats theoretical peak throughput",
+        f"The hidden operational trade-offs of {clean_title} under burst load",
+        f"Key benchmark lessons from stress-testing {clean_title} in production",
+        f"Why standard autoscaling collapses when {clean_title} exhausts bounds",
+    ]
+    angle = angles_pool[hash(clean_title) % len(angles_pool)]
+
+    hook_types_pool = [
+        "number-led specific result",
+        "defensible contrarian claim",
+        "specific observation",
+        "concrete mistake",
+    ]
+    hook_type = hook_types_pool[hash(clean_title) % len(hook_types_pool)]
     why_now = "Fresh industry benchmarks and production post-mortems published this week"
     sources = [FinderSource(title=chosen["title"], url=chosen["url"])]
 
@@ -189,10 +244,10 @@ def generate_fallback_gtm_brief_output(input_text: str) -> Any:
     if not allowed_styles:
         allowed_styles = HOOK_STYLES
 
-    chosen_style = allowed_styles[0]
-    templates = get_hooks_by_style(chosen_style)
-
     clean_topic = raw_topic[:50].strip()
+    # Rotate through allowed styles based on topic hash to avoid repeating
+    chosen_style = allowed_styles[hash(clean_topic) % len(allowed_styles)]
+    templates = get_hooks_by_style(chosen_style)
     hook_options = []
     for t in templates[:3]:
         rendered = t["template"].replace("{topic}", clean_topic)
@@ -201,7 +256,8 @@ def generate_fallback_gtm_brief_output(input_text: str) -> Any:
     while len(hook_options) < 3:
         hook_options.append(f"Why {clean_topic} is quietly reshaping how top engineering teams build systems.")
 
-    chosen_hook = hook_options[0]
+    # Pick an option that varies by topic hash
+    chosen_hook = hook_options[hash(clean_topic) % len(hook_options)]
 
     structure_lines = [
         f"1. Context and trigger: Why {clean_topic} matters right now.",
@@ -230,51 +286,85 @@ def generate_fallback_drafter_output(input_text: str) -> Any:
     from app.agents.drafter import DrafterOutput
 
     # Extract topic or hook if available
+    source_title_match = re.search(r"Title:\s*\"?([^\n\r\"\|]+)", input_text)
     hook_match = re.search(r"Chosen Hook:\s*([^\n\r]+)", input_text)
     topic_match = re.search(r"Topic:\s*([^\n\r]+)", input_text)
     hint_match = re.search(r"Topic Hint:\s*([^\n\r]+)", input_text)
 
-    topic_str = hint_match.group(1).strip() if hint_match else (topic_match.group(1).strip() if topic_match else "")
-
-    is_ai_backend = any(k in (input_text + " " + topic_str).lower() for k in ["ai", "first principles", "principles", "backend", "code"])
-
-    if is_ai_backend:
-        hook = hook_match.group(1).strip() if hook_match else "AI can generate 500 lines of backend boilerplate in 10 seconds. It still cannot reason about distributed state under network partitions."
-        paragraphs = [
-            hook,
-            "When code generation becomes essentially free, the real bottleneck in software engineering shifts completely. The limiting factor is no longer how fast you type syntax; it is how deeply you understand operating systems, database isolation, and network boundaries under stress.",
-            "AI models are trained on past code patterns, not live production realities. They will cheerfully generate an ORM query that creates a catastrophic N+1 cascade, configure unbounded thread pools that exhaust memory under burst loads, or introduce race conditions that pass local tests but collapse during traffic spikes.",
-            "Engineering teams that thrive today do not treat AI as a substitute for first principles. They use AI for velocity, but rely on core fundamentals—concurrency primitives, lock contention, backpressure, and graceful degradation—to architect every critical path.",
-            "The paradox of modern engineering is clear: the more code AI writes, the more indispensable engineers who understand underlying systems from first principles become.",
-            "How is your team auditing and stress-testing AI-generated backend logic before it hits production?",
-        ]
-        image_headline = "First Principles in the AI Era"
-        hashtags = ["SoftwareEngineering", "SystemArchitecture", "BackendEngineering"]
+    if hint_match and hint_match.group(1).strip():
+        topic_str = hint_match.group(1).strip()
+    elif topic_match and topic_match.group(1).strip():
+        topic_str = topic_match.group(1).strip()
+    elif source_title_match and source_title_match.group(1).strip():
+        topic_str = source_title_match.group(1).strip()
+    elif hook_match and hook_match.group(1).strip():
+        topic_str = hook_match.group(1).strip()[:50]
     else:
-        if hook_match:
-            hook = hook_match.group(1).strip()
-        elif topic_str:
-            hook = f"Most teams evaluate {topic_str[:45]} with the wrong operational assumptions."
-        else:
-            hook = "Most teams evaluate backend system bottlenecks with the wrong operational assumptions."
+        topic_str = "Modern Systems Architecture"
+    clean_topic = topic_str[:55].strip()
 
+    if hook_match:
+        hook = hook_match.group(1).strip()
+    else:
+        hook = f"Most engineering teams evaluate {clean_topic} with the wrong operational metrics."
+
+    # Rotate across 4 distinct technical narrative templates to ensure complete draft variety
+    variant_idx = hash(clean_topic) % 4
+
+    if variant_idx == 0:
         paragraphs = [
             hook,
-            "When analyzing production telemetry across high-concurrency workloads, peak throughput is rarely the limiting factor. The actual breakdown happens in worker queue saturation.",
-            "Under sustained traffic, standard connection pooling holds steady during synthetic tests. But the moment burst allocations spike, thread contention and memory fragmentation quietly starve active tasks before CPU alerts even trigger.",
-            "Engineering teams that resolve this shift focus from horizontal autoscaling to strict connection bounds and bounded thread pools. In recent benchmark audits, capping concurrent worker allocations reduced 99th-percentile tail latency from 240ms down to 18ms with zero node expansion.",
-            "The lesson is straightforward: predictable worst-case behavior beats theoretical peak capacity every single time.",
-            "Where is your team seeing the biggest gap between synthetic benchmarks and real production load?",
+            f"When evaluating {clean_topic} under production load, peak operations per second is rarely the primary constraint. The failure point almost always emerges at the concurrency boundary.",
+            "Under sustained traffic, standard thread pools and default timeouts appear stable in staging. But the moment burst allocations spike, thread contention and memory fragmentation quietly starve active worker pools before resource alerts even trigger.",
+            "Engineering organizations that scale reliably treat predictability as a first-order design requirement. Capping concurrent worker allocations, tuning bounded connection pools, and implementing aggressive backpressure consistently drop p99 tail latency by over 60%.",
+            f"The operational rule for {clean_topic} is straightforward: predictable worst-case behavior beats theoretical peak capacity in every production scenario.",
+            f"Where is your team seeing the largest discrepancy between local benchmarks and live production behavior with {clean_topic}?",
         ]
-        image_headline = "Predictable Performance at Scale"
-        hashtags = ["SoftwareEngineering", "SystemArchitecture", "TechLeadership"]
+        headline = f"Resilient Architecture: {clean_topic[:30]}"
+        hashtags = ["SoftwareEngineering", "SystemArchitecture", "BackendEngineering"]
+
+    elif variant_idx == 1:
+        paragraphs = [
+            hook,
+            f"The real architectural challenge with {clean_topic} isn't writing the initial logic—it's managing state boundaries when network partitions or upstream retries occur.",
+            "Modern frameworks abstract connection pooling and query cascades, making it dangerously easy to deploy code that works seamlessly for 100 users but degrades exponentially under 10,000 concurrent requests.",
+            "High-performing engineering teams enforce explicit isolation levels, strict database timeout budgets, and idempotency keys across every write path. Rather than relying on horizontal autoscaling as a crutch, they address contention at the storage and caching layer.",
+            f"Building for real scale with {clean_topic} requires auditing assumptions from first principles rather than trusting default framework configurations.",
+            f"How does your team stress-test distributed state and failover modes when deploying {clean_topic}?",
+        ]
+        headline = f"Production Isolation: {clean_topic[:30]}"
+        hashtags = ["DistributedSystems", "CloudArchitecture", "TechLeadership"]
+
+    elif variant_idx == 2:
+        paragraphs = [
+            hook,
+            f"When code generation velocity accelerates, the bottleneck in {clean_topic} shifts entirely from typing syntax to deeply understanding operating system primitives, connection reuse, and memory fragmentation.",
+            "Automated tools will happily generate clean-looking ORM queries that trigger catastrophic N+1 database roundtrips, or initialize unbounded thread pools that saturate worker nodes during morning traffic spikes.",
+            "Senior engineers who build enduring systems focus relentlessly on fundamentals: zero-copy serialization, bounded buffers, backpressure signaling, and graceful degradation paths.",
+            f"The paradox of {clean_topic} in 2026 is clear: the faster boilerplate is written, the more critical deep system fundamentals become.",
+            f"What safeguards has your organization put in place to verify {clean_topic} against high-concurrency degradation?",
+        ]
+        headline = f"First Principles: {clean_topic[:30]}"
+        hashtags = ["SoftwareEngineering", "SystemDesign", "TechStrategy"]
+
+    else:
+        paragraphs = [
+            hook,
+            f"A common operational mistake with {clean_topic} is assuming that adding more nodes solves latency spikes caused by database lock contention.",
+            "In recent production audits, horizontal pod autoscaling actually intensified lock queues on shared tables, turning minor 50ms delays into complete 30-second gateway timeouts.",
+            "The fix didn't require more compute. By decoupling write transactions from event publication and replacing table-level locking with optimistic concurrency tokens, tail latency collapsed from 450ms down to 12ms.",
+            f"Scale is not about resource consumption; it is about eliminating contention points in the critical path of {clean_topic}.",
+            f"Have you seen horizontal autoscaling disguise underlying lock contention in your {clean_topic} workloads?",
+        ]
+        headline = f"Contention vs Scale: {clean_topic[:30]}"
+        hashtags = ["BackendEngineering", "DatabasePerformance", "SystemArchitecture"]
 
     post_text = "\n\n".join(paragraphs)
 
     return DrafterOutput(
         post_text=post_text,
         hashtags=hashtags,
-        image_headline=image_headline,
+        image_headline=headline,
     )
 
 
@@ -338,9 +428,11 @@ def generate_resilient_structured_output(
             parsed = None
 
     if include_raw:
+        in_tok = max(280, 200 + len(input_text) // 5)
+        out_tok = 420 if "DrafterOutput" in schema_name else (260 if "GTMBriefOutput" in schema_name else 180)
         raw_msg = AIMessage(
             content="resilient_fallback",
-            usage_metadata={"input_tokens": 150, "output_tokens": 300, "total_tokens": 450},
+            usage_metadata={"input_tokens": in_tok, "output_tokens": out_tok, "total_tokens": in_tok + out_tok},
         )
         return {"parsed": parsed, "raw": raw_msg}
 

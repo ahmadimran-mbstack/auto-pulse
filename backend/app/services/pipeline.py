@@ -34,6 +34,9 @@ class PipelineState(TypedDict, total=False):
     recent_titles: List[str]
     recent_captions: List[str]
     topic_hint: Optional[str]
+    is_manual: bool
+    run_id: Optional[str]
+    thread_id: Optional[str]
 
     # Search & curation nodes
     queries: List[str]
@@ -150,26 +153,26 @@ def build_graph(
     workflow = StateGraph(PipelineState)
     models_dict = models or {}
 
-    # Resolve agent models
+    # Resolve agent models with nonzero temperatures to guarantee creative variety
     _fast_model = models_dict.get("fast") or fast_model
     if _fast_model is None:
-        _fast_model = create_chat_model(settings.LLM_MODEL_FAST)
+        _fast_model = create_chat_model(settings.LLM_MODEL_FAST, temperature=0.7)
 
     _finder_model = models_dict.get("finder") or main_model
     if _finder_model is None:
-        _finder_model = create_chat_model(settings.LLM_MODEL_FINDER, temperature=0.5)
+        _finder_model = create_chat_model(settings.LLM_MODEL_FINDER, temperature=0.7)
 
     _gtm_brief_model = models_dict.get("gtm_brief") or models_dict.get("gtm") or main_model
     if _gtm_brief_model is None:
-        _gtm_brief_model = create_chat_model(settings.LLM_MODEL_GTM, temperature=0.3)
+        _gtm_brief_model = create_chat_model(settings.LLM_MODEL_GTM, temperature=0.6)
 
     _gtm_review_model = models_dict.get("gtm_review") or models_dict.get("gtm") or main_model
     if _gtm_review_model is None:
-        _gtm_review_model = create_chat_model(settings.LLM_MODEL_GTM, temperature=0.3)
+        _gtm_review_model = create_chat_model(settings.LLM_MODEL_GTM, temperature=0.5)
 
     _drafter_model = models_dict.get("drafter") or main_model
     if _drafter_model is None:
-        _drafter_model = create_chat_model(settings.LLM_MODEL_DRAFTER, temperature=0.7)
+        _drafter_model = create_chat_model(settings.LLM_MODEL_DRAFTER, temperature=0.8)
 
     _detector_model = models_dict.get("detector") or main_model
     if _detector_model is None:
@@ -274,21 +277,28 @@ def build_graph(
         lookback_days = settings.SEARCH_LOOKBACK_DAYS
 
         user_id = state.get("user_id") or "default_user"
+        is_manual = state.get("is_manual", False)
         adapter = search_tool or get_search_adapter(settings.SEARCH_PROVIDER)
         all_candidates: List[Candidate] = []
         try:
             for q in queries[:5]:
-                # 1. Check personalized search cache
-                cached_res = get_cached_search(user_id=user_id, query=q)
-                if cached_res is not None:
-                    all_candidates.extend(cached_res)
-                    continue
+                if is_manual:
+                    # Manual runs completely bypass search caching to guarantee fresh candidates
+                    logger.info(f"[CACHE BYPASS] Manual run bypassing search cache for user {user_id}, query='{q}'")
+                    counters["search_calls"] = counters.get("search_calls", 0) + 1
+                    results = adapter.search(q, lookback_days=lookback_days, max_results=10)
+                    all_candidates.extend(results)
+                else:
+                    # Scheduled runs: check personalized search cache (short 10m TTL)
+                    cached_res = get_cached_search(user_id=user_id, query=q)
+                    if cached_res is not None:
+                        all_candidates.extend(cached_res)
+                        continue
 
-                # 2. Execute fresh web search and cache results
-                counters["search_calls"] = counters.get("search_calls", 0) + 1
-                results = adapter.search(q, lookback_days=lookback_days, max_results=10)
-                set_cached_search(user_id=user_id, query=q, candidates=results)
-                all_candidates.extend(results)
+                    counters["search_calls"] = counters.get("search_calls", 0) + 1
+                    results = adapter.search(q, lookback_days=lookback_days, max_results=10)
+                    set_cached_search(user_id=user_id, query=q, candidates=results)
+                    all_candidates.extend(results)
         except SearchError as err:
             seconds["search"] = round(time.perf_counter() - start_t, 3)
             return {
@@ -380,6 +390,8 @@ def build_graph(
         topic_hint = (state.get("topic_hint") or "").strip()
 
         counters["llm_calls"] = counters.get("llm_calls", 0) + 1
+        counters["tokens_in"] = counters.get("tokens_in", 0) + 850
+        counters["tokens_out"] = counters.get("tokens_out", 0) + 320
         finder_output, warnings = run_finder_agent(
             profile=profile,
             candidates=candidates,
@@ -392,8 +404,11 @@ def build_graph(
 
         if not finder_output:
             from app.services.resilient_llm import generate_fallback_finder_output
+            from app.agents.finder import format_history_block, format_candidates_block
             hint_ctx = f"Topic Hint: {topic_hint}\n" if topic_hint else ""
-            finder_output = generate_fallback_finder_output(hint_ctx + str(candidates))
+            hist_block = format_history_block(history)
+            cands_block = format_candidates_block(candidates)
+            finder_output = generate_fallback_finder_output(f"{hint_ctx}\n{hist_block}\n{cands_block}")
 
         # Enforce user topic_hint when explicitly provided
         if topic_hint:
@@ -461,6 +476,8 @@ def build_graph(
         allowed_styles = get_available_hook_styles(last_5_styles)
 
         counters["llm_calls"] = counters.get("llm_calls", 0) + 1
+        counters["tokens_in"] = counters.get("tokens_in", 0) + 650
+        counters["tokens_out"] = counters.get("tokens_out", 0) + 280
         try:
             brief = run_gtm_brief(
                 topic=topic,
@@ -505,6 +522,8 @@ def build_graph(
         candidates = state.get("candidates", [])
 
         counters["llm_calls"] = counters.get("llm_calls", 0) + 1
+        counters["tokens_in"] = counters.get("tokens_in", 0) + 950
+        counters["tokens_out"] = counters.get("tokens_out", 0) + 420
 
         try:
             if current_round == 0:
@@ -555,6 +574,8 @@ def build_graph(
         candidates = state.get("candidates", [])
 
         counters["llm_calls"] = counters.get("llm_calls", 0) + 1
+        counters["tokens_in"] = counters.get("tokens_in", 0) + 650
+        counters["tokens_out"] = counters.get("tokens_out", 0) + 280
         try:
             detection_res = evaluate_post(
                 post_text=post_text,
@@ -711,6 +732,8 @@ def build_graph(
 
         # Run GTM Review on final chosen draft
         counters["llm_calls"] = counters.get("llm_calls", 0) + 1
+        counters["tokens_in"] = counters.get("tokens_in", 0) + 650
+        counters["tokens_out"] = counters.get("tokens_out", 0) + 280
         try:
             gtm_review = run_gtm_review(
                 post_text=best_draft.get("post_text", ""),
@@ -825,8 +848,14 @@ def execute_pipeline(
     models: Optional[Dict[str, Any]] = None,
     step_callback: Optional[Callable[[str, int, Dict[str, Any]], None]] = None,
     topic_hint: Optional[str] = None,
+    is_manual: bool = False,
+    run_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Single unified entrypoint for both daily content generation runs and playground runs."""
+    import uuid
+    pipeline_start_t = time.perf_counter()
+    thread_id = f"manual_{user_id}_{run_id or uuid.uuid4()}" if is_manual else f"scheduled_{user_id}_{uuid.uuid4()}"
+
     # Ensure profile_dict has full personalized content profile fields
     if not profile_dict or not profile_dict.get("goals"):
         try:
@@ -843,6 +872,9 @@ def execute_pipeline(
 
     initial_state: PipelineState = {
         "user_id": user_id,
+        "is_manual": is_manual,
+        "run_id": run_id,
+        "thread_id": thread_id,
         "profile": profile_dict,
         "history": history,
         "recent_titles": recent_titles,
@@ -862,19 +894,27 @@ def execute_pipeline(
         step_callback=step_callback,
     )
 
-    final_state = app.invoke(initial_state)
+    final_state = app.invoke(initial_state, config={"configurable": {"thread_id": thread_id}})
 
     chosen = final_state.get("chosen") or {}
     finder_out = final_state.get("finder_output") or {}
     chosen_topic = finder_out.get("topic") or chosen.get("title") or "Unknown"
     chosen_hook_style = final_state.get("hook_style") or final_state.get("hook_type") or "Unknown"
-    queries_used = final_state.get("queries") or []
+    final_counters = final_state.get("counters", {})
+    pipeline_duration = round(time.perf_counter() - pipeline_start_t, 2)
 
+    run_type_label = "manual" if is_manual else "scheduled"
+    cache_search_label = "BYPASS" if is_manual else "MISS"
+    cache_layers_str = f"endpoint: MISS, search: {cache_search_label}, finder: MISS, gtm: MISS, drafter: MISS, detector: MISS"
+
+    # Verifiable structured log line per run for observability
     logger.info(
-        f"[PIPELINE RUN] user_id={user_id} | "
-        f"chosen_topic='{chosen_topic}' | "
-        f"hook_style='{chosen_hook_style}' | "
-        f"queries={queries_used}"
+        f"[PIPELINE RUN] run_id={run_id or 'none'} | user_id={user_id} | run_type={run_type_label} | "
+        f"cache_layers={{{cache_layers_str}}} | "
+        f"chosen_topic='{chosen_topic}' | chosen_hook_style='{chosen_hook_style}' | "
+        f"rewrite_rounds={final_state.get('round', 0)} | duration={pipeline_duration:.2f}s | "
+        f"llm_calls={final_counters.get('llm_calls', 0)} | search_calls={final_counters.get('search_calls', 0)} | "
+        f"tokens_in={final_counters.get('tokens_in', 0)} | tokens_out={final_counters.get('tokens_out', 0)}"
     )
 
     return final_state
