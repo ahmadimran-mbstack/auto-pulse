@@ -96,9 +96,10 @@ export function RichPostEditor({
 
   return (
     <div
+      data-input-wrapper
       className={cn(
-        "flex flex-col rounded-md border border-input bg-background transition-colors",
-        "focus-within:border-ring focus-within:ring-1 focus-within:ring-ring",
+        "flex flex-col rounded-md border border-input bg-card transition-[border-color] duration-200 ease-in-out",
+        "focus-within:border-input-focus",
         disabled && "opacity-50 pointer-events-none"
       )}
     >
@@ -116,7 +117,7 @@ export function RichPostEditor({
             handleFormat("bold");
           }}
           className={cn(
-            "size-7 p-0 rounded text-muted-foreground hover:text-foreground hover:bg-accent",
+            "size-7 p-0 rounded text-muted-foreground hover:text-foreground hover:bg-accent focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-input-focus focus-visible:border-input-focus",
             isBold && "bg-accent text-foreground font-semibold"
           )}
         >
@@ -134,7 +135,7 @@ export function RichPostEditor({
             handleFormat("italic");
           }}
           className={cn(
-            "size-7 p-0 rounded text-muted-foreground hover:text-foreground hover:bg-accent",
+            "size-7 p-0 rounded text-muted-foreground hover:text-foreground hover:bg-accent focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-input-focus focus-visible:border-input-focus",
             isItalic && "bg-accent text-foreground font-semibold"
           )}
         >
@@ -152,7 +153,7 @@ export function RichPostEditor({
             handleFormat("underline");
           }}
           className={cn(
-            "size-7 p-0 rounded text-muted-foreground hover:text-foreground hover:bg-accent",
+            "size-7 p-0 rounded text-muted-foreground hover:text-foreground hover:bg-accent focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-input-focus focus-visible:border-input-focus",
             isUnderline && "bg-accent text-foreground font-semibold"
           )}
         >
@@ -177,7 +178,8 @@ export function RichPostEditor({
           onKeyUp={updateFormattingState}
           onMouseUp={updateFormattingState}
           onKeyDown={handleKeyDown}
-          className="min-h-[160px] outline-none text-foreground leading-relaxed whitespace-pre-wrap break-words"
+          className="min-h-[160px] outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 shadow-none focus:shadow-none text-foreground leading-relaxed whitespace-pre-wrap break-words"
+          style={{ outline: "none", boxShadow: "none" }}
         />
       </div>
 

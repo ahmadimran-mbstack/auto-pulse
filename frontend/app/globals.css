@@ -478,6 +478,19 @@ select:focus-visible {
   background-color: transparent !important;
 }
 
+/* Rich text editor and contenteditable focus styling */
+[data-input-wrapper] [contenteditable],
+[contenteditable],
+[contenteditable]:focus,
+[contenteditable]:focus-visible,
+.ProseMirror,
+.ProseMirror:focus,
+.ProseMirror-focused {
+  outline: none !important;
+  box-shadow: none !important;
+  -webkit-box-shadow: none !important;
+}
+
 /*
   Global Scrollbar Removal:
   - Hides both horizontal and vertical web scrollbars across the entire app (dashboard, landing pages, sheets, modals).
