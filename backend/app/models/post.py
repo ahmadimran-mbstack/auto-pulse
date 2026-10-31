@@ -6,6 +6,7 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     DateTime,
+    Float,
     Index,
     Integer,
     SmallInteger,
@@ -123,7 +124,10 @@ class GenerationRun(Base):
     # Local date for which content generation is running
     run_date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
 
-    # Run lifecycle status: started, succeeded, failed, or skipped
+    # Run type: 'scheduled' for daily loop, 'manual' for playground / on-demand triggers
+    run_type: Mapped[str] = mapped_column(Text, nullable=False, server_default="scheduled")
+
+    # Run lifecycle status: queued, started, running, succeeded, completed, failed, or skipped
     status: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Number of execution attempts for this run
@@ -149,11 +153,15 @@ class GenerationRun(Base):
     tokens_out: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="0"
     )
+    duration: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # ID of the generated draft post if successful
     post_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), nullable=True
     )
+
+    # Final generated post draft result (text, headline, hashtags, scores)
+    result: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
 
     # Agent loop execution trace and intermediate state
     agent_trace: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
@@ -172,12 +180,16 @@ class GenerationRun(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('started', 'succeeded', 'failed', 'skipped')",
+            "status IN ('queued', 'started', 'running', 'succeeded', 'completed', 'failed', 'skipped')",
             name="ck_generation_runs_status",
         ),
-        # Single run record per user per scheduled date
-        UniqueConstraint(
-            "user_id", "run_date", name="uq_generation_runs_user_id_run_date"
+        # Scheduled runs are limited to at most one record per user per date
+        Index(
+            "uq_generation_runs_scheduled_user_date",
+            "user_id",
+            "run_date",
+            unique=True,
+            postgresql_where=text("run_type = 'scheduled'"),
         ),
     )
 
