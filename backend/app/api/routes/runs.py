@@ -27,7 +27,7 @@ def get_generation_run(
         .first()
     )
     if gen_run:
-        status_val = "done" if gen_run.status == "completed" else gen_run.status
+        status_val = "done" if gen_run.status in ("completed", "succeeded") else gen_run.status
         trace_data = gen_run.agent_trace
         return GenerationRunDetail(
             id=gen_run.id,
@@ -38,6 +38,7 @@ def get_generation_run(
             trace=trace_data,
             agent_trace=trace_data,
             post_id=gen_run.post_id,
+            result=gen_run.result,
             started_at=gen_run.started_at.isoformat() if gen_run.started_at else None,
             finished_at=gen_run.finished_at.isoformat() if gen_run.finished_at else None,
         )

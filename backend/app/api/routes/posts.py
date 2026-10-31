@@ -459,49 +459,17 @@ def generate_draft_now(
     if replace:
         post_repo.delete_draft_and_run_for_date(db=db, user_id=user.id, run_date=today_local)
 
-    # Check if a non-playground draft or post already exists for today
-    existing = post_repo.get_caller_posts(db=db, user_id=user.id, limit=50)
-    for p in existing:
-        if p.run_date == today_local and getattr(p, "approval_source", None) != "playground":
-            return PostDetail(
-                id=p.id,
-                status=p.status,
-                run_date=p.run_date.isoformat(),
-                topic_title=p.topic_title,
-                topic_url=p.topic_url,
-                sources=p.sources,
-                caption=p.caption,
-                hashtags=p.hashtags,
-                created_at=p.created_at.isoformat(),
-                angle=p.angle,
-                hook_type=p.hook_type,
-                hook_style=getattr(p, "hook_style", None) or p.hook_type,
-                post_format=p.post_format,
-            )
-
-    # Record or claim generation run safely avoiding duplicate key conflicts
-    run = db.query(GenerationRun).filter(
-        GenerationRun.user_id == user.id,
-        GenerationRun.run_date == today_local,
-    ).first()
-
-    if run:
-        run.status = "started"
-        run.attempts += 1
-        run.started_at = datetime.datetime.now(datetime.timezone.utc)
-        run.finished_at = None
-        run.error_code = None
-        run.error_detail = None
-        run.search_provider = settings.SEARCH_PROVIDER
-    else:
-        run = GenerationRun(
-            user_id=user.id,
-            run_date=today_local,
-            status="started",
-            search_provider=settings.SEARCH_PROVIDER,
-        )
-        db.add(run)
-
+    # Always create a brand new generation run with fresh UUID and run_type='manual'
+    new_run_id = uuid.uuid4()
+    run = GenerationRun(
+        id=new_run_id,
+        user_id=user.id,
+        run_date=today_local,
+        run_type="manual",
+        status="started",
+        search_provider=settings.SEARCH_PROVIDER,
+    )
+    db.add(run)
     db.commit()
     db.refresh(run)
 
@@ -521,6 +489,8 @@ def generate_draft_now(
         history=history,
         search_tool=search_tool,
         step_callback=_step_callback,
+        is_manual=True,
+        run_id=str(new_run_id),
     )
 
     counters = final_state.get("counters", {})
@@ -538,6 +508,8 @@ def generate_draft_now(
         run.error_code = err_code
         run.error_detail = final_state.get("error_detail")
         run.finished_at = datetime.datetime.now(datetime.timezone.utc)
+        if run.started_at:
+            run.duration = round((run.finished_at - run.started_at).total_seconds(), 2)
         db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -593,7 +565,10 @@ def generate_draft_now(
 
     run.status = "succeeded"
     run.post_id = post.id
+    run.result = draft
     run.finished_at = datetime.datetime.now(datetime.timezone.utc)
+    if run.started_at:
+        run.duration = round((run.finished_at - run.started_at).total_seconds(), 2)
     db.commit()
 
     # Trigger approval request email

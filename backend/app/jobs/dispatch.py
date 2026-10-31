@@ -88,6 +88,7 @@ def claim_generation_run(db: Session, user_id: str, run_date: datetime.date) -> 
         .filter(
             GenerationRun.user_id == user_id,
             GenerationRun.run_date == run_date,
+            GenerationRun.run_type == "scheduled",
         )
         .first()
     )
@@ -96,6 +97,7 @@ def claim_generation_run(db: Session, user_id: str, run_date: datetime.date) -> 
         run = GenerationRun(
             user_id=user_id,
             run_date=run_date,
+            run_type="scheduled",
             status="started",
             attempts=1,
             search_provider=settings.SEARCH_PROVIDER,
@@ -109,7 +111,7 @@ def claim_generation_run(db: Session, user_id: str, run_date: datetime.date) -> 
         "UPDATE generation_runs "
         "SET status = 'started', attempts = attempts + 1, started_at = now(), "
         "    finished_at = NULL, error_code = NULL, error_detail = NULL "
-        "WHERE user_id = :user_id AND run_date = :run_date AND attempts < 2 "
+        "WHERE user_id = :user_id AND run_date = :run_date AND run_type = 'scheduled' AND attempts < 2 "
         "  AND (status = 'failed' OR (status = 'started' AND started_at < now() - interval '15 minutes')) "
         "RETURNING id"
     )
@@ -172,8 +174,10 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
             run.error_code = err_code
             run.error_detail = final_state.get("error_detail")
             run.finished_at = datetime.datetime.now(datetime.timezone.utc)
+            if run.started_at:
+                run.duration = round((run.finished_at - run.started_at).total_seconds(), 2)
             db.commit()
-            elapsed = (run.finished_at - run.started_at).total_seconds()
+            elapsed = run.duration or (run.finished_at - run.started_at).total_seconds()
             logger.warning(f"Generation run {run.id} failed after {elapsed:.2f}s: {err_code} - {run.error_detail}")
             return None
 
@@ -227,9 +231,11 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
         run.status = "succeeded"
         run.post_id = post.id
         run.finished_at = datetime.datetime.now(datetime.timezone.utc)
+        if run.started_at:
+            run.duration = round((run.finished_at - run.started_at).total_seconds(), 2)
         db.commit()
 
-        elapsed = (run.finished_at - run.started_at).total_seconds()
+        elapsed = run.duration or (run.finished_at - run.started_at).total_seconds()
         logger.info(
             f"Generation run {run.id} for user {profile.user_id} succeeded in {elapsed:.2f}s "
             f"(ai_score={post.ai_score}, needs_review={post.needs_review})"
@@ -246,6 +252,8 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
         run.error_code = "generation_exception"
         run.error_detail = str(exc)[:200]
         run.finished_at = datetime.datetime.now(datetime.timezone.utc)
+        if run.started_at:
+            run.duration = round((run.finished_at - run.started_at).total_seconds(), 2)
         db.commit()
         logger.error(f"Generation run failed for user {profile.user_id}: {exc}")
         return None
