@@ -25,7 +25,7 @@ import {
 } from "@/lib/queries";
 import { deleteAccount, ApiClientError } from "@/lib/api";
 import { authClient } from "@/lib/auth/client";
-import { signOutAction } from "@/app/app/actions";
+import { useSignOut } from "@/hooks/use-sign-out";
 import { getTimezonesLazy } from "@/lib/timezones";
 import { cn } from "@/lib/utils";
 
@@ -1292,6 +1292,7 @@ function AccountTabPanel({
   email: string;
   router: ReturnType<typeof useRouter>;
 }) {
+  const { signOut, isSigningOut } = useSignOut();
   const [deleteConfirmText, setDeleteConfirmText] = React.useState("");
   const [showDeleteDialog, setShowDeleteDialog] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
@@ -1401,17 +1402,26 @@ function AccountTabPanel({
           <span className="text-caption text-muted-foreground">
             Sign out of your active browser session
           </span>
-          <form
-            action={signOutAction}
-            onSubmit={() => {
-              clearAllAppCaches();
-            }}
+          <Button
+            variant="outline"
+            size="sm"
+            type="button"
+            disabled={isSigningOut}
+            onClick={signOut}
+            className="gap-2"
           >
-            <Button variant="outline" size="sm" type="submit" className="gap-2">
-              <LogOutIcon className="size-4" />
-              <span>Sign out</span>
-            </Button>
-          </form>
+            {isSigningOut ? (
+              <>
+                <Loader2Icon className="size-4 animate-spin" />
+                <span>Signing out...</span>
+              </>
+            ) : (
+              <>
+                <LogOutIcon className="size-4" />
+                <span>Sign out</span>
+              </>
+            )}
+          </Button>
         </CardFooter>
       </Card>
 

@@ -70,11 +70,28 @@ export const queryClient = new QueryClient({
   },
 });
 
-// Clears the entire in-memory query cache and auth token on sign out
+// Clears the entire in-memory query cache, auth token, and client storage on sign out
 export function clearAllAppCaches(): void {
   clearCachedToken();
   queryClient.clear();
+
+  if (typeof window !== "undefined") {
+    try {
+      const theme = localStorage.getItem("theme");
+      const nextTheme = localStorage.getItem("next-theme");
+
+      localStorage.clear();
+      sessionStorage.clear();
+
+      if (theme) localStorage.setItem("theme", theme);
+      if (nextTheme) localStorage.setItem("next-theme", nextTheme);
+    } catch {
+      // Storage access may be restricted in sandbox/privacy mode
+    }
+  }
 }
+
+export const clearClientState = clearAllAppCaches;
 
 // Canonical query key factories strictly namespaced by signed-in user id
 export const queryKeys = {

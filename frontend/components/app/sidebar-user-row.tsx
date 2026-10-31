@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { MoreHorizontal, Bell, Settings, LogOut, ExternalLink } from "lucide-react";
+import { MoreHorizontal, Bell, Settings, LogOut, Loader2, ExternalLink } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,8 +18,8 @@ import {
 } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { signOutAction } from "@/app/app/actions";
-import { clearAllAppCaches, useDashboardQuery } from "@/lib/queries";
+import { useSignOut } from "@/hooks/use-sign-out";
+import { useDashboardQuery } from "@/lib/queries";
 import { getDeterministicGradient } from "@/lib/avatar-gradient";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +33,7 @@ interface SidebarUserRowProps {
 }
 
 export function SidebarUserRow({ user }: SidebarUserRowProps) {
+  const { signOut, isSigningOut } = useSignOut();
   const displayName = user.name || user.email.split("@")[0] || "User";
   const avatarGradient = getDeterministicGradient(user.id);
   const [imageError, setImageError] = React.useState(false);
@@ -159,22 +160,25 @@ export function SidebarUserRow({ user }: SidebarUserRowProps) {
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <form
-                action={signOutAction}
-                onSubmit={() => {
-                  clearAllAppCaches();
-                }}
-                className="w-full"
-              >
-                <button
-                  type="submit"
-                  className="flex w-full items-center gap-2.5 px-3 py-2 text-destructive cursor-pointer"
-                >
-                  <LogOut className="size-4" />
+            <DropdownMenuItem
+              disabled={isSigningOut}
+              onSelect={(e) => {
+                e.preventDefault();
+                signOut();
+              }}
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-destructive cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
+            >
+              {isSigningOut ? (
+                <>
+                  <Loader2 className="size-4 animate-spin shrink-0" />
+                  <span>Signing out...</span>
+                </>
+              ) : (
+                <>
+                  <LogOut className="size-4 shrink-0" />
                   <span>Sign out</span>
-                </button>
-              </form>
+                </>
+              )}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

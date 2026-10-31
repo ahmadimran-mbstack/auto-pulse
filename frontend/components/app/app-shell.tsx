@@ -5,6 +5,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import { useAppSidebarState } from "@/components/providers/sidebar-provider";
 import type { AppUser } from "@/components/providers/user-provider";
+import { clearClientState } from "@/lib/queries";
 
 export function AppShell({
   user,
@@ -14,6 +15,46 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const { open, isReady } = useAppSidebarState();
+
+  React.useEffect(() => {
+    // 1. Detect if page is restored from browser back/forward cache (bfcache)
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        // Force full reload so server layout re-verifies session
+        window.location.reload();
+      }
+    };
+    window.addEventListener("pageshow", handlePageShow);
+
+    // 2. Synchronize sign-out across multiple open browser tabs
+    const authChannel =
+      typeof BroadcastChannel !== "undefined"
+        ? new BroadcastChannel("autopulse-auth")
+        : null;
+
+    const handleBroadcast = (event: MessageEvent) => {
+      if (event.data === "logout") {
+        clearClientState();
+        window.location.replace("/auth/sign-in");
+      }
+    };
+    authChannel?.addEventListener("message", handleBroadcast);
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === "autopulse_logout_event") {
+        clearClientState();
+        window.location.replace("/auth/sign-in");
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener("pageshow", handlePageShow);
+      authChannel?.removeEventListener("message", handleBroadcast);
+      authChannel?.close();
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
 
   return (
     <div

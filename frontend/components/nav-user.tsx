@@ -20,10 +20,9 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { EllipsisVerticalIcon, SettingsIcon, LogOutIcon } from "lucide-react";
+import { EllipsisVerticalIcon, SettingsIcon, LogOutIcon, Loader2 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { signOutAction } from "@/app/app/actions";
-import { clearAllAppCaches } from "@/lib/queries";
+import { useSignOut } from "@/hooks/use-sign-out";
 
 export interface NavUserData {
   name?: string | null;
@@ -31,6 +30,7 @@ export interface NavUserData {
 }
 
 export function NavUser({ user }: { user: NavUserData }) {
+  const { signOut, isSigningOut } = useSignOut();
   const { isMobile } = useSidebar();
   const displayName = user.name || user.email.split("@")[0] || "User";
   const initial = displayName.charAt(0).toUpperCase();
@@ -92,22 +92,25 @@ export function NavUser({ user }: { user: NavUserData }) {
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <form
-                action={signOutAction}
-                onSubmit={() => {
-                  clearAllAppCaches();
-                }}
-                className="w-full"
-              >
-                <button
-                  type="submit"
-                  className="flex w-full items-center gap-2 text-destructive cursor-pointer"
-                >
-                  <LogOutIcon className="size-4" />
+            <DropdownMenuItem
+              disabled={isSigningOut}
+              onSelect={(e) => {
+                e.preventDefault();
+                signOut();
+              }}
+              className="flex w-full items-center gap-2 text-destructive cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
+            >
+              {isSigningOut ? (
+                <>
+                  <Loader2 className="size-4 animate-spin shrink-0" />
+                  <span>Signing out...</span>
+                </>
+              ) : (
+                <>
+                  <LogOutIcon className="size-4 shrink-0" />
                   <span>Sign out</span>
-                </button>
-              </form>
+                </>
+              )}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

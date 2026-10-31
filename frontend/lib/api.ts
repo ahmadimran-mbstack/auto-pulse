@@ -104,9 +104,18 @@ export async function apiCall<T>(
       // Ignore cleanup error if already signed out
     }
     if (typeof window !== "undefined") {
-      // Hard redirect to sign-in on session invalidation outside React lifecycle
-      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-      window.location.href = "/auth/sign-in";
+      try {
+        const theme = localStorage.getItem("theme");
+        const nextTheme = localStorage.getItem("next-theme");
+        localStorage.clear();
+        sessionStorage.clear();
+        if (theme) localStorage.setItem("theme", theme);
+        if (nextTheme) localStorage.setItem("next-theme", nextTheme);
+      } catch {
+        // Storage access may be restricted
+      }
+      // Hard replace navigation to sign-in on session invalidation
+      window.location.replace("/auth/sign-in");
     }
     throw new ApiClientError(401, {
       code: "unauthorized",
@@ -155,9 +164,18 @@ export async function apiCall<T>(
       // Ignore cleanup error
     }
     if (typeof window !== "undefined") {
-      // Hard redirect to sign-in on session invalidation outside React lifecycle
-      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-      window.location.href = "/auth/sign-in";
+      try {
+        const theme = localStorage.getItem("theme");
+        const nextTheme = localStorage.getItem("next-theme");
+        localStorage.clear();
+        sessionStorage.clear();
+        if (theme) localStorage.setItem("theme", theme);
+        if (nextTheme) localStorage.setItem("next-theme", nextTheme);
+      } catch {
+        // Storage access may be restricted
+      }
+      // Hard replace navigation to sign-in on session invalidation
+      window.location.replace("/auth/sign-in");
     }
     throw new ApiClientError(401, {
       code: "unauthorized",
@@ -373,8 +391,17 @@ export async function fetchPostImageBlob(
       // Ignore cleanup error if already signed out
     }
     if (typeof window !== "undefined") {
-      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-      window.location.href = "/auth/sign-in";
+      try {
+        const theme = localStorage.getItem("theme");
+        const nextTheme = localStorage.getItem("next-theme");
+        localStorage.clear();
+        sessionStorage.clear();
+        if (theme) localStorage.setItem("theme", theme);
+        if (nextTheme) localStorage.setItem("next-theme", nextTheme);
+      } catch {
+        // Storage access may be restricted
+      }
+      window.location.replace("/auth/sign-in");
     }
     throw new ApiClientError(401, {
       code: "unauthorized",
@@ -409,8 +436,17 @@ export async function fetchPostImageBlob(
       // Ignore cleanup error
     }
     if (typeof window !== "undefined") {
-      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-      window.location.href = "/auth/sign-in";
+      try {
+        const theme = localStorage.getItem("theme");
+        const nextTheme = localStorage.getItem("next-theme");
+        localStorage.clear();
+        sessionStorage.clear();
+        if (theme) localStorage.setItem("theme", theme);
+        if (nextTheme) localStorage.setItem("next-theme", nextTheme);
+      } catch {
+        // Storage access may be restricted
+      }
+      window.location.replace("/auth/sign-in");
     }
     throw new ApiClientError(401, {
       code: "unauthorized",
