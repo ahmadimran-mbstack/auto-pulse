@@ -3,6 +3,13 @@ import signal
 import sys
 import threading
 import time
+from pathlib import Path
+
+# Ensure the backend directory is in sys.path so 'app' modules can be imported
+# whether started from project root or backend folder
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
 
 from app.core.config import settings
 from app.services.slack import handle_block_action
