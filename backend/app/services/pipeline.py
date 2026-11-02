@@ -35,21 +35,51 @@ from app.services.resilient_llm import run_call_with_timeout
 logger = logging.getLogger(__name__)
 
 
-def _update_db_node_progress(run_id: Optional[str], node_name: str, is_start: bool = True) -> None:
-    """Updates current_node and last_progress_at in Postgres to ensure accurate live progress."""
+def _update_db_node_progress(
+    run_id: Optional[str],
+    node_name: str,
+    is_start: bool = True,
+    topic_index: int = 0,
+    round_num: int = 0,
+    best_draft: Optional[Dict[str, Any]] = None,
+    current_step: Optional[str] = None,
+) -> None:
+    """Updates current_node, current_step, topic_index, round, best_draft and last_progress_at in Postgres."""
     if not run_id or str(run_id) == "none":
         return
     try:
         from app.db.session import SessionLocal
         from sqlalchemy import text
+        import json
+        best_draft_json = json.dumps(best_draft) if best_draft else None
         with SessionLocal() as db:
+            params = {
+                "id": run_id,
+                "node": node_name,
+                "step": current_step or node_name,
+                "topic_idx": topic_index,
+                "round": round_num,
+                "best_draft": best_draft_json,
+            }
             db.execute(
-                text("UPDATE generation_runs SET current_node = :node, last_progress_at = now() WHERE id = :id"),
-                {"id": run_id, "node": node_name},
+                text(
+                    "UPDATE generation_runs "
+                    "SET current_node = :node, current_step = :step, last_progress_at = now(), "
+                    "    current_topic_index = :topic_idx, current_round = :round, "
+                    "    best_draft = CASE WHEN :best_draft IS NOT NULL THEN :best_draft::jsonb ELSE best_draft END "
+                    "WHERE id = :id"
+                ),
+                params,
             )
             db.execute(
-                text("UPDATE playground_runs SET current_node = :node, last_progress_at = now() WHERE id = :id"),
-                {"id": run_id, "node": node_name},
+                text(
+                    "UPDATE playground_runs "
+                    "SET current_node = :node, current_step = :step, last_progress_at = now(), "
+                    "    current_topic_index = :topic_idx, current_round = :round, "
+                    "    best_draft = CASE WHEN :best_draft IS NOT NULL THEN :best_draft::jsonb ELSE best_draft END "
+                    "WHERE id = :id"
+                ),
+                params,
             )
             db.commit()
     except Exception as exc:
@@ -84,6 +114,19 @@ class PipelineState(TypedDict, total=False):
     hook_text: Optional[str]
     post_format: Optional[str]
     why_now: Optional[str]
+
+    # Multi-topic and Smart Loop
+    topic_candidates: List[Dict[str, Any]]
+    current_topic_index: int
+    max_topics: int
+    current_round: int
+    max_rewrites: int
+    best_failing_gates: List[str]
+    consecutive_same_gate_failures: int
+    last_failing_gate: Optional[str]
+    switch_to_gtm: bool
+    cached_pages: Dict[str, str]
+    cached_facts: Dict[str, List[Any]]
 
     # Editorial strategy
     gtm_brief: Optional[Dict[str, Any]]
@@ -535,6 +578,65 @@ def build_graph(
             for vf in verified_facts
         ]
 
+        # Build list of up to MAX_TOPICS_PER_RUN candidate topics
+        topic_0 = {
+            "topic_title": topic_title,
+            "topic_label": topic_label,
+            "angle": finder_output.angle,
+            "key_facts": key_facts_data,
+            "hook_type": finder_output.hook_type,
+            "post_format": finder_output.post_format,
+            "why_now": finder_output.why_now,
+            "chosen": chosen_candidate,
+            "sources": [chosen_candidate],
+        }
+        topic_candidates = [topic_0]
+
+        def _extract_cand_facts(c_item: Dict[str, Any]) -> List[Dict[str, Any]]:
+            import re
+            c_text = c_item.get("text", "")
+            c_url = c_item.get("url", "")
+            if not c_text:
+                return []
+            sentences = re.split(r"(?<=[.!?])\s+", c_text)
+            f_list = []
+            for s in sentences:
+                s_c = s.strip()
+                w_list = s_c.split()
+                if 8 <= len(w_list) <= 50:
+                    if re.search(r"\b\d+(?:\.\d+)?%?|\$[0-9]|[A-Z][a-z0-9]+\s+[0-9]", s_c):
+                        f_list.append({
+                            "claim": s_c,
+                            "fact": s_c,
+                            "evidence_quote": s_c,
+                            "source_url": c_url,
+                        })
+                        if len(f_list) >= 4:
+                            break
+            return f_list
+
+        max_allowed_topics = getattr(settings, "MAX_TOPICS_PER_RUN", 4)
+        for alt_c in candidates:
+            if len(topic_candidates) >= max_allowed_topics:
+                break
+            if alt_c.get("url", "").strip().lower() == chosen_candidate.get("url", "").strip().lower():
+                continue
+            alt_title = alt_c.get("title", "")
+            alt_label = clean_topic_label(alt_title)
+            alt_facts = _extract_cand_facts(alt_c)
+            if len(alt_facts) >= 2:
+                topic_candidates.append({
+                    "topic_title": alt_title,
+                    "topic_label": alt_label,
+                    "angle": f"Practical engineering tradeoffs of {alt_label}",
+                    "key_facts": alt_facts,
+                    "hook_type": "specific observation",
+                    "post_format": "observer take",
+                    "why_now": "Recent industry adoption",
+                    "chosen": alt_c,
+                    "sources": [alt_c],
+                })
+
         return {
             "finder_output": finder_output.model_dump(),
             "chosen": chosen_candidate,
@@ -545,6 +647,9 @@ def build_graph(
             "hook_type": finder_output.hook_type,
             "post_format": finder_output.post_format,
             "why_now": finder_output.why_now,
+            "topic_candidates": topic_candidates,
+            "current_topic_index": 0,
+            "max_topics": len(topic_candidates),
             "counters": counters,
             "seconds_per_node": seconds,
         }
@@ -777,11 +882,14 @@ def build_graph(
 
     # Node 8: ROUTER (Evaluates scores, strike rules, round limits, and loop branching)
     def router_node(state: PipelineState) -> Dict[str, Any]:
-        current_round = state.get("round", 0)
+        current_round = state.get("current_round", state.get("round", 0))
+        topic_index = state.get("current_topic_index", 0)
+        topic_candidates = state.get("topic_candidates", [])
+        
         draft = state.get("draft", {})
         detection_dict = state.get("detection_result", {})
         findings = state.get("findings", [])
-        check_failures = state.get("check_failures", [])
+        check_failures = list(state.get("check_failures", []))
         rounds_history = list(state.get("rounds_history", []))
 
         final_score = detection_dict.get("final_score", 0)
@@ -789,6 +897,16 @@ def build_graph(
         best_score = state.get("best_score", 999)
         best_round = state.get("best_round", 0)
         strike_count = state.get("strike_count", 0)
+        best_failing_gates = list(state.get("best_failing_gates", []))
+        consecutive_same_gate_failures = state.get("consecutive_same_gate_failures", 0)
+        last_failing_gate = state.get("last_failing_gate")
+
+        primary_failing_gate = check_failures[0] if check_failures else (f"AI score {final_score}" if final_score >= settings.AI_SCORE_THRESHOLD else None)
+        if primary_failing_gate and primary_failing_gate == last_failing_gate:
+            consecutive_same_gate_failures += 1
+        else:
+            consecutive_same_gate_failures = 1 if primary_failing_gate else 0
+        last_failing_gate = primary_failing_gate
 
         # 1. Record round snapshot
         serialized_findings = [
@@ -797,6 +915,7 @@ def build_graph(
         ]
         round_entry = {
             "round": current_round,
+            "topic_index": topic_index,
             "post_text": draft.get("post_text", ""),
             "hashtags": draft.get("hashtags", []),
             "image_headline": draft.get("image_headline", ""),
@@ -809,48 +928,102 @@ def build_graph(
         }
         rounds_history.append(round_entry)
 
-        # 2. Track best draft (lowest score)
-        if best_draft is None or final_score < best_score:
-            score_improved = (best_score - final_score) if best_score != 999 else 100
+        # 2. Track best draft across all topics and rounds
+        is_pass = (final_score < settings.AI_SCORE_THRESHOLD and not check_failures)
+        current_failure_count = len(check_failures) + (1 if final_score >= settings.AI_SCORE_THRESHOLD else 0)
+        best_failure_count = len(best_failing_gates) if best_draft is not None else 999
+
+        if best_draft is None or is_pass or current_failure_count < best_failure_count or (current_failure_count == best_failure_count and final_score < best_score):
             best_draft = draft
             best_score = final_score
             best_round = current_round
-        else:
-            score_improved = 0
+            best_failing_gates = list(check_failures)
+            if final_score >= settings.AI_SCORE_THRESHOLD:
+                best_failing_gates.append(f"AI slop score {final_score}/100 exceeds threshold {settings.AI_SCORE_THRESHOLD}")
 
-        # 3. Track strikes (a strike = rewrite failed to improve best score by >= 3 points)
-        if current_round > 0 and score_improved < 3:
-            strike_count += 1
+        # 3. Check termination conditions
+        if is_pass:
+            return {
+                "round": current_round,
+                "current_round": current_round,
+                "current_topic_index": topic_index,
+                "best_draft": best_draft,
+                "best_score": best_score,
+                "best_round": best_round,
+                "best_failing_gates": [],
+                "is_loop_terminal": True,
+                "status": "succeeded",
+                "exit_reason": "passed",
+                "rounds_history": rounds_history,
+                "switch_to_gtm": False,
+            }
 
-        # 4. Check termination conditions
-        is_terminal = False
-        exit_reason = ""
+        # Multi-topic failover check:
+        # If a topic fails 2 rewrites with the same failure or hits MAX_REWRITES_PER_TOPIC (4)
+        max_rewrites_topic = getattr(settings, "MAX_REWRITES_PER_TOPIC", 4)
+        should_switch = (
+            (current_round >= 1 and consecutive_same_gate_failures >= 2)
+            or (current_round >= (max_rewrites_topic - 1))
+        )
 
-        # A draft can ONLY pass if BOTH slop score < threshold AND all validation checks passed
-        if final_score < settings.AI_SCORE_THRESHOLD and not check_failures:
-            is_terminal = True
-            exit_reason = "passed"
-        elif strike_count >= 2:
-            is_terminal = True
-            exit_reason = "no_improvement"
-        elif current_round >= settings.MAX_REWRITE_ROUNDS:
-            is_terminal = True
-            exit_reason = "max_rounds"
-        elif state.get("counters", {}).get("llm_calls", 0) >= settings.MAX_LLM_CALLS_PER_RUN:
-            is_terminal = True
-            exit_reason = "call_limit_reached"
+        if should_switch and (topic_index + 1 < len(topic_candidates)):
+            next_topic_idx = topic_index + 1
+            next_topic = topic_candidates[next_topic_idx]
+            logger.info(f"Topic {topic_index} failed to converge. Switching to topic {next_topic_idx}: '{next_topic.get('topic_label')}'")
 
-        next_round = current_round if is_terminal else current_round + 1
+            return {
+                "current_topic_index": next_topic_idx,
+                "current_round": 0,
+                "round": 0,
+                "strike_count": 0,
+                "consecutive_same_gate_failures": 0,
+                "last_failing_gate": None,
+                "topic_title": next_topic.get("topic_title"),
+                "topic_label": next_topic.get("topic_label"),
+                "angle": next_topic.get("angle"),
+                "key_facts": next_topic.get("key_facts"),
+                "hook_type": next_topic.get("hook_type"),
+                "post_format": next_topic.get("post_format"),
+                "why_now": next_topic.get("why_now"),
+                "chosen": next_topic.get("chosen"),
+                "draft": None,
+                "best_draft": best_draft,
+                "best_score": best_score,
+                "best_failing_gates": best_failing_gates,
+                "switch_to_gtm": True,
+                "is_loop_terminal": False,
+                "rounds_history": rounds_history,
+            }
 
+        if should_switch and (topic_index + 1 >= len(topic_candidates)):
+            # All topics exhausted without a full pass: terminate honestly as needs_review
+            return {
+                "round": current_round,
+                "current_round": current_round,
+                "current_topic_index": topic_index,
+                "best_draft": best_draft,
+                "best_score": best_score,
+                "best_failing_gates": best_failing_gates,
+                "is_loop_terminal": True,
+                "status": "needs_review",
+                "exit_reason": "needs_review",
+                "rounds_history": rounds_history,
+                "switch_to_gtm": False,
+            }
+
+        # Continue rewrites on current topic
         return {
-            "round": next_round,
+            "round": current_round + 1,
+            "current_round": current_round + 1,
+            "current_topic_index": topic_index,
             "best_draft": best_draft,
             "best_score": best_score,
-            "best_round": best_round,
-            "strike_count": strike_count,
+            "best_failing_gates": best_failing_gates,
+            "consecutive_same_gate_failures": consecutive_same_gate_failures,
+            "last_failing_gate": last_failing_gate,
+            "is_loop_terminal": False,
+            "switch_to_gtm": False,
             "rounds_history": rounds_history,
-            "is_loop_terminal": is_terminal,
-            "exit_reason": exit_reason,
         }
 
     # Node 9: POST-LOOP (Picks lowest-score draft, generates image headline, GTM review, final checks, compiles trace)
@@ -897,19 +1070,19 @@ def build_graph(
             angle=angle,
         )
 
-        # A post MUST pass BOTH slop threshold AND all validation checks.
-        failed_quality = bool(
-            exit_reason != "passed"
-            or bool(final_check_failures)
-            or best_score >= settings.AI_SCORE_THRESHOLD
+        passed_all = bool(
+            (state.get("status") == "succeeded" or exit_reason == "passed")
+            and not bool(final_check_failures)
+            and best_score < settings.AI_SCORE_THRESHOLD
         )
-        run_status = "failed_quality" if failed_quality else "completed"
-        current_step = "failed_quality" if failed_quality else "completed"
-        needs_review = failed_quality
+        run_status = "succeeded" if passed_all else "needs_review"
+        current_step = run_status
+        needs_review = not passed_all
+        failed_quality = not passed_all
 
         # Run GTM Review on final chosen draft
         gtm_review_data = {}
-        if not failed_quality:
+        if passed_all:
             counters["llm_calls"] = counters.get("llm_calls", 0) + 1
             counters["tokens_in"] = counters.get("tokens_in", 0) + 650
             counters["tokens_out"] = counters.get("tokens_out", 0) + 280
@@ -927,7 +1100,7 @@ def build_graph(
         else:
             gtm_review_data = {
                 "hook_strength": 0,
-                "review_notes": [f"Run failed quality gates: {'; '.join(final_check_failures) if final_check_failures else exit_reason}"],
+                "review_notes": [f"Run finished as needs_review: {'; '.join(final_check_failures) if final_check_failures else exit_reason}"],
             }
 
         seconds["post_loop"] = round(time.perf_counter() - start_t, 3)
@@ -960,62 +1133,87 @@ def build_graph(
         res_dict = {
             "status": run_status,
             "draft": best_draft,
+            "best_draft": best_draft,
             "ai_score": best_score,
             "final_score": best_score,
             "needs_review": needs_review,
             "gtm_review": gtm_review_data,
             "agent_trace": agent_trace,
             "current_step": current_step,
+            "current_topic_index": state.get("current_topic_index", 0),
+            "max_topics": state.get("max_topics", 4),
+            "current_round": state.get("current_round", 0),
+            "max_rewrites": getattr(settings, "MAX_REWRITES_PER_TOPIC", 4),
             "topic_title": topic_title,
             "topic_label": topic_label,
             "key_facts": key_facts,
+            "failing_gates": final_check_failures,
             "counters": counters,
             "seconds_per_node": seconds,
         }
-        if failed_quality:
-            res_dict["error_code"] = "failed_quality"
+        if needs_review:
+            res_dict["error_code"] = "needs_review"
             res_dict["error_detail"] = (
                 f"Quality gate failure: {'; '.join(final_check_failures)}"
                 if final_check_failures
-                else f"Post loop failed to converge: {exit_reason}"
+                else f"Post loop finished without full pass: {exit_reason}"
             )
         return res_dict
 
-    # Node execution wrapper enforcing per-node timeout, whole-run deadline, and live progress persistence
+    # Node execution wrapper enforcing per-node timeout, whole-run safety ceiling, and live progress persistence
     def _wrap_node(node_name: str, node_func: Callable[[PipelineState], Dict[str, Any]]) -> Callable[[PipelineState], Dict[str, Any]]:
         def _wrapped(state: PipelineState) -> Dict[str, Any]:
             run_id = str(state.get("run_id") or "none")
             user_id = str(state.get("user_id") or "none")
-            round_num = state.get("round", 0)
+            round_num = state.get("current_round", state.get("round", 0))
+            topic_idx = state.get("current_topic_index", 0)
+            best_draft = state.get("best_draft")
 
-            # Whole-run hard deadline check (180s)
+            # Whole-run safety ceiling check (1200s)
             deadline = state.get("run_deadline")
+            ceiling_limit = getattr(settings, "RUN_SAFETY_CEILING_SECONDS", 1200)
             if deadline and time.time() > deadline:
-                logger.warning(f"[DEADLINE HIT] run_id={run_id} | user_id={user_id} | node={node_name} | deadline={settings.TOTAL_RUN_DEADLINE_SECONDS}s")
-                best_draft = state.get("best_draft")
+                logger.warning(f"[SAFETY CEILING HIT] run_id={run_id} | user_id={user_id} | node={node_name} | ceiling={ceiling_limit}s")
                 best_score = state.get("best_score", 999)
-                if best_draft and best_score <= settings.AI_SCORE_THRESHOLD:
-                    logger.info(f"[DEADLINE RECOVER] run_id={run_id} | returning passing draft (score={best_score})")
+                if best_draft and best_score <= getattr(settings, "AI_SCORE_THRESHOLD", 15):
+                    logger.info(f"[CEILING RECOVER] run_id={run_id} | returning passing draft (score={best_score})")
                     return {
-                        "status": "completed",
+                        "status": "succeeded",
                         "draft": best_draft,
                         "best_draft": best_draft,
                         "best_score": best_score,
                         "ai_score": best_score,
-                        "is_loop_terminal": True,
+                        "current_step": "completed",
+                    }
+                elif best_draft:
+                    logger.info(f"[CEILING RECOVER] run_id={run_id} | returning best effort draft marked needs_review (score={best_score})")
+                    return {
+                        "status": "needs_review",
+                        "draft": best_draft,
+                        "best_draft": best_draft,
+                        "best_score": best_score,
+                        "ai_score": best_score,
                         "current_step": "post_loop",
                     }
                 return {
                     "status": "timed_out",
                     "error_code": "timed_out",
-                    "error_detail": f"Run exceeded whole-run deadline of {settings.TOTAL_RUN_DEADLINE_SECONDS}s at node '{node_name}'",
+                    "error_detail": f"Run exceeded whole-run deadline of {ceiling_limit}s at node '{node_name}'",
                     "current_step": node_name,
                 }
 
             # Live DB progress update & structured log on node start
-            _update_db_node_progress(run_id, node_name, is_start=True)
+            _update_db_node_progress(
+                run_id,
+                node_name,
+                is_start=True,
+                topic_index=topic_idx,
+                round_num=round_num,
+                best_draft=best_draft,
+                current_step=node_name,
+            )
             _notify_step(node_name, round_num, state)
-            logger.info(f"[NODE START] run_id={run_id} | user_id={user_id} | node={node_name}")
+            logger.info(f"[NODE START] run_id={run_id} | user_id={user_id} | node={node_name} | topic={topic_idx} | round={round_num}")
             node_start_t = time.perf_counter()
 
             try:
@@ -1026,11 +1224,10 @@ def build_graph(
                 )
             except TimeoutError as te:
                 logger.error(f"[NODE TIMEOUT] run_id={run_id} | node={node_name} timed out after {settings.PER_NODE_TIMEOUT_SECONDS}s: {te}")
-                best_draft = state.get("best_draft")
                 best_score = state.get("best_score", 999)
-                if best_draft and best_score <= settings.AI_SCORE_THRESHOLD:
+                if best_draft:
                     return {
-                        "status": "completed",
+                        "status": "needs_review",
                         "draft": best_draft,
                         "best_draft": best_draft,
                         "best_score": best_score,
@@ -1049,7 +1246,15 @@ def build_graph(
                 raise
             finally:
                 dur = time.perf_counter() - node_start_t
-                _update_db_node_progress(run_id, node_name, is_start=False)
+                _update_db_node_progress(
+                    run_id,
+                    node_name,
+                    is_start=False,
+                    topic_index=topic_idx,
+                    round_num=round_num,
+                    best_draft=best_draft,
+                    current_step=node_name,
+                )
                 logger.info(f"[NODE END] run_id={run_id} | user_id={user_id} | node={node_name} | duration={dur:.2f}s")
 
             return result
@@ -1064,8 +1269,12 @@ def build_graph(
     # Error routing helper: terminates to END if error_code is set or run terminated early
     def route_after_node(next_node: str) -> Callable[[PipelineState], str]:
         def _route(state: PipelineState) -> str:
-            if state.get("error_code") or state.get("is_loop_terminal") or state.get("status") in ("timed_out", "completed", "succeeded"):
+            if state.get("error_code") and not state.get("is_loop_terminal"):
                 return END
+            if state.get("status") in ("timed_out", "completed", "succeeded", "needs_review"):
+                return END
+            if state.get("is_loop_terminal"):
+                return "post_loop" if (not partial and next_node != END) else END
             return next_node
         return _route
 
@@ -1078,17 +1287,27 @@ def build_graph(
 
     workflow.add_node("gtm_brief", _wrap_node("gtm_brief", gtm_brief_node), retry_policy=transient_retry)
     workflow.add_node("drafter", _wrap_node("drafter", drafter_node), retry_policy=transient_retry)
-    workflow.add_node("detector", _wrap_node("detector", detector_node), retry_policy=transient_retry)
     workflow.add_node("check", _wrap_node("check", check_node))
+    workflow.add_node("detector", _wrap_node("detector", detector_node), retry_policy=transient_retry)
     workflow.add_node("router", _wrap_node("router", router_node))
     workflow.add_node("post_loop", _wrap_node("post_loop", post_loop_node), retry_policy=transient_retry)
 
-    # Define router conditional edge
+    # Check routing helper: if deterministic check failures exist, skip detector LLM call directly to router
+    def route_after_check(state: PipelineState) -> str:
+        if state.get("error_code") and not state.get("is_loop_terminal"):
+            return END
+        if state.get("check_failures"):
+            return "router"
+        return "detector"
+
+    # Define router conditional edge: either retry drafter, failover to gtm_brief with new topic, or terminate to post_loop
     def route_after_router(state: PipelineState) -> str:
-        if state.get("error_code"):
+        if state.get("error_code") and not state.get("is_loop_terminal"):
             return END
         if state.get("is_loop_terminal"):
             return "post_loop"
+        if state.get("switch_to_gtm"):
+            return "gtm_brief"
         return "drafter"
 
     # Assemble graph edges
@@ -1097,10 +1316,10 @@ def build_graph(
     workflow.add_conditional_edges("search", route_after_node("finder"), ["finder", END])
     workflow.add_conditional_edges("finder", route_after_node("gtm_brief"), ["gtm_brief", END])
     workflow.add_conditional_edges("gtm_brief", route_after_node("drafter"), ["drafter", END])
-    workflow.add_conditional_edges("drafter", route_after_node("detector"), ["detector", END])
-    workflow.add_conditional_edges("detector", route_after_node("check"), ["check", END])
-    workflow.add_conditional_edges("check", route_after_node("router"), ["router", END])
-    workflow.add_conditional_edges("router", route_after_router, ["drafter", "post_loop", END])
+    workflow.add_conditional_edges("drafter", route_after_node("check"), ["check", END])
+    workflow.add_conditional_edges("check", route_after_check, ["detector", "router", END])
+    workflow.add_conditional_edges("detector", route_after_node("router"), ["router", END])
+    workflow.add_conditional_edges("router", route_after_router, ["drafter", "gtm_brief", "post_loop", END])
     workflow.add_edge("post_loop", END)
 
     return workflow.compile()
@@ -1136,7 +1355,8 @@ def execute_pipeline(
     recent_titles = [p.get("topic_title") for p in history if p.get("topic_title")]
     recent_captions = [p.get("caption_preview", "") for p in history if p.get("caption_preview")]
 
-    run_deadline = time.time() + float(settings.TOTAL_RUN_DEADLINE_SECONDS)
+    ceiling_seconds = getattr(settings, "RUN_SAFETY_CEILING_SECONDS", 1200)
+    run_deadline = time.time() + float(ceiling_seconds)
 
     initial_state: PipelineState = {
         "user_id": user_id,
@@ -1152,6 +1372,15 @@ def execute_pipeline(
         "counters": {"search_calls": 0, "llm_calls": 0, "tokens_in": 0, "tokens_out": 0},
         "seconds_per_node": {},
         "round": 0,
+        "current_round": 0,
+        "current_topic_index": 0,
+        "max_topics": getattr(settings, "MAX_TOPICS_PER_RUN", 4),
+        "max_rewrites": getattr(settings, "MAX_REWRITES_PER_TOPIC", 4),
+        "best_draft": None,
+        "best_failing_gates": [],
+        "consecutive_same_gate_failures": 0,
+        "last_failing_gate": None,
+        "topic_candidates": [],
         "strike_count": 0,
         "rounds_history": [],
         "best_score": 999,
@@ -1166,7 +1395,7 @@ def execute_pipeline(
     final_state = app.invoke(
         initial_state,
         config={
-            "recursion_limit": 30,
+            "recursion_limit": 150,
             "configurable": {"thread_id": thread_id},
         },
     )

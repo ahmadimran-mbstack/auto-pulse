@@ -174,6 +174,105 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
 
         err_code = final_state.get("error_code")
         state_status = final_state.get("status")
+
+        # Handle hard errors or failed quality without draft
+        if err_code in ("pipeline_error", "search_failed", "no_candidates") or state_status in ("failed_error", "failed"):
+            run.status = "failed_error"
+            run.current_step = "failed_error"
+            run.error_code = err_code or "pipeline_error"
+            run.error_detail = final_state.get("error_detail") or "Pipeline encountered an error"
+            run.finished_at = datetime.datetime.now(datetime.timezone.utc)
+            if run.started_at:
+                run.duration = round((run.finished_at - run.started_at).total_seconds(), 2)
+            db.commit()
+            elapsed = run.duration or (run.finished_at - run.started_at).total_seconds()
+            logger.warning(f"Generation run {run.id} failed after {elapsed:.2f}s: {run.error_code} - {run.error_detail}")
+            return None
+
+        # Handle needs_review: save best draft, do NOT queue approval or publish automatically
+        if state_status == "needs_review" or err_code == "needs_review":
+            chosen = final_state.get("chosen", {})
+            draft = final_state.get("best_draft") or final_state.get("draft") or {}
+            candidates = final_state.get("candidates", [])
+
+            sources_list = [
+                {
+                    "title": c.get("title"),
+                    "url": c.get("url"),
+                    "published_at": c.get("published_at"),
+                }
+                for c in candidates[:5]
+            ]
+            image_spec = {
+                "headline": draft.get("image_headline", chosen.get("title", "")),
+                "brand_name": profile.brand_name or "AutoPulse",
+                "brand_primary_hex": profile.brand_primary_hex or "#0F172A",
+                "brand_accent_hex": profile.brand_accent_hex or "#38BDF8",
+                "template_version": "v1",
+            }
+            publish_at = compute_publish_at(run_date, profile.post_time, profile.timezone)
+
+            post = Post(
+                user_id=profile.user_id,
+                run_date=run_date,
+                status="draft",
+                publish_at=publish_at,
+                topic_title=chosen.get("title") or "Industry Update",
+                topic_label=final_state.get("topic_label") or (final_state.get("finder_output") or {}).get("topic_label"),
+                topic_url=chosen.get("url") or "",
+                key_facts=final_state.get("key_facts") or (final_state.get("finder_output") or {}).get("key_facts"),
+                angle=final_state.get("angle"),
+                hook_type=final_state.get("hook_type"),
+                hook_style=final_state.get("hook_style") or final_state.get("hook_type"),
+                post_format=final_state.get("post_format"),
+                ai_score=final_state.get("ai_score"),
+                needs_review=True,
+                sources=sources_list,
+                caption=draft.get("post_text", ""),
+                hashtags=draft.get("hashtags", []),
+                image_spec=image_spec,
+                llm_model=settings.LLM_MODEL,
+                prompt_version=PROMPT_VERSION,
+            )
+            db.add(post)
+            db.commit()
+            db.refresh(post)
+
+            run.status = "needs_review"
+            run.current_step = "needs_review"
+            run.post_id = post.id
+            run.best_draft = draft
+            run.error_code = "needs_review"
+            run.error_detail = final_state.get("error_detail") or "Post needs manual review"
+            run.finished_at = datetime.datetime.now(datetime.timezone.utc)
+            if run.started_at:
+                run.duration = round((run.finished_at - run.started_at).total_seconds(), 2)
+            db.commit()
+
+            # Alert user via email that daily post needs quick manual review (NOT published automatically)
+            try:
+                from email.message import EmailMessage
+                from app.services.email import send_smtp_message
+                recipient = profile.user_id if "@" in profile.user_id else None
+                if recipient:
+                    msg = EmailMessage()
+                    msg["From"] = settings.SMTP_FROM or "noreply@autopulse.ai"
+                    msg["To"] = recipient
+                    msg["Subject"] = "AutoPulse: Your Daily Post Needs a Quick Review"
+                    msg.set_content(
+                        f"Hello,\n\n"
+                        f"Today's automated post is ready for your review. It produced a strong draft, but automated gates requested a human check:\n\n"
+                        f"Reason: {run.error_detail}\n\n"
+                        f"To protect your professional reputation, we did not schedule or publish it automatically.\n"
+                        f"You can review, edit, or approve the post in your AutoPulse dashboard.\n\n"
+                        f"- AutoPulse"
+                    )
+                    send_smtp_message(msg)
+            except Exception as mail_err:
+                logger.warning(f"Could not dispatch needs_review email to {profile.user_id}: {mail_err}")
+
+            return post
+
         if err_code or state_status == "failed_quality":
             is_quality_failure = (state_status == "failed_quality" or err_code == "failed_quality")
             run.status = "failed_quality" if is_quality_failure else "failed"
@@ -186,29 +285,6 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
             db.commit()
             elapsed = run.duration or (run.finished_at - run.started_at).total_seconds()
             logger.warning(f"Generation run {run.id} terminated with {run.status} after {elapsed:.2f}s: {run.error_code} - {run.error_detail}")
-
-            # Notify user via email if quality failed (rate-limited to 1 per user per day via run_date)
-            try:
-                from email.message import EmailMessage
-                from app.services.email import send_smtp_message
-                recipient = profile.user_id if "@" in profile.user_id else None
-                if recipient:
-                    msg = EmailMessage()
-                    msg["From"] = settings.SMTP_FROM or "noreply@autopulse.ai"
-                    msg["To"] = recipient
-                    msg["Subject"] = "AutoPulse: Daily Post Skipped (Quality Gate)"
-                    msg.set_content(
-                        f"Hello,\n\n"
-                        f"Today's automated LinkedIn post was skipped because no search topic met our strict quality standards.\n\n"
-                        f"Reason: {run.error_detail}\n\n"
-                        f"A failed run is always better than publishing ungrounded or weak content under your name.\n"
-                        f"You can launch a manual run in Post Studio whenever you would like to provide a specific topic or link.\n\n"
-                        f"- AutoPulse"
-                    )
-                    send_smtp_message(msg)
-            except Exception as mail_err:
-                logger.warning(f"Could not dispatch quality failure email to {profile.user_id}: {mail_err}")
-
             return None
 
         chosen = final_state.get("chosen", {})
