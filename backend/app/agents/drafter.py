@@ -78,9 +78,9 @@ HARD FACTUAL GROUNDING & TRUTH RULES (ZERO TOLERANCE FOR INVENTED FACTS):
 
 LINKEDIN PLAYBOOK SPECIFICATIONS:
 - The Opening Hook [HOOK-01, HOOK-02]:
-  Follow the provided opening hook line strictly. The hook must stand alone in the first 2-3 lines before 'see more'.
+  The opening hook MUST be on line 1 by itself, followed by an empty line (double newline). The first line must be under 140 characters. NEVER merge the hook with the next body paragraph.
 - Post Length & Narrative Density [BODY-02]:
-  Total length MUST be strictly between 700 and 1,800 characters. Target sweet spot: 850 to 1,200 characters.
+  Total length MUST be strictly between 850 and 1,200 characters. Target ~950-1,050 characters.
 - Human Cadence & Paragraph Rhythm [BODY-03]:
   Format with 3 to 6 paragraphs separated by blank lines. Mix single punchy lines with 2-4 sentence descriptive paragraphs.
 - Core Value & Perspective [BODY-01]:

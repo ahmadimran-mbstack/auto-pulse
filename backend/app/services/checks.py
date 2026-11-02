@@ -38,7 +38,6 @@ BANNED_PHRASES: List[str] = get_current_banned_phrases()
 FILLER_PHRASES: List[str] = [
     "forward-thinking teams",
     "sustainable workflow habits",
-    "predictable execution",
     "real-world scenario",
     "something significant is shifting",
     "meaningful trade-offs",
@@ -46,13 +45,10 @@ FILLER_PHRASES: List[str] = [
     "realistic expectations",
     "clear boundaries",
     "unproven claims",
-    "operational behavior",
-    "theoretical peak",
     "friction almost always emerges",
     "boundaries between tools",
     "when real team adoption begins",
     "unmonitored coordination costs",
-    "integration assumptions",
     "prioritize predictable execution",
 ]
 
@@ -299,6 +295,19 @@ def check_raw_title(caption: str, topic_title: Optional[str]) -> Optional[str]:
     return None
 
 
+def _match_token_in_text(tok: str, text: str) -> bool:
+    """Matches a token in text with tolerance for stem/plural inflections."""
+    if tok in text:
+        return True
+    if len(tok) > 4 and tok.endswith("s") and tok[:-1] in text:
+        return True
+    if len(tok) > 5 and tok.endswith("ing") and tok[:-3] in text:
+        return True
+    if len(tok) > 5 and tok.endswith("ed") and tok[:-2] in text:
+        return True
+    return False
+
+
 def check_fact_coverage(caption: str, facts: Optional[List[Any]]) -> Optional[str]:
     """Ensures at least 3 distinct verified facts are reflected in the post body."""
     if not facts or len(facts) < 3:
@@ -314,8 +323,8 @@ def check_fact_coverage(caption: str, facts: Optional[List[Any]]) -> Optional[st
             t.lower() for t in re.findall(r"\b[\w'-]{4,}\b|\b\d+%\b|\b\d+\b", claim_text)
             if t.lower() not in {"that", "with", "from", "this", "they", "have", "were", "been"}
         ]
-        # If at least 2 tokens from this fact appear in the caption, consider it reflected
-        matched = sum(1 for tok in tokens if tok in lower_caption)
+        # If at least 2 tokens from this fact appear in the caption (with stem tolerance), consider it reflected
+        matched = sum(1 for tok in tokens if _match_token_in_text(tok, lower_caption))
         if matched >= min(2, len(tokens)):
             reflected_count += 1
 
@@ -343,8 +352,9 @@ def check_numbers_grounding(
     caption: str,
     source_text: str = "",
     key_facts: Optional[List[Any]] = None,
+    topic_title: str = "",
 ) -> Optional[str]:
-    """Check that percentages, decimals, and numbers with units appear in verified key_facts.
+    """Check that percentages, decimals, and numbers with units appear in verified key_facts or source.
     Years 2020-2030 and small structural counts (1-10) are allowed.
     """
     facts_parts = []
@@ -359,7 +369,7 @@ def check_numbers_grounding(
             else:
                 facts_parts.append(str(kf))
 
-    combined_grounding = f"{source_text} {' '.join(facts_parts)}"
+    combined_grounding = f"{topic_title} {source_text} {' '.join(facts_parts)}"
     normalized_source = re.sub(r",(\d)", r"\1", combined_grounding).lower()
 
     # 1. Percentages: e.g. 43%, 78%
@@ -369,16 +379,25 @@ def check_numbers_grounding(
         if search_target not in normalized_source and raw not in normalized_source:
             return f"Ungrounded percentage '{raw}%' found in post (must appear in verified facts)"
 
-    # 2. Numbers with units: ms, s, seconds, minutes, hours, days, x, $, k, million, billion, audits
+    # 2. Numbers with units: ms, s, seconds, minutes, hours, days, x, $, k, million, billion, audits, kb, mb, gb, tb, qps, rps, tps, vcpus, cores, workers, connections
     unit_pattern = re.compile(
-        r"(\$\s*\d+(?:\.\d+)?|\b\d+(?:\.\d+)?\s*(?:ms|s|seconds?|minutes?|hours?|days?|x|k|million|billion|audits?)\b)",
+        r"(\$\s*\d+(?:\.\d+)?|\b\d+(?:\.\d+)?\s*(?:ms|s|seconds?|minutes?|hours?|days?|x|k|million|billion|audits?|kb|mb|gb|tb|qps|rps|tps|vcpus?|cores?|workers?|conns?|connections?)\b)",
         re.IGNORECASE,
     )
     for match in unit_pattern.finditer(caption):
         token = match.group().strip()
         clean_token = re.sub(r"\s+", "", token.lower()).replace(",", "")
         digits_only = re.sub(r"[^\d\.]", "", clean_token)
-        if clean_token not in normalized_source.replace(" ", "") and digits_only not in normalized_source:
+        # Check scale expansion e.g. 10k -> 10000
+        is_k = token.lower().endswith("k") and digits_only.isdigit()
+        k_expanded = f"{digits_only}000" if is_k else None
+
+        grounded = (
+            clean_token in normalized_source.replace(" ", "")
+            or digits_only in normalized_source
+            or (k_expanded and (k_expanded in normalized_source or f"{digits_only}k" in normalized_source))
+        )
+        if not grounded:
             return f"Ungrounded number with unit '{token}' found in post (must appear in verified facts)"
 
     # 3. Decimals: e.g. 12.5, 0.85
@@ -786,7 +805,7 @@ def run_all_checks(
     if res:
         failures.append(res)
 
-    res = check_numbers_grounding(caption, source_text=source_text, key_facts=key_facts)
+    res = check_numbers_grounding(caption, source_text=source_text, key_facts=key_facts, topic_title=topic_title or "")
     if res:
         failures.append(res)
 
