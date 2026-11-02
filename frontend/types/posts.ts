@@ -160,7 +160,7 @@ export interface AgentTrace {
   final_check_failures?: string[];
 }
 
-export type RunStatus = "queued" | "running" | "done" | "failed";
+export type RunStatus = "queued" | "running" | "done" | "failed" | "failed_quality";
 export type RunStep = "finder" | "gtm" | "drafter" | "detector" | "rewrite" | null;
 
 export interface RunResponse {
