@@ -270,7 +270,9 @@ def get_post(
         post_format=p.post_format,
         ai_score=p.ai_score,
         needs_review=p.needs_review,
-        topic=p.topic_title,
+        topic=p.topic_label or p.topic_title,
+        topic_label=p.topic_label,
+        key_facts=p.key_facts,
     )
 
 
@@ -545,7 +547,9 @@ def generate_draft_now(
         status="draft",
         publish_at=publish_at,
         topic_title=chosen.get("title") or "Industry Update",
+        topic_label=final_state.get("topic_label") or (final_state.get("finder_output") or {}).get("topic_label"),
         topic_url=chosen.get("url") or "",
+        key_facts=final_state.get("key_facts") or (final_state.get("finder_output") or {}).get("key_facts"),
         angle=final_state.get("angle"),
         hook_type=final_state.get("hook_type"),
         hook_style=final_state.get("hook_style") or final_state.get("hook_type"),
@@ -581,7 +585,10 @@ def generate_draft_now(
         run_date=post.run_date.isoformat(),
         publish_at=post.publish_at.isoformat() if post.publish_at else None,
         topic_title=post.topic_title,
+        topic_label=post.topic_label,
+        topic=post.topic_label or post.topic_title,
         topic_url=post.topic_url,
+        key_facts=post.key_facts,
         sources=post.sources,
         caption=post.caption,
         hashtags=post.hashtags,

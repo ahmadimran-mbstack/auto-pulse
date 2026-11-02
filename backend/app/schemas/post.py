@@ -26,6 +26,8 @@ class PostListItem(BaseModel):
     ai_score: Optional[int] = None
     needs_review: Optional[bool] = None
     topic: Optional[str] = None
+    topic_label: Optional[str] = None
+    key_facts: Optional[List[Dict[str, Any]]] = None
 
 
 class PaginatedPostsResponse(BaseModel):
@@ -61,6 +63,8 @@ class PostDetail(BaseModel):
     ai_score: Optional[int] = None
     needs_review: Optional[bool] = None
     topic: Optional[str] = None
+    topic_label: Optional[str] = None
+    key_facts: Optional[List[Dict[str, Any]]] = None
 
 
 class PlaygroundRunCreateRequest(BaseModel):

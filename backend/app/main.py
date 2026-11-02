@@ -229,6 +229,24 @@ app.include_router(slack_api_integrations_router)
 
 
 @app.on_event("startup")
+def run_db_migrations():
+    """Apply pending Alembic database migrations on startup."""
+    import os, sys
+    if os.environ.get("PYTEST_CURRENT_TEST") or "pytest" in sys.modules:
+        return
+    try:
+        from alembic.config import Config
+        from alembic import command
+        alembic_ini_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "alembic.ini")
+        if os.path.exists(alembic_ini_path):
+            alembic_cfg = Config(alembic_ini_path)
+            command.upgrade(alembic_cfg, "head")
+            logger.info("Database schema verified and upgraded to latest Alembic revision")
+    except Exception as exc:
+        logger.warning(f"Alembic auto-migration on startup skipped or failed: {exc}")
+
+
+@app.on_event("startup")
 def sweep_stale_playground_runs():
     """Startup sweeper: Marks playground runs stuck in 'running' for > 10 minutes as failed."""
     try:
@@ -272,11 +290,13 @@ def _run_scheduler_cycle():
         try:
             run_dispatch(db)
         except Exception as exc:
+            db.rollback()
             logger.error(f"Error in automated dispatch cycle: {exc}")
 
         try:
             run_publisher(db)
         except Exception as exc:
+            db.rollback()
             logger.error(f"Error in automated publishing cycle: {exc}")
 
 

@@ -41,13 +41,17 @@ class Post(Base):
         Text, nullable=False, server_default="draft"
     )
 
-    # Chosen topic title and primary source URL
+    # Chosen topic title, clean short label, and primary source URL
     topic_title: Mapped[str] = mapped_column(Text, nullable=False)
+    topic_label: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     topic_url: Mapped[str] = mapped_column(Text, nullable=False)
 
     @property
     def topic(self) -> str:
-        return self.topic_title
+        return self.topic_label or self.topic_title
+
+    # Grounded key facts extracted from source articles
+    key_facts: Mapped[Optional[List[Dict[str, Any]]]] = mapped_column(JSONB, nullable=True)
 
     # Editorial metadata from Post Finder agent (nullable)
     angle: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
