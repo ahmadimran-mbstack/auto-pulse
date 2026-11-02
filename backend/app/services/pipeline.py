@@ -30,8 +30,30 @@ from app.services.search import (
 )
 from app.services.search_cache import get_cached_search, set_cached_search
 from app.services.source_quality import is_blocked_domain, score_domain
+from app.services.resilient_llm import run_call_with_timeout
 
 logger = logging.getLogger(__name__)
+
+
+def _update_db_node_progress(run_id: Optional[str], node_name: str, is_start: bool = True) -> None:
+    """Updates current_node and last_progress_at in Postgres to ensure accurate live progress."""
+    if not run_id or str(run_id) == "none":
+        return
+    try:
+        from app.db.session import SessionLocal
+        from sqlalchemy import text
+        with SessionLocal() as db:
+            db.execute(
+                text("UPDATE generation_runs SET current_node = :node, last_progress_at = now() WHERE id = :id"),
+                {"id": run_id, "node": node_name},
+            )
+            db.execute(
+                text("UPDATE playground_runs SET current_node = :node, last_progress_at = now() WHERE id = :id"),
+                {"id": run_id, "node": node_name},
+            )
+            db.commit()
+    except Exception as exc:
+        logger.debug(f"Failed to update progress in db for run {run_id}: {exc}")
 
 
 class PipelineState(TypedDict, total=False):
@@ -45,6 +67,7 @@ class PipelineState(TypedDict, total=False):
     is_manual: bool
     run_id: Optional[str]
     thread_id: Optional[str]
+    run_deadline: Optional[float]
 
     # Search & curation nodes
     queries: List[str]
@@ -87,6 +110,7 @@ class PipelineState(TypedDict, total=False):
     agent_trace: Optional[Dict[str, Any]]
 
     # Execution telemetry
+    status: Optional[str]
     current_step: Optional[str]
     counters: Dict[str, int]
     seconds_per_node: Dict[str, float]
@@ -103,6 +127,10 @@ def create_chat_model(model_name: str, temperature: Optional[float] = None) -> A
         kwargs["api_key"] = settings.LLM_API_KEY
     if temperature is not None:
         kwargs["temperature"] = temperature
+
+    # Explicit call timeout for underlying chat models (default 45s)
+    kwargs.setdefault("timeout", settings.LLM_TIMEOUT_SECONDS)
+    kwargs.setdefault("request_timeout", settings.LLM_TIMEOUT_SECONDS)
 
     model_provider = settings.LLM_PROVIDER
     clean_model = model_name
@@ -126,7 +154,11 @@ def create_chat_model(model_name: str, temperature: Optional[float] = None) -> A
         except Exception as exc:
             logger.warning(f"Could not initialize model {clean_model} via provider {model_provider}: {exc}")
 
-    return ResilientChatModelWrapper(real_model=real_model, model_name=clean_model)
+    return ResilientChatModelWrapper(
+        real_model=real_model,
+        model_name=clean_model,
+        timeout_seconds=settings.LLM_TIMEOUT_SECONDS,
+    )
 
 
 # Check whether an article date is older than lookback cutoff
@@ -949,16 +981,90 @@ def build_graph(
             )
         return res_dict
 
+    # Node execution wrapper enforcing per-node timeout, whole-run deadline, and live progress persistence
+    def _wrap_node(node_name: str, node_func: Callable[[PipelineState], Dict[str, Any]]) -> Callable[[PipelineState], Dict[str, Any]]:
+        def _wrapped(state: PipelineState) -> Dict[str, Any]:
+            run_id = str(state.get("run_id") or "none")
+            user_id = str(state.get("user_id") or "none")
+            round_num = state.get("round", 0)
+
+            # Whole-run hard deadline check (180s)
+            deadline = state.get("run_deadline")
+            if deadline and time.time() > deadline:
+                logger.warning(f"[DEADLINE HIT] run_id={run_id} | user_id={user_id} | node={node_name} | deadline={settings.TOTAL_RUN_DEADLINE_SECONDS}s")
+                best_draft = state.get("best_draft")
+                best_score = state.get("best_score", 999)
+                if best_draft and best_score <= settings.AI_SCORE_THRESHOLD:
+                    logger.info(f"[DEADLINE RECOVER] run_id={run_id} | returning passing draft (score={best_score})")
+                    return {
+                        "status": "completed",
+                        "draft": best_draft,
+                        "best_draft": best_draft,
+                        "best_score": best_score,
+                        "ai_score": best_score,
+                        "is_loop_terminal": True,
+                        "current_step": "post_loop",
+                    }
+                return {
+                    "status": "timed_out",
+                    "error_code": "timed_out",
+                    "error_detail": f"Run exceeded whole-run deadline of {settings.TOTAL_RUN_DEADLINE_SECONDS}s at node '{node_name}'",
+                    "current_step": node_name,
+                }
+
+            # Live DB progress update & structured log on node start
+            _update_db_node_progress(run_id, node_name, is_start=True)
+            _notify_step(node_name, round_num, state)
+            logger.info(f"[NODE START] run_id={run_id} | user_id={user_id} | node={node_name}")
+            node_start_t = time.perf_counter()
+
+            try:
+                result = run_call_with_timeout(
+                    node_func,
+                    args=(state,),
+                    timeout_seconds=float(settings.PER_NODE_TIMEOUT_SECONDS),
+                )
+            except TimeoutError as te:
+                logger.error(f"[NODE TIMEOUT] run_id={run_id} | node={node_name} timed out after {settings.PER_NODE_TIMEOUT_SECONDS}s: {te}")
+                best_draft = state.get("best_draft")
+                best_score = state.get("best_score", 999)
+                if best_draft and best_score <= settings.AI_SCORE_THRESHOLD:
+                    return {
+                        "status": "completed",
+                        "draft": best_draft,
+                        "best_draft": best_draft,
+                        "best_score": best_score,
+                        "ai_score": best_score,
+                        "is_loop_terminal": True,
+                        "current_step": "post_loop",
+                    }
+                return {
+                    "status": "timed_out",
+                    "error_code": "timed_out",
+                    "error_detail": f"Node '{node_name}' timed out after {settings.PER_NODE_TIMEOUT_SECONDS}s",
+                    "current_step": node_name,
+                }
+            except Exception as exc:
+                logger.error(f"[NODE ERROR] run_id={run_id} | node={node_name} failed: {exc}", exc_info=True)
+                raise
+            finally:
+                dur = time.perf_counter() - node_start_t
+                _update_db_node_progress(run_id, node_name, is_start=False)
+                logger.info(f"[NODE END] run_id={run_id} | user_id={user_id} | node={node_name} | duration={dur:.2f}s")
+
+            return result
+        return _wrapped
+
     # Register workflow nodes
     transient_retry = RetryPolicy(max_attempts=2)
-    workflow.add_node("plan", plan_node, retry_policy=transient_retry)
-    workflow.add_node("search", search_node, retry_policy=transient_retry)
-    workflow.add_node("finder", finder_node, retry_policy=transient_retry)
+    workflow.add_node("plan", _wrap_node("plan", plan_node), retry_policy=transient_retry)
+    workflow.add_node("search", _wrap_node("search", search_node), retry_policy=transient_retry)
+    workflow.add_node("finder", _wrap_node("finder", finder_node), retry_policy=transient_retry)
 
-    # Error routing helper: terminates to END if error_code is set
+    # Error routing helper: terminates to END if error_code is set or run terminated early
     def route_after_node(next_node: str) -> Callable[[PipelineState], str]:
         def _route(state: PipelineState) -> str:
-            if state.get("error_code"):
+            if state.get("error_code") or state.get("is_loop_terminal") or state.get("status") in ("timed_out", "completed", "succeeded"):
                 return END
             return next_node
         return _route
@@ -970,12 +1076,12 @@ def build_graph(
         workflow.add_conditional_edges("finder", route_after_node(END), [END])
         return workflow.compile()
 
-    workflow.add_node("gtm_brief", gtm_brief_node, retry_policy=transient_retry)
-    workflow.add_node("drafter", drafter_node, retry_policy=transient_retry)
-    workflow.add_node("detector", detector_node, retry_policy=transient_retry)
-    workflow.add_node("check", check_node)
-    workflow.add_node("router", router_node)
-    workflow.add_node("post_loop", post_loop_node, retry_policy=transient_retry)
+    workflow.add_node("gtm_brief", _wrap_node("gtm_brief", gtm_brief_node), retry_policy=transient_retry)
+    workflow.add_node("drafter", _wrap_node("drafter", drafter_node), retry_policy=transient_retry)
+    workflow.add_node("detector", _wrap_node("detector", detector_node), retry_policy=transient_retry)
+    workflow.add_node("check", _wrap_node("check", check_node))
+    workflow.add_node("router", _wrap_node("router", router_node))
+    workflow.add_node("post_loop", _wrap_node("post_loop", post_loop_node), retry_policy=transient_retry)
 
     # Define router conditional edge
     def route_after_router(state: PipelineState) -> str:
@@ -1030,11 +1136,14 @@ def execute_pipeline(
     recent_titles = [p.get("topic_title") for p in history if p.get("topic_title")]
     recent_captions = [p.get("caption_preview", "") for p in history if p.get("caption_preview")]
 
+    run_deadline = time.time() + float(settings.TOTAL_RUN_DEADLINE_SECONDS)
+
     initial_state: PipelineState = {
         "user_id": user_id,
         "is_manual": is_manual,
         "run_id": run_id,
         "thread_id": thread_id,
+        "run_deadline": run_deadline,
         "profile": profile_dict,
         "history": history,
         "recent_titles": recent_titles,
@@ -1054,7 +1163,13 @@ def execute_pipeline(
         step_callback=step_callback,
     )
 
-    final_state = app.invoke(initial_state, config={"configurable": {"thread_id": thread_id}})
+    final_state = app.invoke(
+        initial_state,
+        config={
+            "recursion_limit": 30,
+            "configurable": {"thread_id": thread_id},
+        },
+    )
 
     chosen = final_state.get("chosen") or {}
     finder_out = final_state.get("finder_output") or {}
@@ -1067,7 +1182,10 @@ def execute_pipeline(
     cache_search_label = "BYPASS" if is_manual else "MISS"
     cache_layers_str = f"endpoint: MISS, search: {cache_search_label}, finder: MISS, gtm: MISS, drafter: MISS, detector: MISS"
 
-    # Verifiable structured log line per run for observability
+    final_status = final_state.get("status") or ("failed_error" if final_state.get("error_code") else "completed")
+    final_reason = final_state.get("error_detail") or final_state.get("exit_reason") or "completed"
+
+    # Verifiable structured log lines per run for observability
     logger.info(
         f"[PIPELINE RUN] run_id={run_id or 'none'} | user_id={user_id} | run_type={run_type_label} | "
         f"cache_layers={{{cache_layers_str}}} | "
@@ -1075,6 +1193,10 @@ def execute_pipeline(
         f"rewrite_rounds={final_state.get('round', 0)} | duration={pipeline_duration:.2f}s | "
         f"llm_calls={final_counters.get('llm_calls', 0)} | search_calls={final_counters.get('search_calls', 0)} | "
         f"tokens_in={final_counters.get('tokens_in', 0)} | tokens_out={final_counters.get('tokens_out', 0)}"
+    )
+    logger.info(
+        f"[PIPELINE RUN END] run_id={run_id or 'none'} | user_id={user_id} | status={final_status} | "
+        f"total_time={pipeline_duration:.2f}s | reason='{final_reason}'"
     )
 
     return final_state

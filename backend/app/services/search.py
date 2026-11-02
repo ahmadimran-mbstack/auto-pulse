@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 from pydantic import BaseModel, Field
 from app.core.config import settings
+from app.services.resilient_llm import run_call_with_timeout
 
 
 class Candidate(BaseModel):
@@ -85,12 +86,17 @@ class TavilySearchAdapter:
             attempts += 1
             self.call_count += 1
             try:
-                # Call Tavily with topic, lookback start date, and content request
-                res = tool.invoke({
+                # Call Tavily with topic, lookback start date, content request, and explicit timeout
+                payload = {
                     "query": query,
                     "topic": self.topic,
                     "start_date": start_date,
-                })
+                }
+                res = run_call_with_timeout(
+                    tool.invoke,
+                    args=(payload,),
+                    timeout_seconds=settings.SEARCH_TIMEOUT_SECONDS,
+                )
 
                 if isinstance(res, dict) and "error" in res and res["error"]:
                     raise SearchError(str(res["error"]))
@@ -145,12 +151,16 @@ class ExaSearchAdapter:
             attempts += 1
             self.call_count += 1
             try:
-                # ExaSearchResults supports start_published_date and text_contents_options
-                raw_results = tool._run(
-                    query=query,
-                    num_results=max_results,
-                    start_published_date=start_date,
-                    text_contents_options=True,
+                # ExaSearchResults supports start_published_date and text_contents_options with explicit timeout
+                raw_results = run_call_with_timeout(
+                    tool._run,
+                    kwargs={
+                        "query": query,
+                        "num_results": max_results,
+                        "start_published_date": start_date,
+                        "text_contents_options": True,
+                    },
+                    timeout_seconds=settings.SEARCH_TIMEOUT_SECONDS,
                 )
                 candidates: List[Candidate] = []
                 if isinstance(raw_results, list):
