@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import List, Optional
 from urllib.parse import urlparse
 import sys
+import uuid
 from pydantic import AliasChoices, Field, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -62,6 +63,17 @@ class Settings(BaseSettings):
     AI_SCORE_THRESHOLD: int = 15
     MAX_REWRITE_ROUNDS: int = 3
     MAX_LLM_CALLS_PER_RUN: int = 20
+
+    # Process and execution lifecycle constants
+    BOOT_ID: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    LLM_TIMEOUT_SECONDS: int = 45
+    SEARCH_TIMEOUT_SECONDS: int = 20
+    PAGE_FETCH_TIMEOUT_SECONDS: int = 20
+    TOTAL_RUN_DEADLINE_SECONDS: int = 180
+    PER_NODE_TIMEOUT_SECONDS: int = 60
+    REAPER_INTERVAL_SECONDS: int = 30
+    STALLED_PROGRESS_TIMEOUT_SECONDS: int = 90
+    STALLED_WARNING_TIMEOUT_SECONDS: int = 60
 
     # Pipeline schedule and lead time settings
     DRAFT_LEAD_MINUTES: int = 180

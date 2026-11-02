@@ -170,9 +170,17 @@ class GenerationRun(Base):
     # Agent loop execution trace and intermediate state
     agent_trace: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
     current_step: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    current_node: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     round: Mapped[int] = mapped_column(
         SmallInteger, nullable=False, server_default="0"
     )
+
+    # Process ownership, liveness, and error tracking
+    boot_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_progress_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    error_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Timestamps for run duration tracking
     started_at: Mapped[datetime.datetime] = mapped_column(
@@ -184,7 +192,7 @@ class GenerationRun(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('queued', 'started', 'running', 'succeeded', 'completed', 'failed', 'failed_quality', 'skipped')",
+            "status IN ('queued', 'started', 'running', 'succeeded', 'completed', 'failed', 'failed_quality', 'failed_error', 'timed_out', 'interrupted', 'skipped')",
             name="ck_generation_runs_status",
         ),
         # Scheduled runs are limited to at most one record per user per date
@@ -211,13 +219,21 @@ class PlaygroundRun(Base):
     # Scoped strictly to the authenticated creator
     user_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
 
-    # Run lifecycle status: queued, running, completed, failed, failed_quality
+    # Run lifecycle status: queued, running, completed, failed, failed_quality, failed_error, timed_out, interrupted
     status: Mapped[str] = mapped_column(
         Text, nullable=False, server_default="queued"
     )
 
-    # Current execution step (e.g. finder, gtm_brief, drafter, detector, post_loop)
+    # Current execution step and node (e.g. plan, search, finder, gtm_brief, drafter, detector, post_loop)
     current_step: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    current_node: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Process ownership, liveness, and error tracking
+    boot_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_progress_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    error_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Active rewrite round counter
     round: Mapped[int] = mapped_column(
@@ -243,7 +259,7 @@ class PlaygroundRun(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('queued', 'running', 'completed', 'failed', 'failed_quality')",
+            "status IN ('queued', 'started', 'running', 'succeeded', 'completed', 'failed', 'failed_quality', 'failed_error', 'timed_out', 'interrupted')",
             name="ck_playground_runs_status",
         ),
         Index("ix_playground_runs_user_id_created_at", "user_id", "created_at"),

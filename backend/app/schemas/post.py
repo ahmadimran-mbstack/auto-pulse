@@ -81,8 +81,15 @@ class PlaygroundRunDetail(BaseModel):
     id: uuid.UUID
     status: str
     current_step: Optional[str] = None
+    current_node: Optional[str] = None
     round: int = 0
     max_rounds: int = 3
+    elapsed_seconds: Optional[float] = None
+    last_progress_at: Optional[str] = None
+    stalled: bool = False
+    error_code: Optional[str] = None
+    error_detail: Optional[str] = None
+    error_reason: Optional[str] = None
     result: Optional[Dict[str, Any]] = None
     trace: Optional[Dict[str, Any]] = None
     started_at: Optional[str] = None
@@ -100,8 +107,15 @@ class GenerationRunDetail(BaseModel):
     id: uuid.UUID
     status: str
     current_step: Optional[str] = None
+    current_node: Optional[str] = None
     round: int = 0
     max_rounds: int = 3
+    elapsed_seconds: Optional[float] = None
+    last_progress_at: Optional[str] = None
+    stalled: bool = False
+    error_code: Optional[str] = None
+    error_detail: Optional[str] = None
+    error_reason: Optional[str] = None
     trace: Optional[Dict[str, Any]] = None
     agent_trace: Optional[Dict[str, Any]] = None
     post_id: Optional[uuid.UUID] = None
