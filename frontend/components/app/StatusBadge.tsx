@@ -1,19 +1,18 @@
 import * as React from "react";
 import { CheckIcon, Loader2Icon, ClockIcon, AlertCircleIcon, HelpCircleIcon } from "lucide-react";
-import { Badge, type badgeVariants } from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { VariantProps } from "class-variance-authority";
 import type { PostStatus } from "@/types/posts";
 
-type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
+export type StatusVariant = "warning" | "success" | "danger" | "info";
 
-interface StatusConfig {
-  variant: BadgeVariant;
+export interface StatusConfig {
+  variant: StatusVariant;
   label: string;
   icon?: React.ReactNode;
 }
 
-const statusMap: Record<string, StatusConfig> = {
+export const statusMap: Record<string, StatusConfig> = {
   draft: {
     variant: "warning",
     label: "Draft",
@@ -70,6 +69,57 @@ const statusMap: Record<string, StatusConfig> = {
     icon: <ClockIcon className="size-3 text-status-warning-fg" />,
   },
 };
+
+export interface StatusBannerStyle {
+  alertVariant: "warning" | "success" | "danger" | "info";
+  bgClass: string;
+  borderClass: string;
+  textClass: string;
+  descClass: string;
+  iconClass: string;
+}
+
+export const statusBannerStyles: Record<StatusVariant, StatusBannerStyle> = {
+  warning: {
+    alertVariant: "warning",
+    bgClass: "bg-status-warning-bg",
+    borderClass: "border-status-warning-arc/40",
+    textClass: "text-status-warning-fg",
+    descClass: "text-status-warning-fg/90",
+    iconClass: "text-status-warning-fg",
+  },
+  success: {
+    alertVariant: "success",
+    bgClass: "bg-status-success-bg",
+    borderClass: "border-status-success-arc/40",
+    textClass: "text-status-success-fg",
+    descClass: "text-status-success-fg/90",
+    iconClass: "text-status-success-fg",
+  },
+  danger: {
+    alertVariant: "danger",
+    bgClass: "bg-status-danger-bg",
+    borderClass: "border-status-danger-arc/40",
+    textClass: "text-status-danger-fg",
+    descClass: "text-status-danger-fg/90",
+    iconClass: "text-status-danger-fg",
+  },
+  info: {
+    alertVariant: "info",
+    bgClass: "bg-status-info-bg",
+    borderClass: "border-status-info-arc/40",
+    textClass: "text-status-info-fg",
+    descClass: "text-status-info-fg/90",
+    iconClass: "text-status-info-fg",
+  },
+};
+
+export function getStatusBannerStyle(status: string): StatusBannerStyle {
+  const normalized = (status || "").toLowerCase();
+  const config = statusMap[normalized];
+  const variant = (config?.variant as StatusVariant) || "info";
+  return statusBannerStyles[variant] || statusBannerStyles.info;
+}
 
 interface StatusBadgeProps {
   status: PostStatus | string;

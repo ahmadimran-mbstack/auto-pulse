@@ -50,6 +50,8 @@ import {
   formatDecisionDeadline,
   getPublicationErrorInfo,
 } from "@/lib/posts";
+import { cn } from "@/lib/utils";
+import { getStatusBannerStyle } from "@/components/app/StatusBadge";
 
 interface PostDetailClientProps {
   id: string;
@@ -199,6 +201,7 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
   const formattedDeadline = formatDecisionDeadline(
     post.publish_at || post.approval?.expires_at
   );
+  const bannerStyle = getStatusBannerStyle(post.status);
 
   return (
     <div className="p-6 md:p-8 space-y-6 max-w-5xl mx-auto">
@@ -249,13 +252,13 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
 
       {/* Status Alert Section positioned prominently */}
       {post.status === "awaiting_approval" && (
-        <Alert className="border-primary/30 bg-signal-soft/40">
-          <AlertCircleIcon className="size-4 text-primary" />
+        <Alert variant={bannerStyle.alertVariant}>
+          <AlertCircleIcon className={cn("size-4", bannerStyle.iconClass)} />
           <div className="flex-1">
-            <AlertTitle className="text-foreground">
+            <AlertTitle className={bannerStyle.textClass}>
               Awaiting your approval
             </AlertTitle>
-            <AlertDescription className="text-xs text-muted-foreground mt-0.5">
+            <AlertDescription className={cn("text-xs mt-0.5", bannerStyle.descClass)}>
               {formattedDeadline
                 ? `Please review and decide before ${formattedDeadline}.`
                 : "Please review and decide on this draft."}
@@ -291,18 +294,18 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
       )}
 
       {post.status === "approved" && (
-        <Alert className="border-signal-line bg-signal-soft text-foreground">
-          <CheckCircle2Icon className="size-4 text-primary" />
+        <Alert variant={bannerStyle.alertVariant}>
+          <CheckCircle2Icon className={cn("size-4", bannerStyle.iconClass)} />
           <div className="flex-1">
-            <AlertTitle className="text-primary font-medium flex items-center gap-1.5">
+            <AlertTitle className={cn("font-medium flex items-center gap-1.5", bannerStyle.textClass)}>
               <span>Approved</span>
               {post.approval?.channel && (
-                <span className="text-xs font-normal text-muted-foreground">
+                <span className={cn("text-xs font-normal opacity-80", bannerStyle.textClass)}>
                   via {post.approval.channel === "slack" ? "Slack" : "Email"}
                 </span>
               )}
             </AlertTitle>
-            <AlertDescription className="text-xs text-muted-foreground">
+            <AlertDescription className={cn("text-xs", bannerStyle.descClass)}>
               This post will be published around {formattedPublishAt || "the scheduled time"}.
             </AlertDescription>
           </div>
@@ -310,11 +313,11 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
       )}
 
       {post.status === "publishing" && (
-        <Alert className="border-border bg-muted/60">
-          <Loader2Icon className="size-4 animate-spin text-primary" />
+        <Alert variant={bannerStyle.alertVariant}>
+          <Loader2Icon className={cn("size-4 animate-spin", bannerStyle.iconClass)} />
           <div className="flex-1">
-            <AlertTitle>Publishing in progress</AlertTitle>
-            <AlertDescription className="text-xs text-muted-foreground flex items-center gap-1">
+            <AlertTitle className={bannerStyle.textClass}>Publishing in progress</AlertTitle>
+            <AlertDescription className={cn("text-xs flex items-center gap-1", bannerStyle.descClass)}>
               <span>Delivering post to</span>
               <PlatformLabel platform="linkedin" size="xs" />
               <span>. This page will update automatically when complete.</span>
@@ -324,14 +327,14 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
       )}
 
       {post.status === "published" && (
-        <Alert className="border-border bg-card">
-          <CheckCircle2Icon className="size-4 text-primary" />
+        <Alert variant={bannerStyle.alertVariant}>
+          <CheckCircle2Icon className={cn("size-4", bannerStyle.iconClass)} />
           <div className="flex-1">
-            <AlertTitle className="inline-flex items-center gap-1.5">
+            <AlertTitle className={cn("inline-flex items-center gap-1.5", bannerStyle.textClass)}>
               <span>Published to</span>
               <PlatformLabel platform="linkedin" size="sm" />
             </AlertTitle>
-            <AlertDescription className="text-xs text-muted-foreground">
+            <AlertDescription className={cn("text-xs", bannerStyle.descClass)}>
               Successfully delivered to your profile.
             </AlertDescription>
           </div>
@@ -353,11 +356,11 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
       )}
 
       {post.status === "rejected" && (
-        <Alert variant="destructive">
-          <AlertCircleIcon className="size-4" />
+        <Alert variant={bannerStyle.alertVariant}>
+          <AlertCircleIcon className={cn("size-4", bannerStyle.iconClass)} />
           <div className="flex-1">
-            <AlertTitle>Rejected</AlertTitle>
-            <AlertDescription className="text-xs">
+            <AlertTitle className={bannerStyle.textClass}>Rejected</AlertTitle>
+            <AlertDescription className={cn("text-xs", bannerStyle.descClass)}>
               This draft was rejected and will not be published.
             </AlertDescription>
           </div>
@@ -365,11 +368,11 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
       )}
 
       {post.status === "expired" && (
-        <Alert>
-          <AlertCircleIcon className="size-4 text-muted-foreground" />
+        <Alert variant={bannerStyle.alertVariant}>
+          <AlertCircleIcon className={cn("size-4", bannerStyle.iconClass)} />
           <div className="flex-1">
-            <AlertTitle>Expired</AlertTitle>
-            <AlertDescription className="text-xs text-muted-foreground">
+            <AlertTitle className={bannerStyle.textClass}>Expired</AlertTitle>
+            <AlertDescription className={cn("text-xs", bannerStyle.descClass)}>
               This draft passed its review deadline before approval. Nothing was published.
             </AlertDescription>
           </div>
@@ -377,11 +380,11 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
       )}
 
       {post.status === "failed" && (
-        <Alert variant="destructive">
-          <AlertCircleIcon className="size-4" />
+        <Alert variant={bannerStyle.alertVariant}>
+          <AlertCircleIcon className={cn("size-4", bannerStyle.iconClass)} />
           <div className="flex-1">
-            <AlertTitle>Publishing failed</AlertTitle>
-            <AlertDescription className="text-xs">
+            <AlertTitle className={bannerStyle.textClass}>Publishing failed</AlertTitle>
+            <AlertDescription className={cn("text-xs", bannerStyle.descClass)}>
               {pubErrorInfo.message}
             </AlertDescription>
           </div>
