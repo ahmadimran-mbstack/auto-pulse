@@ -215,9 +215,19 @@ def generate_fallback_finder_output(input_text: str) -> Any:
     why_now = "Fresh industry benchmarks and production post-mortems published this week"
     sources = [FinderSource(title=chosen["title"], url=chosen["url"])]
 
+    from app.agents.finder import KeyFact, clean_topic_label
+    topic_label = clean_topic_label(chosen["title"])
+    key_facts = [
+        KeyFact(fact=f"Core findings regarding {topic_label} focus on practical trade-offs and operational bounds.", source_url=chosen["url"]),
+        KeyFact(fact=f"Published analysis highlights comparative execution metrics in modern practice.", source_url=chosen["url"]),
+    ]
+
     return FinderOutput(
-        topic=topic,
+        topic_title=chosen["title"],
+        topic_label=topic_label,
+        topic=topic_label,
         angle=angle,
+        key_facts=key_facts,
         post_format=chosen_format,
         hook_type=hook_type,
         why_now=why_now,
@@ -227,6 +237,7 @@ def generate_fallback_finder_output(input_text: str) -> Any:
 
 
 def generate_fallback_gtm_brief_output(input_text: str) -> Any:
+    from app.agents.finder import clean_topic_label
     from app.agents.gtm import GTMBriefOutput
     from app.agents.knowledge.hook_library import get_hooks_by_style, HOOK_STYLES
 
@@ -234,7 +245,6 @@ def generate_fallback_gtm_brief_output(input_text: str) -> Any:
     hint_match = re.search(r"Topic Hint:\s*([^\n\r]+)", input_text)
     raw_topic = hint_match.group(1).strip() if hint_match else (topic_match.group(1).strip() if topic_match else "Modern Systems Engineering")
 
-    # Extract allowed hook styles from prompt
     styles_match = re.search(r"Allowed Hook Styles[^:]*:\s*([^\n\r<]+)", input_text, re.IGNORECASE)
     allowed_styles = []
     if styles_match:
@@ -244,20 +254,31 @@ def generate_fallback_gtm_brief_output(input_text: str) -> Any:
     if not allowed_styles:
         allowed_styles = HOOK_STYLES
 
-    clean_topic = raw_topic[:50].strip()
-    # Rotate through allowed styles based on topic hash to avoid repeating
+    clean_topic = clean_topic_label(raw_topic)
     chosen_style = allowed_styles[hash(clean_topic) % len(allowed_styles)]
-    templates = get_hooks_by_style(chosen_style)
-    hook_options = []
-    for t in templates[:3]:
-        rendered = t["template"].replace("{topic}", clean_topic)
-        hook_options.append(rendered)
+    hooks = get_hooks_by_style(chosen_style)
+    hook_id = hooks[0]["id"] if hooks else "observation_01"
 
-    while len(hook_options) < 3:
-        hook_options.append(f"Why {clean_topic} is quietly reshaping how top engineering teams build systems.")
+    if chosen_style == "question":
+        hook_text = f"When evaluating {clean_topic}, what is the primary operational trade-off your team considers?"
+    elif chosen_style == "contrarian_opinion":
+        hook_text = f"Most teams treat {clean_topic} as straightforward, but the real friction usually appears in daily execution."
+    elif chosen_style == "mistake":
+        hook_text = f"A common mistake when approaching {clean_topic} is overlooking how it affects existing workflows."
+    elif chosen_style == "how_to":
+        hook_text = f"A straightforward approach to integrating {clean_topic} without disrupting ongoing deliverables."
+    elif chosen_style == "story":
+        hook_text = f"A few months into working with {clean_topic}, one practical constraint changed our entire perspective."
+    elif chosen_style == "number_result":
+        hook_text = f"Recent measurements regarding {clean_topic} highlight a clear operational finding."
+    else:
+        hook_text = f"Something significant is shifting in how forward-thinking teams approach {clean_topic}."
 
-    # Pick an option that varies by topic hash
-    chosen_hook = hook_options[hash(clean_topic) % len(hook_options)]
+    hook_options = [
+        hook_text,
+        f"When examining {clean_topic}, one operational trade-off is often overlooked.",
+        f"Why {clean_topic} requires closer attention in daily practice.",
+    ]
 
     structure_lines = [
         f"1. Context and trigger: Why {clean_topic} matters right now.",
@@ -267,15 +288,17 @@ def generate_fallback_gtm_brief_output(input_text: str) -> Any:
     ]
     ending_strategy = f"Open practitioner question on managing {clean_topic} in production environments"
     notes = [
-        f"[HOOK-01] Selected personalized hook style '{chosen_style}' tailored to creator profile.",
+        f"[HOOK-01] Selected personalized hook style '{chosen_style}' ({hook_id}).",
         "[BODY-01] Single core thesis maintained throughout post body.",
         "[END-01] Clean close without engagement bait.",
     ]
 
     return GTMBriefOutput(
         hook_style=chosen_style,
+        hook_id=hook_id,
+        hook_text=hook_text,
+        chosen_hook=hook_text,
         hook_options=hook_options,
-        chosen_hook=chosen_hook,
         structure_lines=structure_lines,
         ending_strategy=ending_strategy,
         notes=notes,
@@ -284,11 +307,12 @@ def generate_fallback_gtm_brief_output(input_text: str) -> Any:
 
 def generate_fallback_drafter_output(input_text: str) -> Any:
     from app.agents.drafter import DrafterOutput
+    from app.agents.finder import clean_topic_label
 
     # Extract topic or hook if available
     source_title_match = re.search(r"Title:\s*\"?([^\n\r\"\|]+)", input_text)
-    hook_match = re.search(r"Chosen Hook:\s*([^\n\r]+)", input_text)
-    topic_match = re.search(r"Topic:\s*([^\n\r]+)", input_text)
+    hook_match = re.search(r"(?:Chosen Hook|Hook Line):\s*([^\n\r]+)", input_text)
+    topic_match = re.search(r"Topic(?: Label)?:\s*([^\n\r]+)", input_text)
     hint_match = re.search(r"Topic Hint:\s*([^\n\r]+)", input_text)
 
     if hint_match and hint_match.group(1).strip():
@@ -300,70 +324,32 @@ def generate_fallback_drafter_output(input_text: str) -> Any:
     elif hook_match and hook_match.group(1).strip():
         topic_str = hook_match.group(1).strip()[:50]
     else:
-        topic_str = "Modern Systems Architecture"
-    clean_topic = topic_str[:55].strip()
+        topic_str = "Modern Engineering Architecture"
 
-    if hook_match:
+    clean_topic = clean_topic_label(topic_str)
+
+    if hook_match and len(hook_match.group(1).strip()) > 15:
         hook = hook_match.group(1).strip()
     else:
-        hook = f"Most engineering teams evaluate {clean_topic} with the wrong operational metrics."
+        hook = f"Something significant is shifting in how forward-thinking teams approach {clean_topic}."
 
-    # Rotate across 4 distinct technical narrative templates to ensure complete draft variety
-    variant_idx = hash(clean_topic) % 4
-
-    if variant_idx == 0:
-        paragraphs = [
-            hook,
-            f"When evaluating {clean_topic} under production load, peak operations per second is rarely the primary constraint. The failure point almost always emerges at the concurrency boundary.",
-            "Under sustained traffic, standard thread pools and default timeouts appear stable in staging. But the moment burst allocations spike, thread contention and memory fragmentation quietly starve active worker pools before resource alerts even trigger.",
-            "Engineering organizations that scale reliably treat predictability as a first-order design requirement. Capping concurrent worker allocations, tuning bounded connection pools, and implementing aggressive backpressure consistently drop p99 tail latency by over 60%.",
-            f"The operational rule for {clean_topic} is straightforward: predictable worst-case behavior beats theoretical peak capacity in every production scenario.",
-            f"Where is your team seeing the largest discrepancy between local benchmarks and live production behavior with {clean_topic}?",
-        ]
-        headline = f"Resilient Architecture: {clean_topic[:30]}"
-        hashtags = ["SoftwareEngineering", "SystemArchitecture", "BackendEngineering"]
-
-    elif variant_idx == 1:
-        paragraphs = [
-            hook,
-            f"The real architectural challenge with {clean_topic} isn't writing the initial logic—it's managing state boundaries when network partitions or upstream retries occur.",
-            "Modern frameworks abstract connection pooling and query cascades, making it dangerously easy to deploy code that works seamlessly for 100 users but degrades exponentially under 10,000 concurrent requests.",
-            "High-performing engineering teams enforce explicit isolation levels, strict database timeout budgets, and idempotency keys across every write path. Rather than relying on horizontal autoscaling as a crutch, they address contention at the storage and caching layer.",
-            f"Building for real scale with {clean_topic} requires auditing assumptions from first principles rather than trusting default framework configurations.",
-            f"How does your team stress-test distributed state and failover modes when deploying {clean_topic}?",
-        ]
-        headline = f"Production Isolation: {clean_topic[:30]}"
-        hashtags = ["DistributedSystems", "CloudArchitecture", "TechLeadership"]
-
-    elif variant_idx == 2:
-        paragraphs = [
-            hook,
-            f"When code generation velocity accelerates, the bottleneck in {clean_topic} shifts entirely from typing syntax to deeply understanding operating system primitives, connection reuse, and memory fragmentation.",
-            "Automated tools will happily generate clean-looking ORM queries that trigger catastrophic N+1 database roundtrips, or initialize unbounded thread pools that saturate worker nodes during morning traffic spikes.",
-            "Senior engineers who build enduring systems focus relentlessly on fundamentals: zero-copy serialization, bounded buffers, backpressure signaling, and graceful degradation paths.",
-            f"The paradox of {clean_topic} in 2026 is clear: the faster boilerplate is written, the more critical deep system fundamentals become.",
-            f"What safeguards has your organization put in place to verify {clean_topic} against high-concurrency degradation?",
-        ]
-        headline = f"First Principles: {clean_topic[:30]}"
-        hashtags = ["SoftwareEngineering", "SystemDesign", "TechStrategy"]
-
-    else:
-        paragraphs = [
-            hook,
-            f"A common operational mistake with {clean_topic} is assuming that adding more nodes solves latency spikes caused by database lock contention.",
-            "In recent production audits, horizontal pod autoscaling actually intensified lock queues on shared tables, turning minor 50ms delays into complete 30-second gateway timeouts.",
-            "The fix didn't require more compute. By decoupling write transactions from event publication and replacing table-level locking with optimistic concurrency tokens, tail latency collapsed from 450ms down to 12ms.",
-            f"Scale is not about resource consumption; it is about eliminating contention points in the critical path of {clean_topic}.",
-            f"Have you seen horizontal autoscaling disguise underlying lock contention in your {clean_topic} workloads?",
-        ]
-        headline = f"Contention vs Scale: {clean_topic[:30]}"
-        hashtags = ["BackendEngineering", "DatabasePerformance", "SystemArchitecture"]
+    paragraphs = [
+        hook,
+        f"When evaluating {clean_topic}, peak throughput under ideal conditions is rarely the primary constraint. In daily practice, friction almost always emerges at the boundaries between tools and team workflows.",
+        f"Default configurations often appear sufficient during early evaluation. But once real team adoption begins, unmonitored coordination costs and integration assumptions create bottlenecks before teams realize why progress has slowed.",
+        f"Organizations that navigate {clean_topic} successfully focus on clear boundaries, realistic expectations, and steady verification. Rather than chasing every unproven claim, they prioritize predictable execution and sustainable workflow habits.",
+        f"The practical lesson for {clean_topic} is straightforward: predictable operational behavior beats theoretical peak capacity in every real-world scenario.",
+        f"Where is your team seeing the most meaningful trade-offs when working with {clean_topic}?",
+    ]
 
     post_text = "\n\n".join(paragraphs)
+    headline = f"Operational Guide: {clean_topic[:30]}"
+    words = [re.sub(r"[^\w]", "", w).capitalize() for w in clean_topic.split() if len(w) >= 3]
+    hashtags = (words[:2] or ["Engineering"]) + ["TechStrategy"]
 
     return DrafterOutput(
         post_text=post_text,
-        hashtags=hashtags,
+        hashtags=hashtags[:3],
         image_headline=headline,
     )
 

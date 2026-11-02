@@ -7,7 +7,7 @@ from langchain_core.runnables import RunnableLambda
 
 from app.agents.detector import DetectionResult, DetectorLLMOutput, LLMFinding, LLMSubScores
 from app.agents.drafter import DrafterOutput
-from app.agents.finder import FinderOutput, FinderSource
+from app.agents.finder import FinderOutput, FinderSource, KeyFact
 from app.agents.gtm import GTMBriefOutput, GTMReviewOutput
 from app.core.config import settings
 from app.services.pipeline import build_graph, execute_pipeline
@@ -64,6 +64,10 @@ def test_loop_terminates_immediately_when_initial_score_below_threshold():
         hook_type="number-led specific result",
         why_now="Recent benchmarks",
         sources=[FinderSource(title=cand.title, url=cand.url)],
+        key_facts=[
+            KeyFact(fact="PostgreSQL 16 dropped buffer locks by 42% in recent high-concurrency benchmarks.", source_url=cand.url),
+            KeyFact(fact="In production workloads running over 400 active client connections, latency fell from 120ms to 18ms.", source_url=cand.url),
+        ],
     )
 
     gtm_brief_resp = GTMBriefOutput(

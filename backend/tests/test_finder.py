@@ -7,6 +7,7 @@ from langchain_core.runnables import RunnableLambda
 from app.agents.finder import (
     FinderOutput,
     FinderSource,
+    KeyFact,
     run_finder_agent,
     validate_finder_output,
 )
@@ -145,6 +146,10 @@ def test_validation_passes_when_all_rules_satisfied():
         hook_type="number-led specific result",
         why_now="Kubernetes 1.31 worker node upgrades surfaced this issue",
         sources=[FinderSource(title="Kafka Kubernetes", url="https://example.com/kafka-rebalance-k8s")],
+        key_facts=[
+            KeyFact(fact="Cooperative sticky assignor avoids stop-the-world pauses", source_url="https://example.com/kafka-rebalance-k8s"),
+            KeyFact(fact="Tested on Kubernetes 1.31 upgrades", source_url="https://example.com/kafka-rebalance-k8s"),
+        ],
         avoided=["PostgreSQL 16 Memory", "Redis Cluster Pitfalls"],
     )
 
@@ -181,6 +186,10 @@ def test_run_finder_agent_retries_on_violation():
         hook_type="specific observation",
         why_now="Now",
         sources=[FinderSource(title="Kafka", url="https://example.com/kafka-rebalance-k8s")],
+        key_facts=[
+            KeyFact(fact="Cooperative sticky assignors reduce latency", source_url="https://example.com/kafka-rebalance-k8s"),
+            KeyFact(fact="Kubernetes rolling restarts trigger partition churn", source_url="https://example.com/kafka-rebalance-k8s"),
+        ],
         avoided=[],
     )
 
@@ -192,6 +201,10 @@ def test_run_finder_agent_retries_on_violation():
         hook_type="specific observation",
         why_now="Now",
         sources=[FinderSource(title="Kafka", url="https://example.com/kafka-rebalance-k8s")],
+        key_facts=[
+            KeyFact(fact="Cooperative sticky assignors reduce latency", source_url="https://example.com/kafka-rebalance-k8s"),
+            KeyFact(fact="Kubernetes rolling restarts trigger partition churn", source_url="https://example.com/kafka-rebalance-k8s"),
+        ],
         avoided=[],
     )
 

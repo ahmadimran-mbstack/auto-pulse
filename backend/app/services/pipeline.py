@@ -43,9 +43,14 @@ class PipelineState(TypedDict, total=False):
     candidates: List[Dict[str, Any]]
     finder_output: Optional[Dict[str, Any]]
     chosen: Optional[Dict[str, Any]]
+    topic_title: Optional[str]
+    topic_label: Optional[str]
+    key_facts: Optional[List[Dict[str, Any]]]
     angle: Optional[str]
     hook_type: Optional[str]
     hook_style: Optional[str]
+    hook_id: Optional[str]
+    hook_text: Optional[str]
     post_format: Optional[str]
     why_now: Optional[str]
 
@@ -411,18 +416,25 @@ def build_graph(
             finder_output = generate_fallback_finder_output(f"{hint_ctx}\n{hist_block}\n{cands_block}")
 
         # Enforce user topic_hint when explicitly provided
+        from app.agents.finder import clean_topic_label
         if topic_hint:
-            from app.agents.finder import FinderSource
+            from app.agents.finder import FinderSource, KeyFact
             clean_hint = topic_hint[:90]
-            finder_output.topic = clean_hint
-            finder_output.angle = f"Why {clean_hint[:45]} is essential for production reliability in modern engineering"
+            finder_output.topic_title = clean_hint
+            finder_output.topic_label = clean_topic_label(clean_hint)
+            finder_output.angle = f"Why {clean_hint[:45]} is essential for practical reliability in modern engineering"
             finder_output.hook_type = "defensible contrarian claim"
             finder_output.why_now = "Recent production updates and shifts in modern software development"
+            hint_url = candidates[0].get("url") if candidates else "https://example.com/editorial/engineering-insights-2026"
             finder_output.sources = [
                 FinderSource(
                     title=clean_hint,
-                    url=candidates[0].get("url") if candidates else "https://example.com/editorial/engineering-insights-2026",
+                    url=hint_url,
                 )
+            ]
+            finder_output.key_facts = [
+                KeyFact(fact=f"Core architectural considerations for {finder_output.topic_label}", source_url=hint_url),
+                KeyFact(fact=f"Practical analysis documented in {clean_hint[:40]}", source_url=hint_url),
             ]
             chosen_candidate = candidates[0] if candidates else {"title": clean_hint, "url": "https://example.com", "text": clean_hint}
         else:
@@ -435,9 +447,19 @@ def build_graph(
                         chosen_candidate = c
                         break
 
+        topic_title = getattr(finder_output, "topic_title", "") or chosen_candidate.get("title", "")
+        topic_label = getattr(finder_output, "topic_label", "") or clean_topic_label(topic_title)
+        key_facts_data = [
+            kf.model_dump() if hasattr(kf, "model_dump") else kf
+            for kf in (getattr(finder_output, "key_facts", []) or [])
+        ]
+
         return {
             "finder_output": finder_output.model_dump(),
             "chosen": chosen_candidate,
+            "topic_title": topic_title,
+            "topic_label": topic_label,
+            "key_facts": key_facts_data,
             "angle": finder_output.angle,
             "hook_type": finder_output.hook_type,
             "post_format": finder_output.post_format,
@@ -459,11 +481,14 @@ def build_graph(
         candidates = state.get("candidates", [])
         history = state.get("history", [])
 
-        topic = finder_dict.get("topic") or chosen.get("title") or "Industry Development"
-        angle = state.get("angle") or "Technical analysis"
-        post_format = state.get("post_format") or "observer take"
-        hook_type = state.get("hook_type") or "specific observation"
-        why_now = state.get("why_now") or "Recent production updates"
+        from app.agents.finder import clean_topic_label
+        topic_title = state.get("topic_title") or finder_dict.get("topic_title") or chosen.get("title") or "Industry Development"
+        topic_label = state.get("topic_label") or finder_dict.get("topic_label") or clean_topic_label(topic_title)
+        key_facts = state.get("key_facts") or finder_dict.get("key_facts") or []
+        angle = state.get("angle") or finder_dict.get("angle") or "Technical analysis"
+        post_format = state.get("post_format") or finder_dict.get("post_format") or "observer take"
+        hook_type = state.get("hook_type") or finder_dict.get("hook_type") or "specific observation"
+        why_now = state.get("why_now") or finder_dict.get("why_now") or "Recent production updates"
 
         sources = finder_dict.get("sources") or candidates[:2]
 
@@ -480,7 +505,9 @@ def build_graph(
         counters["tokens_out"] = counters.get("tokens_out", 0) + 280
         try:
             brief = run_gtm_brief(
-                topic=topic,
+                topic=topic_label,
+                topic_label=topic_label,
+                key_facts=key_facts,
                 angle=angle,
                 post_format=post_format,
                 hook_type=hook_type,
@@ -495,16 +522,21 @@ def build_graph(
             from app.services.resilient_llm import generate_fallback_gtm_brief_output
             styles_str = ", ".join(allowed_styles)
             brief = generate_fallback_gtm_brief_output(
-                f"Topic: {topic}\nAngle: {angle}\nAllowed Hook Styles: {styles_str}"
+                f"Topic: {topic_label}\nAngle: {angle}\nAllowed Hook Styles: {styles_str}"
             )
 
         chosen_hook_style = getattr(brief, "hook_style", None) or allowed_styles[0]
+        hook_id = getattr(brief, "hook_id", None) or "observation_01"
+        hook_text = getattr(brief, "hook_text", None) or getattr(brief, "chosen_hook", "")
+
         seconds["gtm_brief"] = round(time.perf_counter() - start_t, 3)
 
         return {
             "gtm_brief": brief.model_dump(),
             "hook_style": chosen_hook_style,
             "hook_type": chosen_hook_style,
+            "hook_id": hook_id,
+            "hook_text": hook_text,
             "counters": counters,
             "seconds_per_node": seconds,
         }
@@ -521,6 +553,11 @@ def build_graph(
         profile = state.get("profile", {})
         candidates = state.get("candidates", [])
 
+        topic_label = state.get("topic_label") or (state.get("finder_output") or {}).get("topic_label") or ""
+        angle = state.get("angle") or (state.get("finder_output") or {}).get("angle") or ""
+        key_facts = state.get("key_facts") or (state.get("finder_output") or {}).get("key_facts") or []
+        hook_text = state.get("hook_text") or (state.get("gtm_brief") or {}).get("hook_text") or (state.get("gtm_brief") or {}).get("chosen_hook") or ""
+
         counters["llm_calls"] = counters.get("llm_calls", 0) + 1
         counters["tokens_in"] = counters.get("tokens_in", 0) + 950
         counters["tokens_out"] = counters.get("tokens_out", 0) + 420
@@ -533,6 +570,10 @@ def build_graph(
                     sources=candidates[:3],
                     profile=profile,
                     model=_drafter_model,
+                    topic_label=topic_label,
+                    angle=angle,
+                    key_facts=key_facts,
+                    hook_text=hook_text,
                 )
             else:
                 # Mode 2: Targeted Span Rewrite
@@ -547,11 +588,17 @@ def build_graph(
                     sources=candidates[:3],
                     profile=profile,
                     model=_drafter_model,
+                    topic_label=topic_label,
+                    angle=angle,
+                    key_facts=key_facts,
+                    hook_text=hook_text,
                 )
         except Exception as exc:
             logger.warning(f"Drafter node error: {exc}. Generating resilient fallback draft.")
             from app.services.resilient_llm import generate_fallback_drafter_output
-            draft_output = generate_fallback_drafter_output(str(gtm_brief))
+            draft_output = generate_fallback_drafter_output(
+                f"Topic: {topic_label}\nAngle: {angle}\nHook Line: {hook_text}\nBrief: {gtm_brief}"
+            )
 
         seconds[f"drafter_r{current_round}"] = round(time.perf_counter() - start_t, 3)
 
@@ -614,11 +661,17 @@ def build_graph(
         draft = state.get("draft", {})
         chosen = state.get("chosen", {})
         recent_captions = state.get("recent_captions", [])
+        profile = state.get("profile", {})
 
         post_text = draft.get("post_text", "")
         hashtags = draft.get("hashtags", [])
         image_headline = draft.get("image_headline", "")
         source_text = chosen.get("text", "")
+
+        topic_title = state.get("topic_title") or (state.get("finder_output") or {}).get("topic_title") or chosen.get("title", "")
+        topic_label = state.get("topic_label") or (state.get("finder_output") or {}).get("topic_label") or ""
+        key_facts = state.get("key_facts") or (state.get("finder_output") or {}).get("key_facts") or []
+        angle = state.get("angle") or (state.get("finder_output") or {}).get("angle") or ""
 
         failures = run_all_checks(
             caption=post_text,
@@ -626,6 +679,12 @@ def build_graph(
             image_headline=image_headline,
             source_text=source_text,
             recent_captions=recent_captions,
+            topic_title=topic_title,
+            topic_label=topic_label,
+            key_facts=key_facts,
+            profile=profile,
+            relevance_model=_fast_model,
+            angle=angle,
         )
 
         seconds[f"check_r{current_round}"] = round(time.perf_counter() - start_t, 3)
@@ -686,6 +745,7 @@ def build_graph(
         is_terminal = False
         exit_reason = ""
 
+        # A draft can ONLY pass if BOTH slop score < threshold AND all validation checks passed
         if final_score < settings.AI_SCORE_THRESHOLD and not check_failures:
             is_terminal = True
             exit_reason = "passed"
@@ -712,23 +772,57 @@ def build_graph(
             "exit_reason": exit_reason,
         }
 
-    # Node 9: POST-LOOP (Picks lowest-score draft, GTM review, final checks, compiles trace)
+    # Node 9: POST-LOOP (Picks lowest-score draft, generates image headline, GTM review, final checks, compiles trace)
     def post_loop_node(state: PipelineState) -> Dict[str, Any]:
         _notify_step("post_loop", state.get("round", 0), state)
         start_t = time.perf_counter()
         counters = dict(state.get("counters", {}))
         seconds = dict(state.get("seconds_per_node", {}))
 
-        best_draft = state.get("best_draft") or state.get("draft") or {}
+        best_draft = dict(state.get("best_draft") or state.get("draft") or {})
         best_score = state.get("best_score", 0)
         exit_reason = state.get("exit_reason", "unknown")
         gtm_brief = state.get("gtm_brief", {})
         candidates = state.get("candidates", [])
         chosen = state.get("chosen", {})
         recent_captions = state.get("recent_captions", [])
+        profile = state.get("profile", {})
 
-        # If score exceeds threshold or checks failed, set needs_review
-        needs_review = bool(best_score >= settings.AI_SCORE_THRESHOLD or exit_reason != "passed")
+        topic_title = state.get("topic_title") or (state.get("finder_output") or {}).get("topic_title") or chosen.get("title", "")
+        topic_label = state.get("topic_label") or (state.get("finder_output") or {}).get("topic_label") or ""
+        key_facts = state.get("key_facts") or (state.get("finder_output") or {}).get("key_facts") or []
+        angle = state.get("angle") or (state.get("finder_output") or {}).get("angle") or ""
+
+        # STEP 6: Generate companion image headline AFTER final post exists from the post's main point
+        from app.services.checks import generate_companion_image_headline
+        final_headline = generate_companion_image_headline(
+            post_text=best_draft.get("post_text", ""),
+            model=_fast_model,
+        )
+        best_draft["image_headline"] = final_headline
+
+        # Final deterministic & relevance check on chosen draft
+        final_check_failures = run_all_checks(
+            caption=best_draft.get("post_text", ""),
+            hashtags=best_draft.get("hashtags", []),
+            image_headline=best_draft.get("image_headline", ""),
+            source_text=chosen.get("text", ""),
+            recent_captions=recent_captions,
+            topic_title=topic_title,
+            topic_label=topic_label,
+            key_facts=key_facts,
+            profile=profile,
+            relevance_model=_fast_model,
+            angle=angle,
+        )
+
+        # A post MUST pass BOTH slop threshold AND all validation checks.
+        # If check failures exist, or exit_reason != "passed", flag needs_review=True
+        needs_review = bool(
+            best_score >= settings.AI_SCORE_THRESHOLD
+            or exit_reason != "passed"
+            or bool(final_check_failures)
+        )
 
         # Run GTM Review on final chosen draft
         counters["llm_calls"] = counters.get("llm_calls", 0) + 1
@@ -746,16 +840,43 @@ def build_graph(
             from app.services.resilient_llm import generate_fallback_gtm_review_output
             gtm_review = generate_fallback_gtm_review_output(best_draft.get("post_text", ""))
 
-        # Final deterministic check
-        final_check_failures = run_all_checks(
-            caption=best_draft.get("post_text", ""),
-            hashtags=best_draft.get("hashtags", []),
-            image_headline=best_draft.get("image_headline", ""),
-            source_text=chosen.get("text", ""),
-            recent_captions=recent_captions,
-        )
-        if final_check_failures:
-            needs_review = True
+        seconds["post_loop"] = round(time.perf_counter() - start_t, 3)
+
+        # Compile complete agent audit trace
+        agent_trace = {
+            "exit_reason": exit_reason,
+            "final_score": best_score,
+            "needs_review": needs_review,
+            "best_round": state.get("best_round", 0),
+            "rounds_count": len(state.get("rounds_history", [])),
+            "finder": state.get("finder_output"),
+            "topic_title": topic_title,
+            "topic_label": topic_label,
+            "key_facts": key_facts,
+            "gtm_brief": gtm_brief,
+            "gtm_review": gtm_review.model_dump(),
+            "rounds": state.get("rounds_history", []),
+            "final_check_failures": final_check_failures,
+            "timings": seconds,
+            "counters": counters,
+        }
+
+        _notify_step("completed", state.get("round", 0), state)
+
+        return {
+            "draft": best_draft,
+            "ai_score": best_score,
+            "final_score": best_score,
+            "needs_review": needs_review,
+            "gtm_review": gtm_review.model_dump(),
+            "agent_trace": agent_trace,
+            "current_step": "completed",
+            "topic_title": topic_title,
+            "topic_label": topic_label,
+            "key_facts": key_facts,
+            "counters": counters,
+            "seconds_per_node": seconds,
+        }
 
         seconds["post_loop"] = round(time.perf_counter() - start_t, 3)
 
@@ -898,7 +1019,7 @@ def execute_pipeline(
 
     chosen = final_state.get("chosen") or {}
     finder_out = final_state.get("finder_output") or {}
-    chosen_topic = finder_out.get("topic") or chosen.get("title") or "Unknown"
+    chosen_topic = finder_out.get("topic_label") or finder_out.get("topic") or chosen.get("title") or "Unknown"
     chosen_hook_style = final_state.get("hook_style") or final_state.get("hook_type") or "Unknown"
     final_counters = final_state.get("counters", {})
     pipeline_duration = round(time.perf_counter() - pipeline_start_t, 2)
