@@ -1,18 +1,20 @@
 import logging
 import time
 import uuid
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
+from app.core.config import settings
 from app.core.limiter import get_redis_client
 
 logger = logging.getLogger(__name__)
 
 # Fallback in-memory store: user_id -> (run_id_str, expires_at)
 _IN_MEMORY_MANUAL_RUN_LOCKS: dict[str, tuple[str, float]] = {}
-MANUAL_RUN_LOCK_TTL_SECONDS = 300  # 5 minutes
+# Lock expires slightly after whole-run deadline (180s deadline + 30s buffer = 210s)
+MANUAL_RUN_LOCK_TTL_SECONDS = settings.TOTAL_RUN_DEADLINE_SECONDS + 30
 
 
 def acquire_manual_run_lock(
-    user_id: str, run_id: uuid.UUID, ttl_seconds: int = MANUAL_RUN_LOCK_TTL_SECONDS
+    user_id: str, run_id: Union[uuid.UUID, str], ttl_seconds: int = MANUAL_RUN_LOCK_TTL_SECONDS
 ) -> Tuple[bool, Optional[str]]:
     """Tries to atomically acquire an in-flight execution lock for a manual run.
     Guarantees:
@@ -56,24 +58,36 @@ def acquire_manual_run_lock(
     return True, None
 
 
-def release_manual_run_lock(user_id: str, run_id: uuid.UUID) -> None:
-    """Releases the in-flight manual run lock for the given user and run."""
+def release_manual_run_lock(user_id: str, run_id: Optional[Union[uuid.UUID, str]] = None) -> None:
+    """Releases the in-flight manual run lock for the given user and run.
+    If run_id is None, forcefully releases any active lock for the user.
+    """
     lock_key = f"lock:manual_run:{user_id}"
-    run_id_str = str(run_id)
+    run_id_str = str(run_id) if run_id is not None else None
 
     redis_client = get_redis_client()
     if redis_client is not None:
         try:
-            curr = redis_client.get(lock_key)
-            curr_str = curr.decode("utf-8") if isinstance(curr, bytes) else str(curr) if curr else None
-            if curr_str == run_id_str:
+            if run_id_str is None:
                 redis_client.delete(lock_key)
-                logger.info(f"Released Redis in-flight lock for user {user_id} (run_id={run_id})")
+                logger.info(f"Force-released Redis in-flight lock for user {user_id}")
+            else:
+                curr = redis_client.get(lock_key)
+                curr_str = curr.decode("utf-8") if isinstance(curr, bytes) else str(curr) if curr else None
+                if curr_str == run_id_str:
+                    redis_client.delete(lock_key)
+                    logger.info(f"Released Redis in-flight lock for user {user_id} (run_id={run_id})")
         except Exception as exc:
             logger.warning(f"Redis lock release failed for {lock_key}: {exc}")
 
     existing = _IN_MEMORY_MANUAL_RUN_LOCKS.get(user_id)
-    if existing and existing[0] == run_id_str:
-        _IN_MEMORY_MANUAL_RUN_LOCKS.pop(user_id, None)
-        logger.info(f"Released in-memory in-flight lock for user {user_id} (run_id={run_id})")
+    if existing:
+        if run_id_str is None or existing[0] == run_id_str:
+            _IN_MEMORY_MANUAL_RUN_LOCKS.pop(user_id, None)
+            logger.info(f"Released in-memory in-flight lock for user {user_id} (run_id={run_id_str or 'force'})")
+
+
+def force_release_manual_run_lock(user_id: str) -> None:
+    """Unconditionally releases the in-flight lock for a user."""
+    release_manual_run_lock(user_id, run_id=None)
 

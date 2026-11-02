@@ -100,6 +100,9 @@ def claim_generation_run(db: Session, user_id: str, run_date: datetime.date) -> 
             run_type="scheduled",
             status="started",
             attempts=1,
+            boot_id=settings.BOOT_ID,
+            current_node="plan",
+            last_progress_at=datetime.datetime.now(datetime.timezone.utc),
             search_provider=settings.SEARCH_PROVIDER,
         )
         db.add(run)
@@ -109,13 +112,14 @@ def claim_generation_run(db: Session, user_id: str, run_date: datetime.date) -> 
 
     claim_stmt = text(
         "UPDATE generation_runs "
-        "SET status = 'started', attempts = attempts + 1, started_at = now(), "
-        "    finished_at = NULL, error_code = NULL, error_detail = NULL "
+        "SET status = 'started', attempts = attempts + 1, started_at = now(), last_progress_at = now(), "
+        "    boot_id = :boot_id, current_node = 'plan', "
+        "    finished_at = NULL, error_code = NULL, error_detail = NULL, error_reason = NULL "
         "WHERE user_id = :user_id AND run_date = :run_date AND run_type = 'scheduled' AND attempts < 2 "
-        "  AND (status = 'failed' OR (status = 'started' AND started_at < now() - interval '15 minutes')) "
+        "  AND (status IN ('failed', 'failed_error', 'interrupted') OR (status = 'started' AND started_at < now() - interval '15 minutes')) "
         "RETURNING id"
     )
-    res = db.execute(claim_stmt, {"user_id": user_id, "run_date": run_date}).fetchone()
+    res = db.execute(claim_stmt, {"user_id": user_id, "run_date": run_date, "boot_id": settings.BOOT_ID}).fetchone()
     if not res:
         return None
 
@@ -276,14 +280,18 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
         return post
 
     except Exception as exc:
-        run.status = "failed"
+        import traceback
+        tb_summary = traceback.format_exc(limit=4)
+        run.status = "failed_error"
+        run.current_step = "failed_error"
         run.error_code = "generation_exception"
         run.error_detail = str(exc)[:200]
+        run.error_reason = f"{exc}\n{tb_summary}"
         run.finished_at = datetime.datetime.now(datetime.timezone.utc)
         if run.started_at:
             run.duration = round((run.finished_at - run.started_at).total_seconds(), 2)
         db.commit()
-        logger.error(f"Generation run failed for user {profile.user_id}: {exc}")
+        logger.error(f"Generation run failed for user {profile.user_id}: {exc}", exc_info=True)
         return None
 
 

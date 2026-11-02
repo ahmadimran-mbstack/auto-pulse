@@ -248,22 +248,49 @@ def run_db_migrations():
 
 
 @app.on_event("startup")
-def sweep_stale_playground_runs():
-    """Startup sweeper: Marks playground runs stuck in 'running' for > 10 minutes as failed."""
+def cleanup_orphan_runs_on_startup():
+    """Startup sweeper: Atomically marks runs stuck in running/queued from prior boot as interrupted."""
     try:
         from app.db.session import SessionLocal
+        from app.services.run_reaper import cleanup_interrupted_runs_on_startup
         with SessionLocal() as db:
-            db.execute(
-                text(
-                    "UPDATE playground_runs "
-                    "SET status = 'failed', finished_at = now() "
-                    "WHERE status = 'running' AND started_at < now() - interval '10 minutes'"
-                )
-            )
-            db.commit()
-            logger.info("Startup sweep of stale playground runs completed")
+            cleaned = cleanup_interrupted_runs_on_startup(db, settings.BOOT_ID)
+            logger.info(f"Startup sweep of orphan runs completed (cleaned: {cleaned}, boot_id: {settings.BOOT_ID})")
     except Exception as exc:
-        logger.warning(f"Failed to sweep stale playground runs on startup: {exc}")
+        logger.warning(f"Failed to cleanup orphan runs on startup: {exc}")
+
+
+async def _background_reaper_loop():
+    """Periodic reaper loop running every 30 seconds to clean up stalled runs."""
+    logger.info(
+        f"AutoPulse stuck-run reaper loop started (interval: {settings.REAPER_INTERVAL_SECONDS}s, "
+        f"threshold: {settings.STALLED_PROGRESS_TIMEOUT_SECONDS}s)"
+    )
+    await asyncio.sleep(5)
+    while True:
+        try:
+            await asyncio.to_thread(_run_reaper_cycle)
+        except asyncio.CancelledError:
+            logger.info("AutoPulse stuck-run reaper loop cancelled")
+            break
+        except Exception as exc:
+            logger.error(f"Error in background reaper cycle: {exc}", exc_info=True)
+        await asyncio.sleep(settings.REAPER_INTERVAL_SECONDS)
+
+
+def _run_reaper_cycle():
+    from app.db.session import SessionLocal
+    from app.services.run_reaper import reap_stalled_runs
+    with SessionLocal() as db:
+        reap_stalled_runs(db, stall_threshold_seconds=settings.STALLED_PROGRESS_TIMEOUT_SECONDS)
+
+
+@app.on_event("startup")
+def start_reaper_task():
+    import os, sys
+    if os.environ.get("PYTEST_CURRENT_TEST") or "pytest" in sys.modules:
+        return
+    asyncio.create_task(_background_reaper_loop())
 
 
 async def _background_scheduler_loop():
