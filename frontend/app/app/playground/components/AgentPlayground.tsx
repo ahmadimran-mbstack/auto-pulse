@@ -20,7 +20,6 @@ import {
   ChevronUp,
   Clock,
   Eye,
-  Zap,
   Activity,
   Layers,
   FileText,
@@ -79,9 +78,7 @@ interface StageDefinition {
 export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProps) {
   const [topicHint, setTopicHint] = React.useState("");
   const [runId, setRunId] = React.useState<string | null>(null);
-  const [isPolling, setIsPolling] = React.useState(false);
   const [elapsedSeconds, setElapsedSeconds] = React.useState(0);
-  const [timedOut, setTimedOut] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   const [showTrace, setShowTrace] = React.useState(false);
   const [expandedStages, setExpandedStages] = React.useState<Record<number, boolean>>({});
@@ -91,45 +88,64 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
   // Run creation mutation
   const createMutation = useCreatePlaygroundRunMutation();
 
-  // Fast 1000ms polling while agents are active for real-time responsiveness
+  // Terminal status helper
+  const isTerminalStatus = React.useCallback((s?: string) => {
+    return (
+      s === "done" ||
+      s === "succeeded" ||
+      s === "completed" ||
+      s === "failed" ||
+      s === "failed_quality" ||
+      s === "failed_error" ||
+      s === "timed_out" ||
+      s === "interrupted"
+    );
+  }, []);
+
+  // Fast polling with backoff while active (1500ms -> 2500ms -> 4000ms)
+  const pollInterval = React.useCallback(
+    (query: { state: { data?: { status?: string } } }) => {
+      const currentStatus = query.state.data?.status;
+      if (isTerminalStatus(currentStatus)) {
+        return false;
+      }
+      if (elapsedSeconds > 90) return 4000;
+      if (elapsedSeconds > 30) return 2500;
+      return 1500;
+    },
+    [elapsedSeconds, isTerminalStatus]
+  );
+
   const {
     data: runData,
     error: runErrorObj,
     refetch: refetchRun,
-  } = useRunQuery(userId, runId, isPolling ? 1000 : false);
+  } = useRunQuery(userId, runId, Boolean(runId) ? pollInterval : false);
 
-  // 180-second timeout guard with unmount timer cleanup
+  const isPolling = Boolean(runId && !isTerminalStatus(runData?.status));
+
+  // Sync elapsedSeconds with server if provided, or increment locally
   React.useEffect(() => {
     if (!isPolling) return;
 
     const interval = setInterval(() => {
       setElapsedSeconds((prev) => {
-        const next = prev + 1;
-        if (next >= 180) {
-          setIsPolling(false);
-          setTimedOut(true);
+        const serverElapsed = runData?.elapsed_seconds;
+        if (serverElapsed !== undefined && serverElapsed !== null) {
+          return Math.floor(serverElapsed);
         }
-        return next;
+        return prev + 1;
       });
     }, 1000);
 
     return () => {
       clearInterval(interval);
     };
-  }, [isPolling]);
+  }, [isPolling, runData?.elapsed_seconds]);
 
-  // Stop polling once the run completes or fails
-  React.useEffect(() => {
-    if (!runData) return;
-
-    if (runData.status === "done" || runData.status === "failed") {
-      setIsPolling(false);
-    }
-  }, [runData]);
-
-  // Extract run details
+  // Extract run details with current_node support
   const status = runData?.status;
-  const currentStep = runData?.current_step || "queued";
+  const currentStep = runData?.current_node || runData?.current_step || "queued";
   const currentRound = runData?.round ?? 0;
   const maxRounds = runData?.max_rounds || 3;
   const trace: AgentTrace | null = runData?.trace || runData?.agent_trace || null;
@@ -427,7 +443,6 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
       queryClient.removeQueries({ queryKey: ["run", userId, runId] });
     }
 
-    setTimedOut(false);
     setElapsedSeconds(0);
     setCopied(false);
     setExpandedStages({ 0: true });
@@ -439,7 +454,6 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
           queryClient.removeQueries({ queryKey: ["run", userId, runId] });
         }
         setRunId(res.run_id);
-        setIsPolling(true);
       } else {
         toast.error("Failed to start agent run. Missing run ID.");
       }
@@ -455,9 +469,7 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
       queryClient.removeQueries({ queryKey: ["run", userId, runId] });
     }
     setRunId(null);
-    setIsPolling(false);
     setElapsedSeconds(0);
-    setTimedOut(false);
     setCopied(false);
     setExpandedStages({});
   };
@@ -882,22 +894,20 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
         </Card>
       )}
 
-      {/* Timeout Alert Guard */}
-      {timedOut && (
-        <Alert className="border-border bg-muted/30">
-          <AlertCircle className="size-4 text-muted-foreground" />
-          <AlertTitle>Still running, check back soon</AlertTitle>
+      {/* Stalled Progress Alert */}
+      {runData?.stalled && (status === "running" || status === "queued") && (
+        <Alert className="border-amber-500/40 bg-amber-500/10 text-foreground">
+          <AlertCircle className="size-4 text-amber-500" />
+          <AlertTitle className="text-amber-500 font-medium">Agent progress paused</AlertTitle>
           <AlertDescription className="text-xs text-muted-foreground mt-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <span>
-              The agent loop is taking longer than 3 minutes. Your draft is still processing safely in the background.
+              The agent loop has not made progress for over 60 seconds (working on {currentStep}).
             </span>
             <div className="flex items-center gap-2 shrink-0">
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  setTimedOut(false);
-                  setIsPolling(true);
                   refetchRun();
                 }}
                 className="h-8 text-xs"
@@ -909,8 +919,70 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
         </Alert>
       )}
 
+      {/* Active Running Status Indicator */}
+      {(status === "running" || status === "queued") && !runData?.stalled && elapsedSeconds > 20 && (
+        <Alert className="border-border bg-muted/20">
+          <Loader2 className="size-4 animate-spin text-primary" />
+          <AlertTitle className="text-sm font-medium">Processing draft in background</AlertTitle>
+          <AlertDescription className="text-xs text-muted-foreground mt-1">
+            Agent loop is actively running ({currentStep}, round {currentRound}/{maxRounds}). Live updates appear as each stage completes.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Timed Out State */}
+      {status === "timed_out" && (
+        <Alert variant="destructive">
+          <AlertCircle className="size-4" />
+          <AlertTitle>Run Timed Out</AlertTitle>
+          <AlertDescription className="text-xs mt-1 flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+            <div className="flex flex-col gap-1">
+              <span>
+                {runData?.error_reason ||
+                  (runData?.result as any)?.error_detail ||
+                  "The agent run exceeded the 180-second hard limit and was safely halted."}
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleStartRun}
+              className="h-8 text-xs shrink-0"
+            >
+              <RotateCcw className="size-3.5 mr-1.5" />
+              <span>Retry</span>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Interrupted State */}
+      {status === "interrupted" && (
+        <Alert variant="destructive">
+          <AlertCircle className="size-4" />
+          <AlertTitle>Run Interrupted</AlertTitle>
+          <AlertDescription className="text-xs mt-1 flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+            <div className="flex flex-col gap-1">
+              <span>
+                {runData?.error_reason ||
+                  "The backend process restarted or redeployed during execution. Locks were cleared."}
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleStartRun}
+              className="h-8 text-xs shrink-0"
+            >
+              <RotateCcw className="size-3.5 mr-1.5" />
+              <span>Retry</span>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Quality Gate Failure State */}
-      {status === "failed_quality" && !timedOut && (
+      {status === "failed_quality" && (
         <Alert variant="destructive" className="border-red-500/40 bg-red-500/10 text-foreground">
           <AlertCircle className="size-5 text-red-500" />
           <AlertTitle className="text-sm font-semibold text-red-500">
@@ -941,15 +1013,16 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
         </Alert>
       )}
 
-      {/* Failure State */}
-      {status === "failed" && !timedOut && (
+      {/* Execution Failure State */}
+      {(status === "failed" || status === "failed_error") && (
         <Alert variant="destructive">
           <AlertCircle className="size-4" />
           <AlertTitle>Agent Run Failed</AlertTitle>
           <AlertDescription className="text-xs mt-1 flex flex-col sm:flex-row sm:items-start justify-between gap-3">
             <div className="flex flex-col gap-1">
               <span>
-                {(runData?.result as any)?.error_detail ||
+                {runData?.error_reason ||
+                  (runData?.result as any)?.error_detail ||
                   (runData?.result as any)?.message ||
                   runErrorObj?.message ||
                   "The agent run encountered an error while writing or evaluating the post."}
@@ -984,7 +1057,7 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
       )}
 
       {/* Done State - High-Converting LinkedIn Preview Card */}
-      {status === "done" && (
+      {(status === "done" || status === "succeeded" || status === "completed") && (
         <Card className="border border-border/80 bg-card shadow-sm overflow-hidden">
           {/* Header Bar */}
           <CardHeader className="pb-3 border-b border-border/50 bg-muted/20">

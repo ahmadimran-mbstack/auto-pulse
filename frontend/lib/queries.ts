@@ -366,7 +366,7 @@ export function useCreatePlaygroundRunMutation() {
 export function useRunQuery(
   userId: string,
   runId: string | null,
-  pollInterval: number | false = 2000
+  pollInterval: number | false | ((query: any) => number | false | undefined) = 2000
 ) {
   return useQuery<RunResponse>({
     queryKey: queryKeys.run(userId, runId || ""),
@@ -374,8 +374,20 @@ export function useRunQuery(
     enabled: !!userId && !!runId,
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      if (status === "done" || status === "failed") {
+      const isTerminal =
+        status === "done" ||
+        status === "succeeded" ||
+        status === "completed" ||
+        status === "failed" ||
+        status === "failed_quality" ||
+        status === "failed_error" ||
+        status === "timed_out" ||
+        status === "interrupted";
+      if (isTerminal) {
         return false;
+      }
+      if (typeof pollInterval === "function") {
+        return pollInterval(query);
       }
       return pollInterval;
     },

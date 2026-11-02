@@ -160,15 +160,33 @@ export interface AgentTrace {
   final_check_failures?: string[];
 }
 
-export type RunStatus = "queued" | "running" | "done" | "failed" | "failed_quality";
+export type RunStatus =
+  | "queued"
+  | "started"
+  | "running"
+  | "done"
+  | "succeeded"
+  | "completed"
+  | "failed"
+  | "failed_quality"
+  | "failed_error"
+  | "timed_out"
+  | "interrupted";
 export type RunStep = "finder" | "gtm" | "drafter" | "detector" | "rewrite" | null;
 
 export interface RunResponse {
   id?: string;
   status: RunStatus;
   current_step: RunStep | string;
+  current_node?: string | null;
   round: number;
   max_rounds: number;
+  elapsed_seconds?: number | null;
+  last_progress_at?: string | null;
+  stalled?: boolean;
+  error_code?: string | null;
+  error_detail?: string | null;
+  error_reason?: string | null;
   trace?: AgentTrace | null;
   agent_trace?: AgentTrace | null;
   result?: {
@@ -182,6 +200,8 @@ export interface RunResponse {
     needs_review?: boolean;
     exit_reason?: string;
     check_failures?: string[];
+    error_detail?: string;
+    error_code?: string;
   } | null;
 }
 
