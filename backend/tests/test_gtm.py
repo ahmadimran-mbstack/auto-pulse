@@ -213,24 +213,20 @@ def test_gtm_untrusted_data_isolation():
 
 
 def test_run_gtm_brief_fallback_on_unhandled_failure():
-    """Ensures fallback brief is returned if model continually errors out."""
+    """Ensures RuntimeError is raised without silent fallback if model continually errors out."""
     class FailingModel(FakeChatModel):
         def with_structured_output(self, schema, **kwargs):
             def _fail(val):
                 raise RuntimeError("Service unavailable")
             return RunnableLambda(_fail)
 
-    brief = run_gtm_brief(
-        topic="Database Indexing",
-        angle="B-Tree fragmentation",
-        post_format="build log",
-        hook_type="concrete mistake",
-        why_now="Cloud database scaling",
-        model=FailingModel(),
-    )
-
-    assert brief is not None
-    assert len(brief.hook_options) == 3
-    assert brief.chosen_hook is not None
-    assert 4 <= len(brief.structure_lines) <= 6
-    assert len(brief.notes) > 0
+    with pytest.raises(RuntimeError) as exc_info:
+        run_gtm_brief(
+            topic="Database Indexing",
+            angle="B-Tree fragmentation",
+            post_format="build log",
+            hook_type="concrete mistake",
+            why_now="Cloud database scaling",
+            model=FailingModel(),
+        )
+    assert "Service unavailable" in str(exc_info.value) or "failed" in str(exc_info.value)

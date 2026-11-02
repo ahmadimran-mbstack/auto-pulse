@@ -184,7 +184,7 @@ class GenerationRun(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('queued', 'started', 'running', 'succeeded', 'completed', 'failed', 'skipped')",
+            "status IN ('queued', 'started', 'running', 'succeeded', 'completed', 'failed', 'failed_quality', 'skipped')",
             name="ck_generation_runs_status",
         ),
         # Scheduled runs are limited to at most one record per user per date
@@ -211,7 +211,7 @@ class PlaygroundRun(Base):
     # Scoped strictly to the authenticated creator
     user_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
 
-    # Run lifecycle status: queued, running, completed, failed
+    # Run lifecycle status: queued, running, completed, failed, failed_quality
     status: Mapped[str] = mapped_column(
         Text, nullable=False, server_default="queued"
     )
@@ -243,7 +243,7 @@ class PlaygroundRun(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('queued', 'running', 'completed', 'failed')",
+            "status IN ('queued', 'running', 'completed', 'failed', 'failed_quality')",
             name="ck_playground_runs_status",
         ),
         Index("ix_playground_runs_user_id_created_at", "user_id", "created_at"),

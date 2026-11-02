@@ -238,7 +238,7 @@ def test_rewrite_post_spans_success():
 
 
 def test_rewrite_post_spans_fallback_on_model_error():
-    """Validates deterministic substitution fallback when model encounters an exception."""
+    """Validates RuntimeError is raised without silent fallback when model encounters an exception."""
     class FailingModel(FakeChatModel):
         def with_structured_output(self, schema, **kwargs):
             def _fail(val):
@@ -262,18 +262,15 @@ def test_rewrite_post_spans_fallback_on_model_error():
         suggested_fix="examine",
     )
 
-    result = rewrite_post_spans(
-        previous_draft={
-            "post_text": original_text,
-            "hashtags": ["PostgreSQL"],
-            "image_headline": "Buffer Pool Scaling",
-        },
-        findings=[finding],
-        model=FailingModel(),
-    )
+    with pytest.raises(RuntimeError) as exc_info:
+        rewrite_post_spans(
+            previous_draft={
+                "post_text": original_text,
+                "hashtags": ["PostgreSQL"],
+                "image_headline": "Buffer Pool Scaling",
+            },
+            findings=[finding],
+            model=FailingModel(),
+        )
 
-    # Fallback should replace 'delve into' with 'examine'
-    assert "delve into" not in result.post_text
-    assert "examine" in result.post_text
-    assert result.hashtags == ["PostgreSQL"]
-    assert result.image_headline == "Buffer Pool Scaling"
+    assert "Service failure" in str(exc_info.value) or "failed" in str(exc_info.value)

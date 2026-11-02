@@ -169,16 +169,42 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
         run.current_step = "completed"
 
         err_code = final_state.get("error_code")
-        if err_code:
-            run.status = "failed"
-            run.error_code = err_code
-            run.error_detail = final_state.get("error_detail")
+        state_status = final_state.get("status")
+        if err_code or state_status == "failed_quality":
+            is_quality_failure = (state_status == "failed_quality" or err_code == "failed_quality")
+            run.status = "failed_quality" if is_quality_failure else "failed"
+            run.current_step = "failed_quality" if is_quality_failure else "failed"
+            run.error_code = err_code or "failed_quality"
+            run.error_detail = final_state.get("error_detail") or "Post failed quality validation"
             run.finished_at = datetime.datetime.now(datetime.timezone.utc)
             if run.started_at:
                 run.duration = round((run.finished_at - run.started_at).total_seconds(), 2)
             db.commit()
             elapsed = run.duration or (run.finished_at - run.started_at).total_seconds()
-            logger.warning(f"Generation run {run.id} failed after {elapsed:.2f}s: {err_code} - {run.error_detail}")
+            logger.warning(f"Generation run {run.id} terminated with {run.status} after {elapsed:.2f}s: {run.error_code} - {run.error_detail}")
+
+            # Notify user via email if quality failed (rate-limited to 1 per user per day via run_date)
+            try:
+                from email.message import EmailMessage
+                from app.services.email import send_smtp_message
+                recipient = profile.user_id if "@" in profile.user_id else None
+                if recipient:
+                    msg = EmailMessage()
+                    msg["From"] = settings.SMTP_FROM or "noreply@autopulse.ai"
+                    msg["To"] = recipient
+                    msg["Subject"] = "AutoPulse: Daily Post Skipped (Quality Gate)"
+                    msg.set_content(
+                        f"Hello,\n\n"
+                        f"Today's automated LinkedIn post was skipped because no search topic met our strict quality standards.\n\n"
+                        f"Reason: {run.error_detail}\n\n"
+                        f"A failed run is always better than publishing ungrounded or weak content under your name.\n"
+                        f"You can launch a manual run in Post Studio whenever you would like to provide a specific topic or link.\n\n"
+                        f"- AutoPulse"
+                    )
+                    send_smtp_message(msg)
+            except Exception as mail_err:
+                logger.warning(f"Could not dispatch quality failure email to {profile.user_id}: {mail_err}")
+
             return None
 
         chosen = final_state.get("chosen", {})

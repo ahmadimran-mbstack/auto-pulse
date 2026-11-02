@@ -384,40 +384,7 @@ def draft_initial_post(
             last_error = str(exc)
 
     if parsed_output is None:
-        logger.error(f"Drafter initial post generation failed after {attempts} attempts: {last_error}. Generating grounded fallback draft.")
-        # Grounded fallback draft strictly on effective_label using key_facts
-        default_hook = chosen_hook or f"Something notable is shifting in how teams approach {effective_label}."
-        facts_summary = []
-        if key_facts:
-            for kf in key_facts[:3]:
-                f_str = kf.get("fact") if isinstance(kf, dict) else (getattr(kf, "fact", "") or str(kf))
-                facts_summary.append(f_str.strip().rstrip("."))
-
-        evidence_sentence = (
-            f"Verified findings document that {'; '.join(facts_summary)}."
-            if facts_summary
-            else f"Recent findings show that adopting {effective_label} introduces concrete operational trade-offs that teams must plan for early."
-        )
-
-        fallback_text = (
-            f"{default_hook}\n\n"
-            f"When evaluating {effective_label}, the core constraint is rarely what default tooling suggests. "
-            f"{effective_angle.rstrip('.')}.\n\n"
-            f"{evidence_sentence}\n\n"
-            f"Teams that evaluate {effective_label} successfully focus on clear boundaries, realistic expectations, "
-            f"and measurable verification before expanding their commitment.\n\n"
-            f"The practical rule for {effective_label} is simple: ground choices in verified constraints rather than borrowed assumptions.\n\n"
-            f"Where is your team seeing the most meaningful trade-offs when working with {effective_label}?"
-        )
-
-        clean_words = [re.sub(r"[^\w]", "", w).capitalize() for w in effective_label.split()[:2] if len(w) >= 3]
-        clean_hashtags_list = clean_words + ["TechStrategy"]
-
-        return DrafterOutput(
-            post_text=fallback_text,
-            hashtags=clean_hashtags_list[:3],
-            image_headline=f"Operational Guide: {effective_label[:30]}",
-        )
+        raise RuntimeError(f"Drafter initial post generation failed after {attempts} attempts: {last_error}")
 
     parsed_output.post_text = _clean_post_text(parsed_output.post_text)
     parsed_output.hashtags = _clean_hashtags(parsed_output.hashtags)
@@ -522,28 +489,7 @@ def rewrite_post_spans(
             last_error = str(exc)
 
     if parsed_output is None:
-        logger.error(f"Drafter rewrite failed after {attempts} attempts: {last_error}. Retaining cleaned previous draft.")
-        # Deterministic surgical fallback: replace flagged quotes with neutral alternatives
-        revised_text = prev_text
-        if findings:
-            for f in findings:
-                quote = f.quote
-                if quote and quote in revised_text:
-                    fix = f.suggested_fix or ""
-                    if fix and not fix.lower().startswith("replace") and not fix.lower().startswith("remove"):
-                        revised_text = revised_text.replace(quote, fix, 1)
-                    else:
-                        revised_text = revised_text.replace(quote, "", 1)
-
-        # Remove obvious ungrounded phrases deterministically
-        for banned in ["we audited", "a customer called us", "in recent production audits", "450ms down to 12ms"]:
-            revised_text = re.sub(re.escape(banned), "practitioners observed", revised_text, flags=re.IGNORECASE)
-
-        return DrafterOutput(
-            post_text=_clean_post_text(revised_text),
-            hashtags=_clean_hashtags(prev_hashtags),
-            image_headline=_clean_image_headline(prev_headline),
-        )
+        raise RuntimeError(f"Drafter rewrite failed after {attempts} attempts: {last_error}")
 
     parsed_output.post_text = _clean_post_text(parsed_output.post_text)
     parsed_output.hashtags = _clean_hashtags(parsed_output.hashtags or prev_hashtags)

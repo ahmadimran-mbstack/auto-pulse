@@ -1,3 +1,4 @@
+import datetime
 from typing import Any, Dict, List, Optional
 import uuid
 import pytest
@@ -10,6 +11,7 @@ from app.agents.drafter import DrafterOutput
 from app.agents.finder import FinderOutput, FinderSource, KeyFact
 from app.agents.gtm import GTMBriefOutput, GTMReviewOutput
 from app.core.config import settings
+from app.services.checks import RelevanceCheckOutput
 from app.services.pipeline import build_graph, execute_pipeline
 from app.services.search import Candidate
 
@@ -22,6 +24,15 @@ class MockStructuredChatModel(FakeChatModel):
     def with_structured_output(self, schema, **kwargs):
         def _invoke(prompt_val):
             self.call_count += 1
+            if getattr(schema, "__name__", "") == "RelevanceCheckOutput":
+                return RelevanceCheckOutput(
+                    passed=True,
+                    swap_test_passed=True,
+                    all_claims_grounded=True,
+                    first_line_natural=True,
+                    unsupported_sentences=[],
+                    reason="Passes swap test and grounded in facts",
+                )
             if self.responses and self.call_count <= len(self.responses):
                 resp = self.responses[self.call_count - 1]
             else:
@@ -40,35 +51,76 @@ class MockSearchAdapter:
 
 
 def _make_candidate(idx: int = 1) -> Candidate:
-    return Candidate(
-        title=f"PostgreSQL 16 Performance Audit #{idx}",
-        url=f"https://example.com/pg16-audit-{idx}",
-        text=(
-            f"PostgreSQL 16 benchmark results show 42% latency reduction under 400 active client connections. "
-            f"In synthetic load tests, latency fell from 120ms to 18ms under concurrent load #{idx}."
-        ),
-        published_at="2026-10-28T10:00:00Z",
-        source_name="DB Weekly",
+    fact_sent_1 = f"PostgreSQL 16 dropped buffer locks by 42% in recent high-concurrency benchmarks under active traffic load {idx}."
+    fact_sent_2 = f"In production workloads running over 400 active client connections, latency fell from 120ms to 18ms across all instances."
+    fact_sent_3 = f"Shared buffer cache hits improved by 35% across all tested memory configurations during high-throughput queries."
+    filler = (
+        "Database performance tuning requires careful measurement of shared memory contention and lock wait states. "
+        "When concurrent update transactions saturate buffer pins, worker threads queue for shared buffer pool locks. "
+        "Modern relational engines isolate read operations using atomic memory primitives and lightweight lock manager locks. "
+        "In enterprise deployments with large connection counts, lock contention often degrades query response times. "
+        "Evaluating database workloads under realistic synthetic load allows engineering teams to identify query stalls. "
+        "Recent architectural enhancements in database storage engines address buffer pool scalability and memory bandwidth. "
+        "Throughput benchmarks demonstrate that avoiding shared lock queues improves throughput for latency-sensitive services. "
+        "Careful capacity planning and database configuration benchmarking prevent unnecessary hardware over-provisioning."
     )
+    full_text = f"{fact_sent_1} {fact_sent_2} {fact_sent_3} {filler} {filler}"
+    return Candidate(
+        title=f"PostgreSQL 16 Performance Audit Under High Concurrency {idx}",
+        url=f"https://engineering.postgresql.org/pg16-audit-{idx}",
+        text=full_text,
+        published_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        source_name="PostgreSQL Engineering",
+    )
+
+
+def _make_finder_resp(cand: Candidate) -> FinderOutput:
+    return FinderOutput(
+        topic_title=cand.title,
+        topic_label="PostgreSQL lock scaling",
+        angle="Benchmark results demonstrate reduced lock contention under high concurrency.",
+        post_format="observer take",
+        hook_type="number-led specific result",
+        why_now="Recent benchmarks",
+        sources=[FinderSource(title=cand.title, url=cand.url)],
+        key_facts=[
+            KeyFact(
+                fact="PostgreSQL 16 dropped buffer locks by 42% in recent high-concurrency benchmarks.",
+                evidence_quote="PostgreSQL 16 dropped buffer locks by 42% in recent high-concurrency benchmarks under active traffic load",
+                source_url=cand.url,
+            ),
+            KeyFact(
+                fact="In production workloads running over 400 active client connections, latency fell from 120ms to 18ms.",
+                evidence_quote="In production workloads running over 400 active client connections, latency fell from 120ms to 18ms across all instances.",
+                source_url=cand.url,
+            ),
+            KeyFact(
+                fact="Shared buffer cache hits improved by 35% across all tested memory configurations.",
+                evidence_quote="Shared buffer cache hits improved by 35% across all tested memory configurations during high-throughput queries.",
+                source_url=cand.url,
+            ),
+        ],
+    )
+
+
+_CLEAN_CAPTION = (
+    "PostgreSQL 16 dropped buffer locks by 42% in recent high-concurrency benchmarks.\n\n"
+    "In production workloads running over 400 active client connections, memory contention regularly stalls queries. "
+    "The legacy engine spent critical CPU cycles coordinating shared buffer pool locks on concurrent updates. "
+    "This architectural bottleneck forced teams to over-provision compute nodes to survive traffic surges.\n\n"
+    "By introducing atomic buffer pinning and lock-free allocation structures, PostgreSQL 16 keeps active read paths clear. "
+    "In our synthetic load tests, query latency fell from 120ms to 18ms without requiring index rebuilds or sharding. "
+    "Shared buffer cache hits improved by 35% across all tested memory configurations.\n\n"
+    "Engineers evaluating PostgreSQL lock scaling should monitor buffer lock pressure before adding hardware. "
+    "Measuring lock contention under synthetic load provides actionable data for infrastructure sizing."
+)
 
 
 def test_loop_terminates_immediately_when_initial_score_below_threshold():
     """Initial draft scores 5 (< 15 threshold), loop should terminate at round 0 with 'passed'."""
     cand = _make_candidate(1)
     search_adapter = MockSearchAdapter([cand])
-
-    finder_resp = FinderOutput(
-        topic="PostgreSQL 16 Performance Audit",
-        angle="Benchmark results",
-        post_format="observer take",
-        hook_type="number-led specific result",
-        why_now="Recent benchmarks",
-        sources=[FinderSource(title=cand.title, url=cand.url)],
-        key_facts=[
-            KeyFact(fact="PostgreSQL 16 dropped buffer locks by 42% in recent high-concurrency benchmarks.", source_url=cand.url),
-            KeyFact(fact="In production workloads running over 400 active client connections, latency fell from 120ms to 18ms.", source_url=cand.url),
-        ],
-    )
+    finder_resp = _make_finder_resp(cand)
 
     gtm_brief_resp = GTMBriefOutput(
         hook_options=["H1", "H2", "H3"],
@@ -78,18 +130,8 @@ def test_loop_terminates_immediately_when_initial_score_below_threshold():
         notes=["[HOOK-01] Valid opening."],
     )
 
-    clean_caption = (
-        "PostgreSQL 16 dropped buffer locks by 42% in recent high-concurrency benchmarks.\n\n"
-        "In production workloads running over 400 active client connections, memory contention regularly stalls queries. "
-        "The legacy engine spent critical CPU cycles coordinating shared buffer pool locks on concurrent updates. "
-        "This architectural bottleneck forced teams to over-provision compute nodes to survive traffic surges.\n\n"
-        "By introducing atomic buffer pinning and lock-free allocation structures, PostgreSQL 16 keeps active read paths clear. "
-        "In our synthetic load tests, p99 query latency fell from 120ms to 18ms without requiring index rebuilds or sharding.\n\n"
-        "Benchmark buffer pool saturation before approving compute upgrades."
-    )
-
     drafter_resp = DrafterOutput(
-        post_text=clean_caption,
+        post_text=_CLEAN_CAPTION,
         hashtags=["PostgreSQL", "DatabaseInternals"],
         image_headline="PostgreSQL 16 Latency Benchmark",
     )
@@ -136,38 +178,20 @@ def test_loop_terminates_on_two_strikes():
     """Rewrite fails to improve score by >= 3 points twice in a row; terminates on 2 strikes."""
     cand = _make_candidate(2)
     search_adapter = MockSearchAdapter([cand])
-
-    finder_resp = FinderOutput(
-        topic="Database Index Optimization",
-        angle="B-Tree bloat",
-        post_format="mistake and fix",
-        hook_type="concrete mistake",
-        why_now="Production latency spikes",
-        sources=[FinderSource(title=cand.title, url=cand.url)],
-    )
+    finder_resp = _make_finder_resp(cand)
 
     gtm_brief_resp = GTMBriefOutput(
         hook_options=["H1", "H2", "H3"],
-        chosen_hook="Why index bloat silently kills database throughput.",
+        chosen_hook="PostgreSQL 16 dropped buffer locks by 42%.",
         structure_lines=["1. A", "2. B", "3. C", "4. D"],
         ending_strategy="Decisive close.",
         notes=["[HOOK-01] Valid opening."],
     )
 
-    caption_text = (
-        "Why index bloat silently kills database throughput under high concurrency.\n\n"
-        "In production workloads running over 400 active client connections, memory contention regularly stalls queries. "
-        "The legacy engine spent critical CPU cycles coordinating shared buffer pool locks on concurrent updates. "
-        "This architectural bottleneck forced teams to over-provision compute nodes to survive traffic surges.\n\n"
-        "By introducing atomic buffer pinning and lock-free allocation structures, PostgreSQL 16 keeps active read paths clear. "
-        "In our synthetic load tests, p99 query latency fell from 120ms to 18ms without requiring index rebuilds or sharding.\n\n"
-        "Benchmark buffer pool saturation before approving compute upgrades."
-    )
-
     drafter_resp = DrafterOutput(
-        post_text=caption_text,
-        hashtags=["PostgreSQL"],
-        image_headline="Index Bloat Fixes",
+        post_text=_CLEAN_CAPTION,
+        hashtags=["PostgreSQL", "DatabaseInternals"],
+        image_headline="PostgreSQL 16 Latency Benchmark",
     )
 
     # Round 0: score 50
@@ -218,38 +242,20 @@ def test_loop_terminates_on_max_rounds():
     """Rounds continue until MAX_REWRITE_ROUNDS (3) reached; selects lowest score draft and flags needs_review."""
     cand = _make_candidate(3)
     search_adapter = MockSearchAdapter([cand])
-
-    finder_resp = FinderOutput(
-        topic="PostgreSQL Replication",
-        angle="Slot failover",
-        post_format="build log",
-        hook_type="specific observation",
-        why_now="Recent failover tests",
-        sources=[FinderSource(title=cand.title, url=cand.url)],
-    )
+    finder_resp = _make_finder_resp(cand)
 
     gtm_brief_resp = GTMBriefOutput(
         hook_options=["H1", "H2", "H3"],
-        chosen_hook="Logical replication slot failover in PG 17.",
+        chosen_hook="PostgreSQL 16 dropped buffer locks by 42%.",
         structure_lines=["1. A", "2. B", "3. C", "4. D"],
         ending_strategy="Decisive close.",
         notes=["[HOOK-01] Valid opening."],
     )
 
-    caption_text = (
-        "Logical replication slot failover in PG 17 dropped replica promotion delay to 12ms.\n\n"
-        "In production workloads running over 400 active client connections, memory contention regularly stalls queries. "
-        "The legacy engine spent critical CPU cycles coordinating shared buffer pool locks on concurrent updates. "
-        "This architectural bottleneck forced teams to over-provision compute nodes to survive traffic surges.\n\n"
-        "By introducing atomic buffer pinning and lock-free allocation structures, PostgreSQL 16 keeps active read paths clear. "
-        "In our synthetic load tests, p99 query latency fell from 120ms to 18ms without requiring index rebuilds or sharding.\n\n"
-        "Benchmark buffer pool saturation before approving compute upgrades."
-    )
-
     drafter_resp = DrafterOutput(
-        post_text=caption_text,
-        hashtags=["PostgreSQL"],
-        image_headline="PG 17 Failover Benchmarks",
+        post_text=_CLEAN_CAPTION,
+        hashtags=["PostgreSQL", "DatabaseInternals"],
+        image_headline="PostgreSQL 16 Latency Benchmark",
     )
 
     # 4 rounds: r0=40, r1=35 (improved by 5), r2=30 (improved by 5), r3=25 (improved by 5, but max rounds reached)
@@ -293,38 +299,20 @@ def test_step_callback_reports_progress():
     """Validates that step_callback receives every step and round during execution."""
     cand = _make_candidate(4)
     search_adapter = MockSearchAdapter([cand])
-
-    finder_resp = FinderOutput(
-        topic="Topic",
-        angle="Angle",
-        post_format="observer take",
-        hook_type="specific observation",
-        why_now="Now",
-        sources=[FinderSource(title=cand.title, url=cand.url)],
-    )
+    finder_resp = _make_finder_resp(cand)
 
     gtm_brief_resp = GTMBriefOutput(
         hook_options=["H1", "H2", "H3"],
-        chosen_hook="Hook line for progress test.",
+        chosen_hook="PostgreSQL 16 dropped buffer locks by 42%.",
         structure_lines=["1. A", "2. B", "3. C", "4. D"],
         ending_strategy="Decisive close.",
         notes=["[HOOK-01] Valid opening."],
     )
 
-    caption_text = (
-        "Hook line for progress test above the fold.\n\n"
-        "In production workloads running over 400 active client connections, memory contention regularly stalls queries. "
-        "The legacy engine spent critical CPU cycles coordinating shared buffer pool locks on concurrent updates. "
-        "This architectural bottleneck forced teams to over-provision compute nodes to survive traffic surges.\n\n"
-        "By introducing atomic buffer pinning and lock-free allocation structures, PostgreSQL 16 keeps active read paths clear. "
-        "In our synthetic load tests, p99 query latency fell from 120ms to 18ms without requiring index rebuilds or sharding.\n\n"
-        "Benchmark buffer pool saturation before approving compute upgrades."
-    )
-
     drafter_resp = DrafterOutput(
-        post_text=caption_text,
-        hashtags=["PostgreSQL"],
-        image_headline="Headline",
+        post_text=_CLEAN_CAPTION,
+        hashtags=["PostgreSQL", "DatabaseInternals"],
+        image_headline="PostgreSQL 16 Latency Benchmark",
     )
 
     detector_resp = DetectorLLMOutput(

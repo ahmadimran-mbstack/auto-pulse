@@ -36,6 +36,10 @@ class KeyFact(BaseModel):
     fact: str = Field(
         description="A concrete, verifiable fact or measurement extracted strictly from the candidate article content"
     )
+    evidence_quote: str = Field(
+        default="",
+        description="Exact verbatim substring from the candidate article content (minimum 10 words)"
+    )
     source_url: str = Field(
         description="Exact URL of the candidate search result from which this fact was extracted"
     )
@@ -55,6 +59,19 @@ def clean_topic_label(text: str) -> str:
         words = re.findall(r"\b[\w'-]+\b", cleaned)
     if len(words) < 2:
         words = re.findall(r"\b[\w'-]+\b", text)
+
+    # Deduplicate adjacent words
+    deduped_words: List[str] = []
+    for w in words:
+        if not deduped_words or w.lower() != deduped_words[-1].lower():
+            deduped_words.append(w)
+    words = deduped_words
+
+    # Strip leading conversational starter words if followed by enough words
+    starters = {"why", "how", "what", "heres", "here's", "is", "are"}
+    while len(words) > 2 and words[0].lower() in starters:
+        words = words[1:]
+
     chosen_words = words[:6] if len(words) >= 6 else words
     if len(chosen_words) < 2:
         chosen_words = ["industry", "update"]
@@ -220,6 +237,18 @@ def validate_finder_output(
     5. Topic must not repeat any post from the last 14 days / last 30 posts.
     """
     violations: List[str] = []
+
+    # 0. Title & Label Quality Validation
+    from app.services.checks import check_candidate_title, validate_topic_label
+    if finder_output.topic_title:
+        title_err = check_candidate_title(finder_output.topic_title)
+        if title_err:
+            violations.append(title_err)
+
+    if finder_output.topic_label:
+        label_err = validate_topic_label(finder_output.topic_label)
+        if label_err:
+            violations.append(label_err)
 
     # 1. Usable key facts requirement (minimum 2 usable facts)
     if not finder_output.key_facts or len(finder_output.key_facts) < 2:
@@ -448,27 +477,7 @@ def run_finder_agent(
                 )
                 warnings.extend([f"Attempt {attempts} violation: {v}" for v in violations])
             else:
-                warnings.extend([f"Final attempt violation (proceeding with best-effort correction): {v}" for v in violations])
-                valid_cand_urls = {c.get("url", "").strip().lower() for c in candidates}
-                filtered_sources = [s for s in parsed_output.sources if s.url.strip().lower() in valid_cand_urls]
-                if not filtered_sources and candidates:
-                    filtered_sources = [
-                        FinderSource(
-                            title=candidates[0].get("title", "Source"),
-                            url=candidates[0].get("url", ""),
-                        )
-                    ]
-                parsed_output.sources = filtered_sources
+                warnings.extend([f"Final attempt violation (rejecting ungrounded topic): {v}" for v in violations])
+                return None, warnings
 
-                # Ensure minimum 2 key facts
-                if len(parsed_output.key_facts) < 2 and candidates:
-                    first_cand = candidates[0]
-                    c_text = first_cand.get("text", "") or first_cand.get("title", "")
-                    cand_url = first_cand.get("url", "")
-                    parsed_output.key_facts = [
-                        KeyFact(fact=f"Core finding regarding {parsed_output.topic_label}: {c_text[:120].strip()}", source_url=cand_url),
-                        KeyFact(fact=f"Analysis documented in {first_cand.get('source_name', 'industry reports')}", source_url=cand_url),
-                    ]
-                return parsed_output, warnings
-
-    return parsed_output, warnings
+    return None, warnings

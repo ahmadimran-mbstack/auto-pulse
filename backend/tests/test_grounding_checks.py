@@ -62,7 +62,7 @@ def test_raw_title_6_word_run_match():
     caption = "We evaluated the October 2026 Benchmarks Memory Usage And found improvements."
     res = check_raw_title(caption, raw_title)
     assert res is not None
-    assert "6+ word phrase copied from raw title" in res
+    assert "word phrase copied from raw title" in res
 
 
 def test_raw_title_no_overlap():

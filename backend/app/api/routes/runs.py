@@ -69,3 +69,51 @@ def get_generation_run(
         status_code=status.HTTP_404_NOT_FOUND,
         detail="Run not found",
     )
+
+
+@router.get("/{run_id}/trace")
+def get_run_trace(
+    run_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    """Retrieves full per-node audit trace, candidate evaluation, extracted facts,
+    and gate verification results for a generation or playground run.
+    Strictly scoped to the current authenticated creator.
+    """
+    gen_run = (
+        db.query(GenerationRun)
+        .filter(GenerationRun.id == run_id, GenerationRun.user_id == user.id)
+        .first()
+    )
+    if gen_run:
+        status_val = "done" if gen_run.status in ("completed", "succeeded") else gen_run.status
+        return {
+            "run_id": str(gen_run.id),
+            "status": status_val,
+            "error_code": gen_run.error_code,
+            "error_detail": gen_run.error_detail,
+            "agent_trace": gen_run.agent_trace or {},
+            "trace": gen_run.agent_trace or {},
+            "result": gen_run.result,
+        }
+
+    p_run = (
+        db.query(PlaygroundRun)
+        .filter(PlaygroundRun.id == run_id, PlaygroundRun.user_id == user.id)
+        .first()
+    )
+    if p_run:
+        status_val = "done" if p_run.status == "completed" else p_run.status
+        return {
+            "run_id": str(p_run.id),
+            "status": status_val,
+            "agent_trace": p_run.trace or {},
+            "trace": p_run.trace or {},
+            "result": p_run.result,
+        }
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Run not found",
+    )

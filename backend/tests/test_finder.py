@@ -180,7 +180,8 @@ def test_run_finder_agent_retries_on_violation():
 
     # First attempt: invalid (uses 'observer take' which was in history[0])
     invalid_resp = FinderOutput(
-        topic="Kafka Partition Rebalancing",
+        topic_title="Kafka Partition Rebalancing Across Distributed Clusters",
+        topic_label="Kafka partition rebalancing",
         angle="Take",
         post_format="observer take",
         hook_type="specific observation",
@@ -195,7 +196,8 @@ def test_run_finder_agent_retries_on_violation():
 
     # Second attempt: corrected (uses 'build log')
     valid_resp = FinderOutput(
-        topic="Kafka Partition Rebalancing",
+        topic_title="Kafka Partition Rebalancing Across Distributed Clusters",
+        topic_label="Kafka partition rebalancing",
         angle="Take",
         post_format="build log",
         hook_type="specific observation",

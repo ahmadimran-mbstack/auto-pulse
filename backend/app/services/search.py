@@ -13,8 +13,13 @@ class Candidate(BaseModel):
     title: str
     url: str
     published_at: Optional[str] = None
-    text: str = Field(description="Cleaned text content truncated to 3000 characters")
+    text: str = Field(description="Cleaned text content up to 20,000 characters")
     source_name: str
+    domain: str = ""
+
+    def model_post_init(self, __context: Any) -> None:
+        if not self.domain and self.url:
+            self.domain = extract_source_name(self.url)
 
 
 class SearchError(Exception):
@@ -23,7 +28,7 @@ class SearchError(Exception):
 
 
 # Clean raw web content by removing html tags and collapsing whitespace
-def clean_content(raw_text: Optional[str], max_chars: int = 3000) -> str:
+def clean_content(raw_text: Optional[str], max_chars: int = 20000) -> str:
     if not raw_text:
         return ""
     # Unescape HTML entities

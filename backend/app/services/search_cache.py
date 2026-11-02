@@ -18,12 +18,14 @@ SEARCH_CACHE_TTL_SECONDS = 600  # 10 minutes maximum per user requirements
 
 
 def build_search_cache_key(user_id: str, query: str, date_str: Optional[str] = None) -> str:
-    """Builds cache key: search:{user_id}:{query_hash}.
+    """Builds cache key: search:{user_id}:{query_hash}:{date}.
     Strictly isolated per user_id and query content.
     """
+    import datetime
     clean_query = query.strip().lower()
     query_hash = hashlib.sha256(clean_query.encode("utf-8")).hexdigest()[:12]
-    return f"search:{user_id}:{query_hash}"
+    effective_date = date_str or datetime.date.today().isoformat()
+    return f"search:{user_id}:{query_hash}:{effective_date}"
 
 
 def get_cached_search(user_id: str, query: str, date_str: Optional[str] = None) -> Optional[List[Candidate]]:

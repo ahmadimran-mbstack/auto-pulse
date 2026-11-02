@@ -120,12 +120,18 @@ def run_playground_pipeline_task(run_id: uuid.UUID, user_id: str, topic_hint: Op
             gen_run = db.query(GenerationRun).filter(GenerationRun.id == run_id).first()
             p_run = db.query(PlaygroundRun).filter(PlaygroundRun.id == run_id).first()
 
-            if err_code:
+            state_status = final_state.get("status")
+            if err_code or state_status == "failed_quality":
+                is_quality_failure = (state_status == "failed_quality" or err_code == "failed_quality")
+                failed_status = "failed_quality" if is_quality_failure else "failed"
+                err_code_val = err_code or "failed_quality"
+                err_detail_val = final_state.get("error_detail") or "Run failed quality validation"
+
                 if gen_run:
-                    gen_run.status = "failed"
-                    gen_run.current_step = "failed"
-                    gen_run.error_code = err_code
-                    gen_run.error_detail = final_state.get("error_detail")
+                    gen_run.status = failed_status
+                    gen_run.current_step = failed_status
+                    gen_run.error_code = err_code_val
+                    gen_run.error_detail = err_detail_val
                     gen_run.finished_at = finished_now
                     if gen_run.started_at:
                         gen_run.duration = round((finished_now - gen_run.started_at).total_seconds(), 2)
@@ -134,11 +140,17 @@ def run_playground_pipeline_task(run_id: uuid.UUID, user_id: str, topic_hint: Op
                     gen_run.tokens_in = counters.get("tokens_in", 0)
                     gen_run.tokens_out = counters.get("tokens_out", 0)
                     gen_run.agent_trace = final_state.get("agent_trace")
+                    gen_run.result = final_state.get("draft")
                 if p_run:
-                    p_run.status = "failed"
-                    p_run.current_step = "failed"
+                    p_run.status = failed_status
+                    p_run.current_step = failed_status
                     p_run.finished_at = finished_now
-                    p_run.result = {"error_code": err_code, "error_detail": final_state.get("error_detail")}
+                    p_run.result = {
+                        "status": failed_status,
+                        "error_code": err_code_val,
+                        "error_detail": err_detail_val,
+                        "draft": final_state.get("draft"),
+                    }
                     p_run.trace = final_state.get("agent_trace")
                 db.commit()
                 return

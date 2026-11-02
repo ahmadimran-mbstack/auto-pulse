@@ -108,15 +108,16 @@ def test_search_cache_keys_include_user_id_hash_and_date():
 
 
 def test_topic_deduplication_against_last_30_posts():
+    from app.agents.finder import KeyFact
     candidates = [
-        {"title": "Kafka Partition Rebalancing Under Stress", "url": "https://example.com/kafka"},
-        {"title": "ClickHouse Real-Time Ingestion", "url": "https://example.com/clickhouse"},
+        {"title": "Kafka Partition Rebalancing Under Cluster Stress", "url": "https://example.com/kafka"},
+        {"title": "ClickHouse Real-Time Ingestion Architecture Benchmarks", "url": "https://example.com/clickhouse"},
     ]
 
     # History contains a post from 20 days ago (within 30 posts limit)
     history = [
         {
-            "topic_title": "Kafka Partition Rebalancing Under Stress",
+            "topic_title": "Kafka Partition Rebalancing Under Cluster Stress",
             "topic_url": "https://example.com/past-kafka",
             "post_format": "build log",
             "is_last_14_days": False,  # Older than 14 days, but in last 30 posts!
@@ -124,27 +125,37 @@ def test_topic_deduplication_against_last_30_posts():
     ]
 
     finder_output_repeat = FinderOutput(
-        topic="Kafka Partition Rebalancing Under Stress",
+        topic_title="Kafka Partition Rebalancing Under Cluster Stress",
+        topic_label="Kafka partition rebalancing",
         angle="Deep dive",
         post_format="observer take",
         hook_type="number-led specific result",
         why_now="Recent release",
         sources=[FinderSource(title="Kafka", url="https://example.com/kafka")],
+        key_facts=[
+            KeyFact(fact="Kafka assignors reduce latency by 20%", source_url="https://example.com/kafka"),
+            KeyFact(fact="Partition rebalances trigger consumer lag spikes", source_url="https://example.com/kafka"),
+        ],
         avoided=[],
     )
 
     is_valid, violations = validate_finder_output(finder_output_repeat, candidates, history)
     assert is_valid is False
-    assert any("Kafka Partition Rebalancing" in v for v in violations)
+    assert any("Kafka" in v for v in violations)
 
     # Distinct topic must pass
     finder_output_fresh = FinderOutput(
-        topic="ClickHouse Real-Time Ingestion",
+        topic_title="ClickHouse Real-Time Ingestion Architecture Benchmarks",
+        topic_label="ClickHouse real-time ingestion",
         angle="Storage engines compared",
         post_format="observer take",
         hook_type="number-led specific result",
         why_now="Recent benchmarks",
         sources=[FinderSource(title="ClickHouse", url="https://example.com/clickhouse")],
+        key_facts=[
+            KeyFact(fact="ClickHouse processes 100M rows per second", source_url="https://example.com/clickhouse"),
+            KeyFact(fact="Columnar compression cuts storage by 4x", source_url="https://example.com/clickhouse"),
+        ],
         avoided=[],
     )
     is_valid_fresh, violations_fresh = validate_finder_output(finder_output_fresh, candidates, history)

@@ -1,0 +1,30 @@
+{
+  "topic_title": "PostgreSQL 17 Connection Scaling: Measuring Memory Overhead Across 10,000 Workers",
+  "topic_label": "Postgres connection scaling",
+  "angle": "PostgreSQL connection pooling saturates memory before CPU under high worker concurrency.",
+  "source_url": "https://engineering.example.com/postgres-17-connection-scaling",
+  "page_text": "PostgreSQL connection pooling is critical for modern database architecture. In our latest benchmarks across PostgreSQL 17, we analyzed how worker connection spikes affect system memory overhead. Each connection in PostgreSQL allocates a private backend process, requiring approximately 10MB of RAM per active session. At 10,000 concurrent client connections, memory consumption exceeds 100GB of RAM before CPU utilization hits 40%. By implementing PgBouncer with transaction pooling, tail latency dropped from 450ms down to 18ms under peak load. Proper pool dimensioning prevents out-of-memory kernel kills during production surges.",
+  "key_facts": [
+    {
+      "claim": "Each PostgreSQL connection requires approximately 10MB of RAM per active session.",
+      "evidence_quote": "Each connection in PostgreSQL allocates a private backend process, requiring approximately 10MB of RAM per active session.",
+      "source_url": "https://engineering.example.com/postgres-17-connection-scaling"
+    },
+    {
+      "claim": "At 10,000 concurrent client connections, memory consumption exceeds 100GB of RAM before CPU utilization hits 40%.",
+      "evidence_quote": "At 10,000 concurrent client connections, memory consumption exceeds 100GB of RAM before CPU utilization hits 40%.",
+      "source_url": "https://engineering.example.com/postgres-17-connection-scaling"
+    },
+    {
+      "claim": "Implementing PgBouncer with transaction pooling dropped tail latency from 450ms down to 18ms under peak load.",
+      "evidence_quote": "By implementing PgBouncer with transaction pooling, tail latency dropped from 450ms down to 18ms under peak load.",
+      "source_url": "https://engineering.example.com/postgres-17-connection-scaling"
+    }
+  ],
+  "hook": "Postgres connection pools saturate RAM long before CPU utilization becomes a bottleneck.",
+  "post_text": "Postgres connection pools saturate RAM long before CPU utilization becomes a bottleneck.\n\nAccording to new PostgreSQL 17 benchmarks from engineering teams, each direct connection allocates a private backend process requiring approximately 10MB of RAM per active session. Under 10,000 concurrent client connections, memory consumption exceeds 100GB of RAM while CPU utilization hovers under 40%.\n\nDefault connection settings often hide this architectural trade-off until production traffic spikes trigger out-of-memory crashes. Teams that implement PgBouncer transaction pooling see tail latency drop from 450ms down to 18ms under identical stress conditions. This allows high-traffic services to sustain massive concurrency without exhausting host memory reserves.\n\nThe operational lesson is straightforward: configure worker bounds around memory limits rather than raw core capacity.\n\nHow does your database team manage pool exhaustion under load?",
+  "hashtags": ["Postgres", "DatabaseReliability", "DevOps"],
+  "image_headline": "Memory saturates before CPU in worker connection pools",
+  "ai_score": 0,
+  "exit_reason": "passed"
+}

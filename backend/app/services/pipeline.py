@@ -13,15 +13,23 @@ from app.agents.finder import FinderOutput, run_finder_agent
 from app.agents.gtm import GTMBriefOutput, GTMReviewOutput, run_gtm_brief, run_gtm_review
 from app.agents.knowledge.hook_library import get_available_hook_styles
 from app.core.config import settings
-from app.services.checks import run_all_checks
+from app.services.checks import (
+    check_candidate_title,
+    check_candidate_page_text,
+    check_candidate_published_date,
+    validate_fact_set,
+    run_all_checks,
+)
 from app.services.content_profile import get_content_profile
 from app.services.prompts import PLAN_PROMPT, PlanOutput
 from app.services.search import (
     Candidate,
     SearchError,
+    extract_source_name,
     get_search_adapter,
 )
 from app.services.search_cache import get_cached_search, set_cached_search
+from app.services.source_quality import is_blocked_domain, score_domain
 
 logger = logging.getLogger(__name__)
 
@@ -258,10 +266,13 @@ def build_graph(
             else []
         )
 
-        if not parsed_output or len(queries) < 3:
-            from app.services.resilient_llm import generate_fallback_plan_output
-            fallback_plan = generate_fallback_plan_output(str(prompt_input))
-            queries = fallback_plan.queries
+        if not parsed_output or len(queries) < 2:
+            topics_inc = profile.get("topics_include") or []
+            industry = profile.get("industry") or "Software Engineering"
+            if topics_inc:
+                queries = [f"{t} technical deep dive" for t in topics_inc[:3]]
+            else:
+                queries = [f"{industry} production engineering", f"{industry} architecture lessons"]
 
         return {
             "queries": queries[:5],
@@ -276,7 +287,7 @@ def build_graph(
         counters = dict(state.get("counters", {}))
         seconds = dict(state.get("seconds_per_node", {}))
 
-        queries = state.get("queries", [])
+        queries = list(state.get("queries", []))
         profile = state.get("profile", {})
         topics_avoid = profile.get("topics_avoid", [])
         lookback_days = settings.SEARCH_LOOKBACK_DAYS
@@ -284,6 +295,22 @@ def build_graph(
         user_id = state.get("user_id") or "default_user"
         is_manual = state.get("is_manual", False)
         adapter = search_tool or get_search_adapter(settings.SEARCH_PROVIDER)
+
+        # Validate topic_hint if present
+        topic_hint = (state.get("topic_hint") or "").strip()
+        if topic_hint:
+            hint_err = check_candidate_title(topic_hint)
+            if hint_err:
+                seconds["search"] = round(time.perf_counter() - start_t, 3)
+                return {
+                    "error_code": "invalid_topic_hint",
+                    "error_detail": f"Provided topic hint is invalid: {hint_err}",
+                    "counters": counters,
+                    "seconds_per_node": seconds,
+                }
+            # Search specifically for topic hint
+            queries.insert(0, topic_hint)
+
         all_candidates: List[Candidate] = []
         try:
             for q in queries[:5]:
@@ -330,51 +357,73 @@ def build_graph(
                 seen_urls.add(clean_url)
                 unique_candidates.append(cand)
 
-        # Filter out candidates older than lookback and matching avoid topics
+        # Filter out candidates based on domain blocklist, lookback, avoid terms, title check, and page text length
+        candidate_evaluations: List[Dict[str, Any]] = []
         filtered_candidates: List[Dict[str, Any]] = []
         for cand in unique_candidates:
-            if is_older_than_lookback(cand.published_at, lookback_days):
-                continue
-            if contains_avoid_terms(cand.title + " " + cand.text, topics_avoid):
-                continue
-            filtered_candidates.append(cand.model_dump())
+            cand_domain = cand.domain or extract_source_name(cand.url)
+            eval_entry = {
+                "title": cand.title,
+                "url": cand.url,
+                "domain": cand_domain,
+                "text_length": len(cand.text),
+                "passed": False,
+                "rejection_reason": None,
+            }
 
+            if is_blocked_domain(cand.url or cand_domain):
+                eval_entry["rejection_reason"] = f"Domain {cand_domain} is blocked as low-quality/aggregator"
+                candidate_evaluations.append(eval_entry)
+                continue
+
+            if is_older_than_lookback(cand.published_at, lookback_days):
+                eval_entry["rejection_reason"] = f"Article published date {cand.published_at} exceeds {lookback_days} days lookback"
+                candidate_evaluations.append(eval_entry)
+                continue
+
+            if contains_avoid_terms(cand.title + " " + cand.text, topics_avoid):
+                eval_entry["rejection_reason"] = "Content mentions topics creator specified to avoid"
+                candidate_evaluations.append(eval_entry)
+                continue
+
+            title_err = check_candidate_title(cand.title)
+            if title_err:
+                eval_entry["rejection_reason"] = title_err
+                candidate_evaluations.append(eval_entry)
+                continue
+
+            text_err = check_candidate_page_text(cand.text)
+            if text_err:
+                eval_entry["rejection_reason"] = text_err
+                candidate_evaluations.append(eval_entry)
+                continue
+
+            eval_entry["passed"] = True
+            domain_score = score_domain(cand.url or cand_domain)
+            text_score = min(len(cand.text) / 5000.0, 3.0)
+            eval_entry["score"] = domain_score + text_score
+            candidate_evaluations.append(eval_entry)
+            cand_dict = cand.model_dump()
+            cand_dict["domain_score"] = eval_entry["score"]
+            filtered_candidates.append(cand_dict)
+
+        # Rank candidates by domain authority and text depth
+        filtered_candidates.sort(key=lambda c: c.get("domain_score", 0), reverse=True)
         top_candidates = filtered_candidates[:12]
         seconds["search"] = round(time.perf_counter() - start_t, 3)
 
-        topic_hint = (state.get("topic_hint") or "").strip()
-        if topic_hint:
-            hint_title = topic_hint[:90]
-            hint_candidate = {
-                "title": hint_title,
-                "url": "https://example.com/editorial/engineering-insights-2026",
-                "published_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                "source_name": "Engineering Architecture Review",
-                "text": (
-                    f"Analysis on {hint_title}: in modern production systems, understanding core system fundamentals, "
-                    f"concurrency primitives, and architectural trade-offs from first principles is essential to maintaining reliability."
-                ),
-            }
-            top_candidates = [hint_candidate] + [c for c in top_candidates if c.get("title") != hint_title]
-
         if not top_candidates:
-            # Fallback candidate grounded in profile industry/topics
-            industry_name = profile.get("industry") or "Software Engineering"
-            top_candidates = [
-                {
-                    "title": f"Production Architecture and Resilience Lessons in {industry_name}",
-                    "url": "https://example.com/production-architecture-insights-2026",
-                    "published_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                    "source_name": f"{industry_name} Engineering Digest",
-                    "text": (
-                        f"Analysis across modern {industry_name} systems demonstrates that tuning worker bounds, "
-                        f"managing connection pools, and reducing memory fragmentation yields a 42% decrease in tail latency."
-                    ),
-                }
-            ]
+            return {
+                "error_code": "no_quality_topic",
+                "error_detail": "No candidate search results met quality, domain, title, and length requirements",
+                "candidate_evaluations": candidate_evaluations,
+                "counters": counters,
+                "seconds_per_node": seconds,
+            }
 
         return {
             "candidates": top_candidates,
+            "candidate_evaluations": candidate_evaluations,
             "counters": counters,
             "seconds_per_node": seconds,
         }
@@ -408,50 +457,50 @@ def build_graph(
         seconds["finder"] = round(time.perf_counter() - start_t, 3)
 
         if not finder_output:
-            from app.services.resilient_llm import generate_fallback_finder_output
-            from app.agents.finder import format_history_block, format_candidates_block
-            hint_ctx = f"Topic Hint: {topic_hint}\n" if topic_hint else ""
-            hist_block = format_history_block(history)
-            cands_block = format_candidates_block(candidates)
-            finder_output = generate_fallback_finder_output(f"{hint_ctx}\n{hist_block}\n{cands_block}")
+            seconds["finder"] = round(time.perf_counter() - start_t, 3)
+            return {
+                "error_code": "no_quality_topic",
+                "error_detail": f"Post finder failed to find a qualified topic with verified facts: {'; '.join(warnings)}",
+                "counters": counters,
+                "seconds_per_node": seconds,
+            }
 
-        # Enforce user topic_hint when explicitly provided
+        # Match chosen source with candidate data
+        primary_source = finder_output.sources[0] if finder_output.sources else None
+        chosen_candidate = candidates[0]
+        if primary_source:
+            for c in candidates:
+                if c.get("url", "").strip().lower() == primary_source.url.strip().lower():
+                    chosen_candidate = c
+                    break
+
+        # Validate that candidate text contains at least 3 verified facts with exact evidence quotes
+        verified_facts, fact_err = validate_fact_set(finder_output.key_facts, chosen_candidate.get("text", ""))
+        if fact_err or len(verified_facts) < 3:
+            candidate_found = False
+            for alt_cand in candidates[1:3]:
+                alt_verified, alt_err = validate_fact_set(finder_output.key_facts, alt_cand.get("text", ""))
+                if not alt_err and len(alt_verified) >= 3:
+                    chosen_candidate = alt_cand
+                    verified_facts = alt_verified
+                    candidate_found = True
+                    break
+
+            if not candidate_found:
+                seconds["finder"] = round(time.perf_counter() - start_t, 3)
+                return {
+                    "error_code": "no_quality_topic",
+                    "error_detail": f"Facts from candidate failed verification: {fact_err}",
+                    "counters": counters,
+                    "seconds_per_node": seconds,
+                }
+
         from app.agents.finder import clean_topic_label
-        if topic_hint:
-            from app.agents.finder import FinderSource, KeyFact
-            clean_hint = topic_hint[:90]
-            finder_output.topic_title = clean_hint
-            finder_output.topic_label = clean_topic_label(clean_hint)
-            finder_output.angle = f"Why {clean_hint[:45]} is essential for practical reliability in modern engineering"
-            finder_output.hook_type = "defensible contrarian claim"
-            finder_output.why_now = "Recent production updates and shifts in modern software development"
-            hint_url = candidates[0].get("url") if candidates else "https://example.com/editorial/engineering-insights-2026"
-            finder_output.sources = [
-                FinderSource(
-                    title=clean_hint,
-                    url=hint_url,
-                )
-            ]
-            finder_output.key_facts = [
-                KeyFact(fact=f"Core architectural considerations for {finder_output.topic_label}", source_url=hint_url),
-                KeyFact(fact=f"Practical analysis documented in {clean_hint[:40]}", source_url=hint_url),
-            ]
-            chosen_candidate = candidates[0] if candidates else {"title": clean_hint, "url": "https://example.com", "text": clean_hint}
-        else:
-            # Match chosen source with candidate data
-            primary_source = finder_output.sources[0] if finder_output.sources else None
-            chosen_candidate = candidates[0]
-            if primary_source:
-                for c in candidates:
-                    if c.get("url", "").strip().lower() == primary_source.url.strip().lower():
-                        chosen_candidate = c
-                        break
-
         topic_title = getattr(finder_output, "topic_title", "") or chosen_candidate.get("title", "")
         topic_label = getattr(finder_output, "topic_label", "") or clean_topic_label(topic_title)
         key_facts_data = [
-            kf.model_dump() if hasattr(kf, "model_dump") else kf
-            for kf in (getattr(finder_output, "key_facts", []) or [])
+            vf.model_dump() if hasattr(vf, "model_dump") else vf
+            for vf in verified_facts
         ]
 
         return {
@@ -518,12 +567,13 @@ def build_graph(
                 allowed_hook_styles=allowed_styles,
             )
         except Exception as exc:
-            logger.warning(f"GTM brief node error: {exc}. Using fallback brief.")
-            from app.services.resilient_llm import generate_fallback_gtm_brief_output
-            styles_str = ", ".join(allowed_styles)
-            brief = generate_fallback_gtm_brief_output(
-                f"Topic: {topic_label}\nAngle: {angle}\nAllowed Hook Styles: {styles_str}"
-            )
+            seconds["gtm_brief"] = round(time.perf_counter() - start_t, 3)
+            return {
+                "error_code": "gtm_brief_failed",
+                "error_detail": str(exc),
+                "counters": counters,
+                "seconds_per_node": seconds,
+            }
 
         chosen_hook_style = getattr(brief, "hook_style", None) or allowed_styles[0]
         hook_id = getattr(brief, "hook_id", None) or "observation_01"
@@ -594,11 +644,13 @@ def build_graph(
                     hook_text=hook_text,
                 )
         except Exception as exc:
-            logger.warning(f"Drafter node error: {exc}. Generating resilient fallback draft.")
-            from app.services.resilient_llm import generate_fallback_drafter_output
-            draft_output = generate_fallback_drafter_output(
-                f"Topic: {topic_label}\nAngle: {angle}\nHook Line: {hook_text}\nBrief: {gtm_brief}"
-            )
+            seconds[f"drafter_r{current_round}"] = round(time.perf_counter() - start_t, 3)
+            return {
+                "error_code": "drafter_failed",
+                "error_detail": str(exc),
+                "counters": counters,
+                "seconds_per_node": seconds,
+            }
 
         seconds[f"drafter_r{current_round}"] = round(time.perf_counter() - start_t, 3)
 
@@ -631,16 +683,13 @@ def build_graph(
                 threshold=settings.AI_SCORE_THRESHOLD,
             )
         except Exception as exc:
-            logger.warning(f"Detector node error: {exc}. Using fallback slop evaluation.")
-            from app.agents.detector import DetectionResult
-            detection_res = DetectionResult(
-                deterministic_score=0,
-                llm_score=7,
-                final_score=7,
-                findings=[],
-                passes_threshold=True,
-                rationale="Fallback verification: draft passes all slop checks.",
-            )
+            seconds[f"detector_r{current_round}"] = round(time.perf_counter() - start_t, 3)
+            return {
+                "error_code": "detector_failed",
+                "error_detail": str(exc),
+                "counters": counters,
+                "seconds_per_node": seconds,
+            }
 
         seconds[f"detector_r{current_round}"] = round(time.perf_counter() - start_t, 3)
 
@@ -817,98 +866,88 @@ def build_graph(
         )
 
         # A post MUST pass BOTH slop threshold AND all validation checks.
-        # If check failures exist, or exit_reason != "passed", flag needs_review=True
-        needs_review = bool(
-            best_score >= settings.AI_SCORE_THRESHOLD
-            or exit_reason != "passed"
+        failed_quality = bool(
+            exit_reason != "passed"
             or bool(final_check_failures)
+            or best_score >= settings.AI_SCORE_THRESHOLD
         )
+        run_status = "failed_quality" if failed_quality else "completed"
+        current_step = "failed_quality" if failed_quality else "completed"
+        needs_review = failed_quality
 
         # Run GTM Review on final chosen draft
-        counters["llm_calls"] = counters.get("llm_calls", 0) + 1
-        counters["tokens_in"] = counters.get("tokens_in", 0) + 650
-        counters["tokens_out"] = counters.get("tokens_out", 0) + 280
-        try:
-            gtm_review = run_gtm_review(
-                post_text=best_draft.get("post_text", ""),
-                brief=gtm_brief,
-                sources=candidates[:3],
-                model=_gtm_review_model,
+        gtm_review_data = {}
+        if not failed_quality:
+            counters["llm_calls"] = counters.get("llm_calls", 0) + 1
+            counters["tokens_in"] = counters.get("tokens_in", 0) + 650
+            counters["tokens_out"] = counters.get("tokens_out", 0) + 280
+            try:
+                gtm_review = run_gtm_review(
+                    post_text=best_draft.get("post_text", ""),
+                    brief=gtm_brief,
+                    sources=candidates[:3],
+                    model=_gtm_review_model,
+                )
+                gtm_review_data = gtm_review.model_dump()
+            except Exception as exc:
+                logger.warning(f"GTM review error: {exc}")
+                gtm_review_data = {"hook_strength": 5, "review_notes": [f"Review error: {exc}"]}
+        else:
+            gtm_review_data = {
+                "hook_strength": 0,
+                "review_notes": [f"Run failed quality gates: {'; '.join(final_check_failures) if final_check_failures else exit_reason}"],
+            }
+
+        seconds["post_loop"] = round(time.perf_counter() - start_t, 3)
+
+        # Compile complete agent audit trace
+        agent_trace = {
+            "status": run_status,
+            "exit_reason": exit_reason,
+            "final_score": best_score,
+            "needs_review": needs_review,
+            "failed_quality": failed_quality,
+            "best_round": state.get("best_round", 0),
+            "rounds_count": len(state.get("rounds_history", [])),
+            "search_queries": state.get("queries", []),
+            "candidate_evaluations": state.get("candidate_evaluations", []),
+            "finder": state.get("finder_output"),
+            "topic_title": topic_title,
+            "topic_label": topic_label,
+            "key_facts": key_facts,
+            "gtm_brief": gtm_brief,
+            "gtm_review": gtm_review_data,
+            "rounds": state.get("rounds_history", []),
+            "final_check_failures": final_check_failures,
+            "timings": seconds,
+            "counters": counters,
+        }
+
+        _notify_step(current_step, state.get("round", 0), state)
+
+        res_dict = {
+            "status": run_status,
+            "draft": best_draft,
+            "ai_score": best_score,
+            "final_score": best_score,
+            "needs_review": needs_review,
+            "gtm_review": gtm_review_data,
+            "agent_trace": agent_trace,
+            "current_step": current_step,
+            "topic_title": topic_title,
+            "topic_label": topic_label,
+            "key_facts": key_facts,
+            "counters": counters,
+            "seconds_per_node": seconds,
+        }
+        if failed_quality:
+            res_dict["error_code"] = "failed_quality"
+            res_dict["error_detail"] = (
+                f"Quality gate failure: {'; '.join(final_check_failures)}"
+                if final_check_failures
+                else f"Post loop failed to converge: {exit_reason}"
             )
-        except Exception as exc:
-            logger.warning(f"GTM review error: {exc}. Using fallback GTM review.")
-            from app.services.resilient_llm import generate_fallback_gtm_review_output
-            gtm_review = generate_fallback_gtm_review_output(best_draft.get("post_text", ""))
-
-        seconds["post_loop"] = round(time.perf_counter() - start_t, 3)
-
-        # Compile complete agent audit trace
-        agent_trace = {
-            "exit_reason": exit_reason,
-            "final_score": best_score,
-            "needs_review": needs_review,
-            "best_round": state.get("best_round", 0),
-            "rounds_count": len(state.get("rounds_history", [])),
-            "finder": state.get("finder_output"),
-            "topic_title": topic_title,
-            "topic_label": topic_label,
-            "key_facts": key_facts,
-            "gtm_brief": gtm_brief,
-            "gtm_review": gtm_review.model_dump(),
-            "rounds": state.get("rounds_history", []),
-            "final_check_failures": final_check_failures,
-            "timings": seconds,
-            "counters": counters,
-        }
-
-        _notify_step("completed", state.get("round", 0), state)
-
-        return {
-            "draft": best_draft,
-            "ai_score": best_score,
-            "final_score": best_score,
-            "needs_review": needs_review,
-            "gtm_review": gtm_review.model_dump(),
-            "agent_trace": agent_trace,
-            "current_step": "completed",
-            "topic_title": topic_title,
-            "topic_label": topic_label,
-            "key_facts": key_facts,
-            "counters": counters,
-            "seconds_per_node": seconds,
-        }
-
-        seconds["post_loop"] = round(time.perf_counter() - start_t, 3)
-
-        # Compile complete agent audit trace
-        agent_trace = {
-            "exit_reason": exit_reason,
-            "final_score": best_score,
-            "needs_review": needs_review,
-            "best_round": state.get("best_round", 0),
-            "rounds_count": len(state.get("rounds_history", [])),
-            "finder": state.get("finder_output"),
-            "gtm_brief": gtm_brief,
-            "gtm_review": gtm_review.model_dump(),
-            "rounds": state.get("rounds_history", []),
-            "final_check_failures": final_check_failures,
-            "timings": seconds,
-            "counters": counters,
-        }
-
-        _notify_step("completed", state.get("round", 0), state)
-
-        return {
-            "draft": best_draft,
-            "ai_score": best_score,
-            "final_score": best_score,
-            "needs_review": needs_review,
-            "gtm_review": gtm_review.model_dump(),
-            "agent_trace": agent_trace,
-            "current_step": "completed",
-            "counters": counters,
-            "seconds_per_node": seconds,
-        }
+        return res_dict
 
     # Register workflow nodes
     transient_retry = RetryPolicy(max_attempts=2)

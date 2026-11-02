@@ -378,54 +378,12 @@ def run_gtm_brief(
             )
 
     if parsed_output is None:
-        logger.error(f"GTM Brief generation failed after {attempts} attempts: {last_error}. Using grounded fallback hook.")
-        chosen_style = allowed_styles[0] if allowed_styles else "observation"
-        hooks = get_hooks_by_style(chosen_style)
-        hook_id = hooks[0]["id"] if hooks else "observation_01"
+        raise RuntimeError(f"GTM Brief generation failed after {attempts} attempts: {last_error}")
 
-        # Grounded fallback hook without templates, without fake numbers, and without mid-word cuts
-        if chosen_style == "question":
-            hook_text = f"When evaluating {effective_label}, what is the primary operational trade-off your team considers?"
-        elif chosen_style == "contrarian_opinion":
-            hook_text = f"Most teams treat {effective_label} as straightforward, but the real friction usually appears in daily execution."
-        elif chosen_style == "mistake":
-            hook_text = f"A common mistake when approaching {effective_label} is overlooking how it affects existing workflows."
-        elif chosen_style == "how_to":
-            hook_text = f"A straightforward approach to integrating {effective_label} without disrupting ongoing deliverables."
-        elif chosen_style == "story":
-            hook_text = f"A few months into working with {effective_label}, one practical constraint changed our entire perspective."
-        elif chosen_style == "number_result" and key_facts:
-            first_fact = key_facts[0]
-            fact_str = first_fact.get("fact") if isinstance(first_fact, dict) else (getattr(first_fact, "fact", "") or str(first_fact))
-            hook_text = f"Recent measurements regarding {effective_label} highlight a clear operational finding: {fact_str[:70].rstrip('.')}."
-        else:
-            hook_text = f"Something significant is shifting in how forward-thinking teams approach {effective_label}."
-
-        hook_options = [hook_text]
-        for h in hooks[1:3]:
-            hook_options.append(f"When examining {effective_label}, one operational trade-off is often overlooked.")
-        while len(hook_options) < 3:
-            hook_options.append(f"Why {effective_label} requires closer attention in daily practice.")
-
-        return GTMBriefOutput(
-            hook_style=chosen_style,
-            hook_id=hook_id,
-            hook_text=hook_text,
-            chosen_hook=hook_text,
-            hook_options=hook_options,
-            structure_lines=[
-                f"1. Context and trigger: Why {effective_label} matters right now.",
-                "2. Core shift observed in practice.",
-                "3. Operational breakdown: Before vs after trade-offs.",
-                "4. Key takeaway for practitioners.",
-            ],
-            ending_strategy="Decisive operational summary with no engagement bait [END-01].",
-            notes=[
-                f"[HOOK-01] Selected personalized hook style: {chosen_style} ({hook_id}).",
-                "[BODY-01] Focus on a single core thesis.",
-                "[END-01] Clean close without engagement bait.",
-            ],
-        )
+    from app.services.checks import check_generic_hook
+    hook_err = check_generic_hook(parsed_output.hook_text or parsed_output.chosen_hook)
+    if hook_err:
+        raise ValueError(f"GTM produced generic hook: {hook_err}")
 
     # Ensure hook_style is valid
     if not parsed_output.hook_style or parsed_output.hook_style not in allowed_styles:

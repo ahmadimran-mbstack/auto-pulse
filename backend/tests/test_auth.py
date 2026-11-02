@@ -134,12 +134,14 @@ def test_wrong_issuer_returns_401(client, monkeypatch, ed25519_keys):
 # Test case: JWKS download failure (network error/timeout) returns 503
 def test_jwks_download_failure_returns_503(client, monkeypatch, ed25519_keys):
     private_key, _ = ed25519_keys
+    monkeypatch.setattr(auth, "_jwks_cache", None)
 
     # Simulate network failure during JWKS download
-    def fake_requests_get(url, timeout=10):
+    def fake_requests_get(*args, **kwargs):
         raise requests.ConnectionError("Connection timed out")
 
     monkeypatch.setattr(requests, "get", fake_requests_get)
+    monkeypatch.setattr(auth._http_session, "get", fake_requests_get)
 
     token = create_test_token(private_key)
     response = client.get("/me", headers={"Authorization": f"Bearer {token}"})

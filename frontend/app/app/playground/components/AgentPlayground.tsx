@@ -909,6 +909,38 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
         </Alert>
       )}
 
+      {/* Quality Gate Failure State */}
+      {status === "failed_quality" && !timedOut && (
+        <Alert variant="destructive" className="border-red-500/40 bg-red-500/10 text-foreground">
+          <AlertCircle className="size-5 text-red-500" />
+          <AlertTitle className="text-sm font-semibold text-red-500">
+            Could not find a high-quality topic matching your sources
+          </AlertTitle>
+          <AlertDescription className="text-xs mt-2 space-y-3">
+            <p className="text-muted-foreground">
+              AutoPulse rejected this run to protect your professional reputation. No topic met the strict factual grounding, domain credibility, and verification standards.
+            </p>
+            {((runData?.result as any)?.error_detail || (runData?.trace as any)?.final_check_failures) && (
+              <div className="p-2.5 rounded-md bg-background/80 border border-border/50 text-[11px] font-mono text-muted-foreground space-y-1">
+                <span className="font-semibold text-foreground">Rejection Reasons:</span>
+                <div>{(runData?.result as any)?.error_detail || (runData?.trace as any)?.final_check_failures?.join("; ")}</div>
+              </div>
+            )}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleReset}
+                className="h-8 text-xs font-medium"
+              >
+                <RotateCcw className="size-3.5 mr-1.5" />
+                <span>Try another search or enter a specific topic/URL</span>
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Failure State */}
       {status === "failed" && !timedOut && (
         <Alert variant="destructive">
