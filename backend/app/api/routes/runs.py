@@ -43,19 +43,19 @@ def _check_and_normalize_liveness(run: GenerationRun | PlaygroundRun, user_id: s
                 last_act = last_act.replace(tzinfo=datetime.timezone.utc)
             inactivity_sec = (now - last_act).total_seconds()
             if inactivity_sec > settings.STALLED_PROGRESS_TIMEOUT_SECONDS:
-                # Run is dead: reaper would clear it. Fail it immediately and release lock.
+                # Run is dead: reaper would clear it. Mark timed_out and release lock.
                 node = getattr(run, "current_node", None) or getattr(run, "current_step", None) or "unknown"
-                status_val = "failed_error"
-                run.status = "failed_error"
-                run.error_reason = f"stalled at {node}"
+                status_val = "timed_out"
+                run.status = "timed_out"
+                run.error_reason = f"Run timed out: stalled at {node}"
                 run.finished_at = now
                 if hasattr(run, "error_code"):
-                    run.error_code = "stalled_execution"
-                    run.error_detail = f"stalled at {node}"
+                    run.error_code = "timed_out"
+                    run.error_detail = f"Run timed out: stalled at {node}"
                 if hasattr(run, "result") and isinstance(run.result, dict):
                     res_dict = dict(run.result)
-                    res_dict["status"] = "failed_error"
-                    res_dict["error_detail"] = f"stalled at {node}"
+                    res_dict["status"] = "timed_out"
+                    res_dict["error_detail"] = f"Run timed out: stalled at {node}"
                     run.result = res_dict
                 db.commit()
                 release_manual_run_lock(user_id, run.id)
@@ -63,7 +63,7 @@ def _check_and_normalize_liveness(run: GenerationRun | PlaygroundRun, user_id: s
                 stalled = True
 
     if status_val in ("completed", "succeeded"):
-        status_val = "done"
+        status_val = "succeeded"
 
     return status_val, stalled, elapsed
 
@@ -89,13 +89,23 @@ def get_generation_run(
     if gen_run:
         status_val, stalled, elapsed = _check_and_normalize_liveness(gen_run, user.id, db)
         trace_data = gen_run.agent_trace
+        failing_gates = []
+        if isinstance(trace_data, dict):
+            failing_gates = trace_data.get("final_check_failures") or []
+
         return GenerationRunDetail(
             id=gen_run.id,
             status=status_val,
             current_step=gen_run.current_step,
             current_node=gen_run.current_node or gen_run.current_step,
             round=gen_run.round,
-            max_rounds=settings.MAX_REWRITE_ROUNDS,
+            max_rounds=getattr(settings, "MAX_REWRITES_PER_TOPIC", 4),
+            current_topic_index=getattr(gen_run, "current_topic_index", 0) or 0,
+            max_topics=getattr(settings, "MAX_TOPICS_PER_RUN", 4),
+            current_round=getattr(gen_run, "current_round", gen_run.round or 0) or 0,
+            max_rewrites=getattr(settings, "MAX_REWRITES_PER_TOPIC", 4),
+            best_draft=getattr(gen_run, "best_draft", None),
+            failing_gates=failing_gates,
             elapsed_seconds=elapsed,
             last_progress_at=gen_run.last_progress_at.isoformat() if gen_run.last_progress_at else None,
             stalled=stalled,
@@ -121,13 +131,23 @@ def get_generation_run(
         trace_data = p_run.trace
         err_code = (p_run.result or {}).get("error_code") if isinstance(p_run.result, dict) else None
         err_detail = (p_run.result or {}).get("error_detail") if isinstance(p_run.result, dict) else None
+        failing_gates = []
+        if isinstance(trace_data, dict):
+            failing_gates = trace_data.get("final_check_failures") or []
+
         return GenerationRunDetail(
             id=p_run.id,
             status=status_val,
             current_step=p_run.current_step,
             current_node=p_run.current_node or p_run.current_step,
             round=p_run.round,
-            max_rounds=settings.MAX_REWRITE_ROUNDS,
+            max_rounds=getattr(settings, "MAX_REWRITES_PER_TOPIC", 4),
+            current_topic_index=getattr(p_run, "current_topic_index", 0) or 0,
+            max_topics=getattr(settings, "MAX_TOPICS_PER_RUN", 4),
+            current_round=getattr(p_run, "current_round", p_run.round or 0) or 0,
+            max_rewrites=getattr(settings, "MAX_REWRITES_PER_TOPIC", 4),
+            best_draft=getattr(p_run, "best_draft", None),
+            failing_gates=failing_gates,
             elapsed_seconds=elapsed,
             last_progress_at=p_run.last_progress_at.isoformat() if p_run.last_progress_at else None,
             stalled=stalled,

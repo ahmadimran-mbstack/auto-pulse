@@ -93,6 +93,7 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
     return (
       s === "done" ||
       s === "succeeded" ||
+      s === "needs_review" ||
       s === "completed" ||
       s === "failed" ||
       s === "failed_quality" ||
@@ -115,6 +116,22 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
     },
     [elapsedSeconds, isTerminalStatus]
   );
+
+  // Resume active run on page reload if user has an in-flight run
+  React.useEffect(() => {
+    if (typeof window === "undefined" || runId) return;
+    fetch(`/api/v1/playground/runs/active`, { credentials: "include" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((activeRun) => {
+        if (activeRun && activeRun.id) {
+          setRunId(activeRun.id);
+          if (activeRun.elapsed_seconds) {
+            setElapsedSeconds(Math.floor(activeRun.elapsed_seconds));
+          }
+        }
+      })
+      .catch(() => {});
+  }, [runId]);
 
   const {
     data: runData,
@@ -146,9 +163,23 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
   // Extract run details with current_node support
   const status = runData?.status;
   const currentStep = runData?.current_node || runData?.current_step || "queued";
-  const currentRound = runData?.round ?? 0;
-  const maxRounds = runData?.max_rounds || 3;
+  const currentTopicIndex = (runData as any)?.current_topic_index ?? 0;
+  const maxTopics = (runData as any)?.max_topics ?? 4;
+  const currentRound = (runData as any)?.current_round ?? runData?.round ?? 0;
+  const maxRounds = (runData as any)?.max_rewrites ?? runData?.max_rounds ?? 4;
   const trace: AgentTrace | null = runData?.trace || runData?.agent_trace || null;
+  const bestDraft = (runData as any)?.best_draft || (runData?.result as any)?.best_draft || (runData?.result as any)?.draft || null;
+  const failingGates: string[] = (runData as any)?.failing_gates || (trace as any)?.final_check_failures || [];
+
+  const [editablePostText, setEditablePostText] = React.useState("");
+  React.useEffect(() => {
+    if (status === "needs_review") {
+      const bestText = bestDraft?.post_text || bestDraft?.text || runData?.result?.post_text || runData?.result?.text || "";
+      if (bestText) {
+        setEditablePostText(bestText);
+      }
+    }
+  }, [status, bestDraft, runData?.result]);
 
   // Final post content & metrics extraction with fallbacks
   const postText =
@@ -920,12 +951,17 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
       )}
 
       {/* Active Running Status Indicator */}
-      {(status === "running" || status === "queued") && !runData?.stalled && elapsedSeconds > 20 && (
+      {(status === "running" || status === "queued") && !runData?.stalled && (
         <Alert className="border-border bg-muted/20">
           <Loader2 className="size-4 animate-spin text-primary" />
-          <AlertTitle className="text-sm font-medium">Processing draft in background</AlertTitle>
-          <AlertDescription className="text-xs text-muted-foreground mt-1">
-            Agent loop is actively running ({currentStep}, round {currentRound}/{maxRounds}). Live updates appear as each stage completes.
+          <AlertTitle className="text-sm font-medium">Quality iterations in progress</AlertTitle>
+          <AlertDescription className="text-xs text-muted-foreground mt-1 space-y-1">
+            <div className="font-medium text-foreground">
+              Topic {currentTopicIndex + 1} of {maxTopics} • Rewrite {currentRound + 1} of {maxRounds} ({currentStep}) • Elapsed: {elapsedSeconds}s
+            </div>
+            <div className="text-[11px] text-muted-foreground">
+              Verifying facts against source materials and fine-tuning hook. Runs may take several minutes to ensure 100% factual grounding and zero invented claims.
+            </div>
           </AlertDescription>
         </Alert>
       )}
@@ -940,7 +976,7 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
               <span>
                 {runData?.error_reason ||
                   (runData?.result as any)?.error_detail ||
-                  "The agent run exceeded the 180-second hard limit and was safely halted."}
+                  "The agent run timed out due to inactive progress."}
               </span>
             </div>
             <Button
@@ -1054,6 +1090,95 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
             </Button>
           </AlertDescription>
         </Alert>
+      )}
+
+      {/* Needs Review State - Best Effort Draft Available with Failing Checks Banner */}
+      {status === "needs_review" && (
+        <div className="space-y-4">
+          <Alert className="border-amber-500/40 bg-amber-500/10 text-foreground">
+            <AlertCircle className="size-5 text-amber-500" />
+            <AlertTitle className="text-sm font-semibold text-amber-500">
+              Best attempt requires review before publishing
+            </AlertTitle>
+            <AlertDescription className="text-xs mt-2 space-y-3">
+              <p className="text-muted-foreground">
+                All candidates were evaluated across multiple rewrites. The agent reached the best achievable version, but automated quality checks flagged items that require human review.
+              </p>
+              {failingGates && failingGates.length > 0 && (
+                <div className="p-2.5 rounded-md bg-background/80 border border-amber-500/30 text-[11px] font-mono text-muted-foreground space-y-1">
+                  <span className="font-semibold text-foreground">Checks Requiring Review:</span>
+                  <ul className="list-disc list-inside space-y-0.5">
+                    {failingGates.map((gate: string, i: number) => (
+                      <li key={i}>{gate}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => {
+                    const textToUse = editablePostText || bestDraft?.post_text || postText;
+                    const finalDraftObj = {
+                      ...(bestDraft || {}),
+                      text: textToUse,
+                      post_text: textToUse,
+                      image_headline: bestDraft?.image_headline || imageHeadline,
+                      hashtags: bestDraft?.hashtags || [],
+                    };
+                    onUseInComposer?.(finalDraftObj);
+                  }}
+                  className="h-8 text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white"
+                >
+                  <CheckCircle2 className="size-3.5 mr-1.5" />
+                  <span>Accept and edit in composer</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleReset}
+                  className="h-8 text-xs font-medium"
+                >
+                  <RotateCcw className="size-3.5 mr-1.5" />
+                  <span>Try different topics</span>
+                </Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+
+          {/* Editable Post Draft Card */}
+          <Card className="border border-border/80 bg-card shadow-sm overflow-hidden">
+            <CardHeader className="pb-3 border-b border-border/50 bg-muted/20">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <span>Best-Effort Draft (Editable)</span>
+                  <Badge variant="outline" className="text-amber-500 border-amber-500/40 text-[10px]">
+                    Needs Review
+                  </Badge>
+                </CardTitle>
+                <div className="text-xs text-muted-foreground">
+                  {(editablePostText || bestDraft?.post_text || postText).length} characters
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 space-y-3">
+              <textarea
+                value={editablePostText || bestDraft?.post_text || postText}
+                onChange={(e) => setEditablePostText(e.target.value)}
+                rows={10}
+                className="w-full text-sm leading-relaxed p-3 rounded-md border border-border bg-background focus:outline-none focus:ring-1 focus:ring-primary font-sans resize-y"
+                placeholder="Review and edit your draft here..."
+              />
+              {(bestDraft?.image_headline || imageHeadline) && (
+                <div className="p-2.5 rounded-md bg-muted/30 border border-border/60 text-xs">
+                  <span className="font-semibold text-muted-foreground mr-2">Companion Headline:</span>
+                  <span className="font-medium">{bestDraft?.image_headline || imageHeadline}</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {/* Done State - High-Converting LinkedIn Preview Card */}

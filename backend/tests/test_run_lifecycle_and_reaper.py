@@ -230,9 +230,9 @@ def test_reaper_marks_stale_run_and_ignores_recent_one(db_test_schema):
 
         db_stale_p = db.query(PlaygroundRun).filter(PlaygroundRun.id == stale_id).first()
         db_stale_gen = db.query(GenerationRun).filter(GenerationRun.id == stale_id).first()
-        assert db_stale_p.status == "failed_error"
+        assert db_stale_p.status == "timed_out"
         assert "stalled at drafter" in (db_stale_p.error_reason or "")
-        assert db_stale_gen.status == "failed_error"
+        assert db_stale_gen.status == "timed_out"
         assert "stalled at drafter" in (db_stale_gen.error_reason or "")
 
         db_recent_p = db.query(PlaygroundRun).filter(PlaygroundRun.id == recent_id).first()
@@ -283,7 +283,7 @@ def test_status_endpoint_reports_stalled(client, db_test_schema, ed25519_keys):
     schema_name = db_test_schema["schema_name"]
 
     run_id = uuid.uuid4()
-    progress_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=70)
+    progress_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=100)
 
     with SessionLocal() as db:
         db.execute(text(f'SET search_path TO "{schema_name}"'))
@@ -307,7 +307,7 @@ def test_status_endpoint_reports_stalled(client, db_test_schema, ed25519_keys):
     assert data["status"] == "running"
     assert data["stalled"] is True
     assert data["current_node"] == "gtm_brief"
-    assert data["elapsed_seconds"] >= 65.0
+    assert data["elapsed_seconds"] >= 95.0
 
 
 def test_lock_pointing_at_dead_run_is_ignored(client, db_test_schema, ed25519_keys, monkeypatch):
