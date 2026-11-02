@@ -16,6 +16,9 @@ export default async function AppShellLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const cookieStore = await cookies();
+  const isSignedOut = cookieStore.get("autopulse_signed_out")?.value === "true";
+
   let session = null;
   try {
     const res = await auth.getSession();
@@ -24,8 +27,8 @@ export default async function AppShellLayout({
     // Session retrieval failed or token expired
   }
 
-  // Any request to an authenticated dashboard route without a valid session MUST redirect to login
-  if (!session?.user) {
+  // Any request to an authenticated dashboard route without a valid session or while marked signed-out MUST redirect to login
+  if (isSignedOut || !session?.user) {
     redirect("/auth/sign-in");
   }
 
@@ -36,7 +39,6 @@ export default async function AppShellLayout({
     image: session.user.image ?? null,
   };
 
-  const cookieStore = await cookies();
   const initialOpen = cookieStore.get("sidebar_state")?.value !== "false";
 
   return (

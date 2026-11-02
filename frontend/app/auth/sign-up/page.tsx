@@ -122,6 +122,9 @@ function SignUpForm() {
         return;
       }
 
+      // Clear any prior signed-out sentinel flag
+      document.cookie = "autopulse_signed_out=; path=/; max-age=0; SameSite=Lax";
+
       // 2. Mark OTP as pending in cookie
       document.cookie = "autopulse_otp_pending=true; path=/; max-age=600; SameSite=Lax";
 

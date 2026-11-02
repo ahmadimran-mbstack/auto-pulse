@@ -154,9 +154,11 @@ function VerifyOtpForm() {
           setError(result.error.message || "Invalid or expired code. Please try again.");
           setIsPending(false);
         } else {
-          // Clear pending OTP lock cookie
+          // Clear pending OTP lock cookie and signed-out sentinel
           document.cookie =
             "autopulse_otp_pending=; path=/; max-age=0; SameSite=Lax";
+          document.cookie =
+            "autopulse_signed_out=; path=/; max-age=0; SameSite=Lax";
           setSuccessMessage(
             "Email successfully verified. Redirecting to your dashboard..."
           );

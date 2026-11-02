@@ -16,6 +16,7 @@ export const metadata: Metadata = {
 
 // Force dynamic rendering so session state is always evaluated fresh
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 interface AuthLayoutProps {
   children: React.ReactNode;
@@ -24,6 +25,15 @@ interface AuthLayoutProps {
 // Layout wrapper for all /auth/* pages
 // Prevents authenticated and verified users from visiting auth screens
 export default async function AuthLayout({ children }: AuthLayoutProps) {
+  const cookieStore = await cookies();
+  const isSignedOut = cookieStore.get("autopulse_signed_out")?.value === "true";
+  const isOtpPending = cookieStore.get("autopulse_otp_pending")?.value === "true";
+
+  // If the user has explicitly signed out, allow auth screens to render unconditionally
+  if (isSignedOut) {
+    return <>{children}</>;
+  }
+
   let session = null;
   try {
     const res = await auth.getSession();
@@ -31,9 +41,6 @@ export default async function AuthLayout({ children }: AuthLayoutProps) {
   } catch (err) {
     // Gracefully handle session retrieval errors in layout (e.g. unauthenticated or cookie restrictions)
   }
-
-  const cookieStore = await cookies();
-  const isOtpPending = cookieStore.get("autopulse_otp_pending")?.value === "true";
 
   // If user is already authenticated and email is verified, and not awaiting OTP verification,
   // redirect them to the dashboard
