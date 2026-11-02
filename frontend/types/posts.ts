@@ -171,7 +171,8 @@ export type RunStatus =
   | "failed_quality"
   | "failed_error"
   | "timed_out"
-  | "interrupted";
+  | "interrupted"
+  | "needs_review";
 export type RunStep = "finder" | "gtm" | "drafter" | "detector" | "rewrite" | null;
 
 export interface RunResponse {
