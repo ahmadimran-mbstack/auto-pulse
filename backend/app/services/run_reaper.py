@@ -1,5 +1,5 @@
 import logging
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 import uuid
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -61,19 +61,24 @@ def cleanup_interrupted_runs_on_startup(db: Session, current_boot_id: str) -> in
     return total_cleaned
 
 
-def reap_stalled_runs(db: Session, stall_threshold_seconds: int = 90) -> int:
+def reap_stalled_runs(db: Session, stall_threshold_seconds: Optional[int] = None) -> int:
     """Periodic reaper running in the always-on backend.
-    Marks runs with no progress for `stall_threshold_seconds` (default 90s) as 'failed_error'
-    with reason 'stalled at <current_node>' and releases their locks.
+    Marks runs with no progress for `stall_threshold_seconds` (default STALL_SECONDS=180)
+    as 'timed_out' with reason 'Run timed out: stalled at <current_node>' and releases their locks.
     Atomic UPDATE with condition in WHERE ensures two concurrent reapers cannot conflict.
     """
+    if stall_threshold_seconds is None:
+        stall_threshold_seconds = getattr(settings, "STALL_SECONDS", 180)
+
     total_reaped = 0
     try:
         # 1. Reap generation_runs
         stmt_gen = text(
             "UPDATE generation_runs "
-            "SET status = 'failed_error', "
-            "    error_reason = 'stalled at ' || COALESCE(current_node, current_step, 'unknown'), "
+            "SET status = 'timed_out', "
+            "    error_code = 'timed_out', "
+            "    error_detail = 'Run timed out: stalled at ' || COALESCE(current_node, current_step, 'unknown'), "
+            "    error_reason = 'Run timed out: stalled at ' || COALESCE(current_node, current_step, 'unknown'), "
             "    finished_at = now() "
             "WHERE status IN ('running', 'queued') "
             "  AND ( "
@@ -88,12 +93,12 @@ def reap_stalled_runs(db: Session, stall_threshold_seconds: int = 90) -> int:
         # 2. Reap playground_runs
         stmt_p = text(
             "UPDATE playground_runs "
-            "SET status = 'failed_error', "
-            "    error_reason = 'stalled at ' || COALESCE(current_node, current_step, 'unknown'), "
+            "SET status = 'timed_out', "
+            "    error_reason = 'Run timed out: stalled at ' || COALESCE(current_node, current_step, 'unknown'), "
             "    result = jsonb_build_object( "
-            "        'status', 'failed_error', "
+            "        'status', 'timed_out', "
             "        'error_code', 'stalled_execution', "
-            "        'error_detail', 'stalled at ' || COALESCE(current_node, current_step, 'unknown') "
+            "        'error_detail', 'Run timed out: stalled at ' || COALESCE(current_node, current_step, 'unknown') "
             "    ), "
             "    finished_at = now() "
             "WHERE status IN ('running', 'queued') "
@@ -116,7 +121,7 @@ def reap_stalled_runs(db: Session, stall_threshold_seconds: int = 90) -> int:
             if lock_pair not in seen_locks:
                 seen_locks.add(lock_pair)
                 release_manual_run_lock(user_id, run_id)
-            logger.warning(f"Reaper marked run {run_id} as failed_error: stalled at {node}")
+            logger.warning(f"Reaper marked run {run_id} as timed_out: stalled at {node}")
 
         total_reaped = len(res_gen) + len(res_p)
     except Exception as exc:

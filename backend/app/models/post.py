@@ -175,6 +175,15 @@ class GenerationRun(Base):
         SmallInteger, nullable=False, server_default="0"
     )
 
+    # Multi-topic and smart rewrite tracking
+    current_topic_index: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, server_default="0"
+    )
+    current_round: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, server_default="0"
+    )
+    best_draft: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+
     # Process ownership, liveness, and error tracking
     boot_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     last_progress_at: Mapped[Optional[datetime.datetime]] = mapped_column(
@@ -192,7 +201,7 @@ class GenerationRun(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('queued', 'started', 'running', 'succeeded', 'completed', 'failed', 'failed_quality', 'failed_error', 'timed_out', 'interrupted', 'skipped')",
+            "status IN ('queued', 'started', 'running', 'succeeded', 'needs_review', 'completed', 'failed', 'failed_quality', 'failed_error', 'timed_out', 'interrupted', 'skipped')",
             name="ck_generation_runs_status",
         ),
         # Scheduled runs are limited to at most one record per user per date
@@ -227,6 +236,15 @@ class PlaygroundRun(Base):
     # Current execution step and node (e.g. plan, search, finder, gtm_brief, drafter, detector, post_loop)
     current_step: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     current_node: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Multi-topic and smart rewrite tracking
+    current_topic_index: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, server_default="0"
+    )
+    current_round: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, server_default="0"
+    )
+    best_draft: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
 
     # Process ownership, liveness, and error tracking
     boot_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

@@ -61,19 +61,23 @@ class Settings(BaseSettings):
 
     # Multi-agent thresholds and iteration bounds
     AI_SCORE_THRESHOLD: int = 15
-    MAX_REWRITE_ROUNDS: int = 3
-    MAX_LLM_CALLS_PER_RUN: int = 20
+    MAX_REWRITE_ROUNDS: int = 4
+    MAX_TOPICS_PER_RUN: int = 4
+    MAX_REWRITES_PER_TOPIC: int = 4
+    MAX_LLM_CALLS_PER_RUN: int = 30
 
     # Process and execution lifecycle constants
     BOOT_ID: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    LLM_TIMEOUT_SECONDS: int = 45
-    SEARCH_TIMEOUT_SECONDS: int = 20
+    LLM_TIMEOUT_SECONDS: int = 60
+    SEARCH_TIMEOUT_SECONDS: int = 30
     PAGE_FETCH_TIMEOUT_SECONDS: int = 20
-    TOTAL_RUN_DEADLINE_SECONDS: int = 180
-    PER_NODE_TIMEOUT_SECONDS: int = 60
+    RUN_SAFETY_CEILING_SECONDS: int = 1200
+    TOTAL_RUN_DEADLINE_SECONDS: int = 1200
+    PER_NODE_TIMEOUT_SECONDS: int = 90
     REAPER_INTERVAL_SECONDS: int = 30
-    STALLED_PROGRESS_TIMEOUT_SECONDS: int = 90
-    STALLED_WARNING_TIMEOUT_SECONDS: int = 60
+    STALL_SECONDS: int = 180
+    STALLED_PROGRESS_TIMEOUT_SECONDS: int = 180
+    STALLED_WARNING_TIMEOUT_SECONDS: int = 90
 
     # Pipeline schedule and lead time settings
     DRAFT_LEAD_MINUTES: int = 180

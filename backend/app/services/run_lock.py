@@ -9,8 +9,8 @@ logger = logging.getLogger(__name__)
 
 # Fallback in-memory store: user_id -> (run_id_str, expires_at)
 _IN_MEMORY_MANUAL_RUN_LOCKS: dict[str, tuple[str, float]] = {}
-# Lock expires slightly after whole-run deadline (180s deadline + 30s buffer = 210s)
-MANUAL_RUN_LOCK_TTL_SECONDS = settings.TOTAL_RUN_DEADLINE_SECONDS + 30
+# Lock expires after whole-run safety ceiling (1200s ceiling + 60s buffer = 1260s)
+MANUAL_RUN_LOCK_TTL_SECONDS = getattr(settings, "RUN_SAFETY_CEILING_SECONDS", 1200) + 60
 
 
 def acquire_manual_run_lock(

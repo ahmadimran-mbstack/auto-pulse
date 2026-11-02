@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 import uuid
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class PostApprovalInfo(BaseModel):
@@ -83,7 +83,13 @@ class PlaygroundRunDetail(BaseModel):
     current_step: Optional[str] = None
     current_node: Optional[str] = None
     round: int = 0
-    max_rounds: int = 3
+    max_rounds: int = 4
+    current_topic_index: int = 0
+    max_topics: int = 4
+    current_round: int = 0
+    max_rewrites: int = 4
+    best_draft: Optional[Dict[str, Any]] = None
+    failing_gates: List[str] = Field(default_factory=list)
     elapsed_seconds: Optional[float] = None
     last_progress_at: Optional[str] = None
     stalled: bool = False
@@ -109,7 +115,13 @@ class GenerationRunDetail(BaseModel):
     current_step: Optional[str] = None
     current_node: Optional[str] = None
     round: int = 0
-    max_rounds: int = 3
+    max_rounds: int = 4
+    current_topic_index: int = 0
+    max_topics: int = 4
+    current_round: int = 0
+    max_rewrites: int = 4
+    best_draft: Optional[Dict[str, Any]] = None
+    failing_gates: List[str] = Field(default_factory=list)
     elapsed_seconds: Optional[float] = None
     last_progress_at: Optional[str] = None
     stalled: bool = False
