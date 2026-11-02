@@ -95,94 +95,91 @@ export function SidebarUserRow({ user }: SidebarUserRowProps) {
 
   return (
     <div className="flex h-14 items-center justify-between px-3 border-t border-sidebar-border bg-sidebar">
-      {/* User profile identifier */}
-      <div className="flex items-center gap-2.5 min-w-0 pr-2">
-        {user.image && !imageError ? (
-          <img
-            src={user.image}
-            alt={displayName}
-            className="size-5 shrink-0 rounded-full border border-sidebar-border object-cover"
-            referrerPolicy="no-referrer"
-            onError={() => setImageError(true)}
-          />
-        ) : (
-          <div
-            style={{ background: avatarGradient }}
-            className="size-5 shrink-0 rounded-full border border-sidebar-border"
-            aria-hidden="true"
-          />
-        )}
-        <span className="text-sm font-normal text-foreground truncate max-w-32">
-          {displayName}
-        </span>
-      </div>
-
-      {/* Action icon buttons */}
-      <div className="flex items-center gap-1.5 shrink-0">
-        {/* Account Menu trigger */}
-        <DropdownMenu>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="User account menu"
-                  className="flex size-7 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:text-foreground hover:bg-accent"
-                >
-                  <MoreHorizontal className="size-3.5" />
-                </button>
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            <TooltipContent side="top">Account settings</TooltipContent>
-          </Tooltip>
-
-          <DropdownMenuContent
-            side="top"
-            align="end"
-            sideOffset={8}
-            className="w-64 p-2 space-y-1"
+      {/* User profile identifier & account menu trigger */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            aria-label="User account menu"
+            className="flex items-center gap-2.5 min-w-0 pr-2 py-1.5 -ml-1 pl-1 rounded-md text-left transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring cursor-pointer group flex-1"
           >
-            <DropdownMenuLabel className="px-3 py-2 font-normal">
-              <div className="text-xs text-muted-foreground truncate">
-                {user.email}
-              </div>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <div className="px-3 py-2 flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Theme</span>
-              <ThemeToggle />
+            {user.image && !imageError ? (
+              <img
+                src={user.image}
+                alt={displayName}
+                className="size-6 shrink-0 rounded-full border border-sidebar-border object-cover"
+                referrerPolicy="no-referrer"
+                onError={() => setImageError(true)}
+              />
+            ) : (
+              <div
+                style={{ background: avatarGradient }}
+                className="size-6 shrink-0 rounded-full border border-sidebar-border"
+                aria-hidden="true"
+              />
+            )}
+            <div className="flex items-center justify-between flex-1 min-w-0">
+              <span className="text-sm font-normal text-foreground truncate max-w-28 group-hover:text-foreground">
+                {displayName}
+              </span>
+              <MoreHorizontal className="size-3.5 text-muted-foreground group-hover:text-foreground shrink-0 ml-1" />
             </div>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link href="/app/settings" className="flex items-center gap-2.5 px-3 py-2 cursor-pointer">
-                <Settings className="size-4" />
-                <span>Settings</span>
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              disabled={isSigningOut}
-              onSelect={(e) => {
-                e.preventDefault();
-                signOut();
-              }}
-              className="flex w-full items-center gap-2.5 px-3 py-2 text-destructive cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
-            >
-              {isSigningOut ? (
-                <>
-                  <Loader2 className="size-4 animate-spin shrink-0" />
-                  <span>Signing out...</span>
-                </>
-              ) : (
-                <>
-                  <LogOut className="size-4 shrink-0" />
-                  <span>Sign out</span>
-                </>
-              )}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+          </button>
+        </DropdownMenuTrigger>
 
+        <DropdownMenuContent
+          side="top"
+          align="start"
+          sideOffset={8}
+          className="w-64 p-2 space-y-1"
+        >
+          <DropdownMenuLabel className="px-3 py-2 font-normal">
+            <div className="text-xs text-muted-foreground truncate">
+              {user.email}
+            </div>
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <div className="px-3 py-2 flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Theme</span>
+            <ThemeToggle />
+          </div>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem asChild>
+            <Link href="/app/settings" className="flex items-center gap-2.5 px-3 py-2 cursor-pointer">
+              <Settings className="size-4" />
+              <span>Settings</span>
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            disabled={isSigningOut}
+            onSelect={(e) => {
+              e.preventDefault();
+              signOut();
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              signOut();
+            }}
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-destructive cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
+          >
+            {isSigningOut ? (
+              <>
+                <Loader2 className="size-4 animate-spin shrink-0" />
+                <span>Signing out...</span>
+              </>
+            ) : (
+              <>
+                <LogOut className="size-4 shrink-0" />
+                <span>Sign out</span>
+              </>
+            )}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* Action icon buttons: notifications */}
+      <div className="flex items-center gap-1.5 shrink-0 pl-1">
         {/* Alerts popover trigger */}
         <Popover>
           <Tooltip>

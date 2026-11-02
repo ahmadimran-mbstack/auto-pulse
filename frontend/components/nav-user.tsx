@@ -98,6 +98,10 @@ export function NavUser({ user }: { user: NavUserData }) {
                 e.preventDefault();
                 signOut();
               }}
+              onClick={(e) => {
+                e.preventDefault();
+                signOut();
+              }}
               className="flex w-full items-center gap-2 text-destructive cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
             >
               {isSigningOut ? (
