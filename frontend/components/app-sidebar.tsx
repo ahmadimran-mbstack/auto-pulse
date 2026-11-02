@@ -48,7 +48,7 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
   const settingsExpanded = userSettingsExpanded ?? isSettingsActive;
 
   // Fetch dashboard connections to pass to notice card
-  const { data: dashboardData } = useDashboardQuery(user.id);
+  const { data: dashboardData, isLoading, isError } = useDashboardQuery(user.id);
 
   // Global keyboard shortcut for 'F' to open command palette
   React.useEffect(() => {
@@ -241,7 +241,11 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
 
         {/* Pinned Bottom Notice Card and User Row */}
         <div className="shrink-0 mt-auto">
-          <SidebarNoticeCard connections={dashboardData?.connections} />
+          <SidebarNoticeCard
+            connections={dashboardData?.connections}
+            isLoading={isLoading}
+            isError={isError}
+          />
           <SidebarUserRow user={user} />
         </div>
       </aside>

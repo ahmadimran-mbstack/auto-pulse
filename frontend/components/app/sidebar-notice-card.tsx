@@ -11,19 +11,22 @@ import { PlatformLabel } from "@/components/app/PlatformLabel";
 
 interface SidebarNoticeCardProps {
   connections?: DashboardConnection[];
+  isLoading?: boolean;
+  isError?: boolean;
 }
 
 // Notice card appearing above user row when LinkedIn needs reconnection or renewal
-export function SidebarNoticeCard({ connections }: SidebarNoticeCardProps) {
-  const linkedin = connections?.find((c) => c.provider === "linkedin");
-  const status = linkedin?.status || "not_connected";
+export function SidebarNoticeCard({ connections, isLoading, isError }: SidebarNoticeCardProps) {
+  const isLoaded = !isLoading && !isError && connections !== undefined && connections !== null;
+  const linkedin = isLoaded ? connections.find((c) => c.provider === "linkedin") : undefined;
+  const status = linkedin?.status;
   const daysLeft = linkedin?.days_left ?? 0;
-  const expiryKey = linkedin?.expires_at || status;
+  const expiryKey = linkedin?.expires_at || status || "disconnected";
 
   // Determine whether to display the warning or error notice
-  const isMissing = !linkedin || status === "not_connected";
-  const isExpired = status === "expired" || (linkedin && daysLeft <= 0);
-  const isExpiringSoon = linkedin && daysLeft > 0 && daysLeft <= 7;
+  const isMissing = isLoaded && (!linkedin || status === "not_connected");
+  const isExpired = isLoaded && (status === "expired" || (Boolean(linkedin) && daysLeft <= 0));
+  const isExpiringSoon = Boolean(linkedin) && status === "connected" && daysLeft > 0 && daysLeft <= 7;
 
   const isDismissedStored = React.useSyncExternalStore(
     (callback) => {
@@ -42,7 +45,9 @@ export function SidebarNoticeCard({ connections }: SidebarNoticeCardProps) {
   const [userDismissed, setUserDismissed] = React.useState(false);
   const dismissed = userDismissed || isDismissedStored;
 
-  if (dismissed || (!isMissing && !isExpired && !isExpiringSoon)) {
+  // Render nothing while connection status is loading, on fetch error, if data is not yet resolved,
+  // or if dismissed / not in an actionable state
+  if (!isLoaded || dismissed || (!isMissing && !isExpired && !isExpiringSoon)) {
     return null;
   }
 
