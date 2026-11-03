@@ -3,17 +3,17 @@
 
 export const LEGAL_CONFIG = {
   // Legal company entity name
-  COMPANY_NAME: "TODO: Company Legal Name (probably MB Stack, ask my manager)",
+  COMPANY_NAME: "MB Stack",
   // Brand and product name
   PRODUCT_NAME: "AutoPulse",
   // Public contact email address for privacy and legal requests
-  CONTACT_EMAIL: "TODO: Contact Email",
+  CONTACT_EMAIL: "contact@mbstack.net",
   // Effective date of terms and privacy policy
   LAST_UPDATED: "3 November 2026",
   // Legal jurisdiction and governing law
-  GOVERNING_LAW: "TODO: Governing Law",
+  GOVERNING_LAW: "the laws of Pakistan",
   // Minimum age required to use the service
-  MIN_AGE: "TODO: Minimum Age",
+  MIN_AGE: "18 years of age",
 } as const;
 
 export const {

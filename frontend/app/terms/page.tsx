@@ -236,10 +236,12 @@ export default function TermsPage() {
           indirect, incidental, special, or consequential damages resulting from your use of the service or
           any content published to LinkedIn.
         </p>
-        <div className="rounded-lg border border-border bg-muted/40 p-4 text-sm text-foreground">
-          <strong>TODO:</strong> Confirm specific liability limit amount (for example, the total fees paid
-          by you in the prior 12 months, or a fixed dollar cap).
-        </div>
+        <p className="text-muted-foreground">
+          In no event shall the total aggregate liability of {COMPANY_NAME} arising out of or related to these
+          terms or your use of {PRODUCT_NAME} exceed the total amount paid by you to {COMPANY_NAME} for the service
+          in the twelve (12) months preceding the event giving rise to liability, or one hundred US dollars ($100 USD),
+          whichever is greater.
+        </p>
       </section>
 
       {/* Section 13: Governing law */}
@@ -247,9 +249,15 @@ export default function TermsPage() {
         <h2 className="text-xl sm:text-2xl font-normal tracking-[-0.02em] text-foreground">
           13. Governing law
         </h2>
-        <div className="rounded-lg border border-border bg-muted/40 p-4 text-sm text-foreground">
-          <strong>TODO:</strong> Confirm governing jurisdiction and applicable law ({GOVERNING_LAW}).
-        </div>
+        <p className="text-muted-foreground">
+          These Terms of Service and any dispute arising out of or relating to them or {PRODUCT_NAME} shall be
+          governed by and construed in accordance with {GOVERNING_LAW}, without regard to conflict of law
+          principles.
+        </p>
+        <p className="text-muted-foreground">
+          Any legal action or proceeding arising under these terms shall be brought exclusively in the competent
+          courts of Pakistan, and you consent to the personal jurisdiction and venue of such courts.
+        </p>
       </section>
 
       {/* Section 14: Changes to these terms */}

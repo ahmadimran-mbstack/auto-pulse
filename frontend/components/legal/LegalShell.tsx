@@ -167,3 +167,4 @@ export function LegalShell({ title, sections, children }: LegalShellProps) {
     </div>
   );
 }
+

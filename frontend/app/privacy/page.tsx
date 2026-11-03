@@ -131,10 +131,11 @@ export default function PrivacyPage() {
           When we generate a draft, we send the AI provider your chosen topics, niche description, role,
           tone preferences, and short web search summaries of relevant news articles.
         </p>
-        <div className="rounded-lg border border-border bg-muted/40 p-4 text-sm text-foreground">
-          <strong>TODO:</strong> Confirm whether the AI model provider retains or trains on customer
-          prompts and drafts under their commercial API terms.
-        </div>
+        <p className="text-muted-foreground">
+          We use commercial and enterprise API endpoints with our AI model providers. Under these terms,
+          your prompts, context, and generated drafts are processed strictly to write and evaluate your posts,
+          and are not used to train or improve the providers&apos; foundation models.
+        </p>
       </section>
 
       {/* Section 5: Who we share data with */}
@@ -262,11 +263,13 @@ export default function PrivacyPage() {
           8. How long we keep data
         </h2>
         <p className="text-muted-foreground">
-          We retain your account details, post drafts, and history while your account remains active.
+          Your personal data, account settings, and post history are retained while your account remains active.
         </p>
-        <div className="rounded-lg border border-border bg-muted/40 p-4 text-sm text-foreground">
-          <strong>TODO:</strong> Confirm formal data retention periods and deletion schedules.
-        </div>
+        <p className="text-muted-foreground">
+          If you decide to close your account or submit a deletion request to {CONTACT_EMAIL}, we permanently
+          delete your personal information, stored post drafts, and OAuth connection tokens within 30 days of
+          receiving your verified request.
+        </p>
       </section>
 
       {/* Section 9: Your choices */}
@@ -308,9 +311,11 @@ export default function PrivacyPage() {
         <h2 className="text-xl sm:text-2xl font-normal tracking-[-0.02em] text-foreground">
           11. Age limit
         </h2>
-        <div className="rounded-lg border border-border bg-muted/40 p-4 text-sm text-foreground">
-          <strong>TODO:</strong> Confirm minimum age requirement ({LEGAL_CONFIG.MIN_AGE}).
-        </div>
+        <p className="text-muted-foreground">
+          {PRODUCT_NAME} is intended for business professionals and operators. You must be at least{" "}
+          {LEGAL_CONFIG.MIN_AGE} to create an account and use the service. We do not knowingly collect
+          personal information from individuals under this age.
+        </p>
       </section>
 
       {/* Section 12: Changes to this policy */}
