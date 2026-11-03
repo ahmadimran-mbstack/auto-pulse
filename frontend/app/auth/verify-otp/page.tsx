@@ -4,13 +4,12 @@ import { Suspense, useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth/client";
-import { Card } from "@/components/ui/card";
+import { AuthShell } from "../components/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AuthStatusLegend } from "../components/AuthStatusLegend";
-import { Activity, AlertCircle, CheckCircle2 } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 
 interface OtpAuthClient {
   emailOtp: {
@@ -31,19 +30,19 @@ interface OtpAuthClient {
   };
 }
 
+// Inner form managing the 6-digit OTP verification flow
 function VerifyOtpForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const errorRef = useRef<HTMLDivElement>(null);
 
-  // Mode can be 'sign-in' or 'email-verification'
   const initialType =
     searchParams.get("type") === "email-verification"
       ? "email-verification"
       : "sign-in";
   const initialEmail = searchParams.get("email") || "";
 
-  const [otpType, setOtpType] = useState<"sign-in" | "email-verification">(initialType);
+  const [otpType] = useState<"sign-in" | "email-verification">(initialType);
   const [email, setEmail] = useState(initialEmail);
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<"send" | "verify">(
@@ -51,14 +50,10 @@ function VerifyOtpForm() {
   );
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(
-    initialEmail
-      ? `A verification code was sent to ${initialEmail}. Please enter it below.`
-      : null
-  );
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(initialEmail ? 60 : 0);
 
-  // Focus error container when an error occurs
+  // Moves focus to error container when an error occurs
   useEffect(() => {
     if (error && errorRef.current) {
       errorRef.current.focus();
@@ -72,7 +67,7 @@ function VerifyOtpForm() {
     return () => clearTimeout(timer);
   }, [countdown]);
 
-  // Request a one-time passcode to the provided email address
+  // Sends or resends the OTP code to the user's email
   const handleSendOtp = async (e?: React.FormEvent<HTMLFormElement>) => {
     if (e) e.preventDefault();
     setError(null);
@@ -98,7 +93,7 @@ function VerifyOtpForm() {
       } else {
         setStep("verify");
         setCountdown(60);
-        setSuccessMessage(`A verification code has been sent to ${cleanEmail}.`);
+        setSuccessMessage(`A verification code was sent to ${cleanEmail}.`);
       }
     } catch (err: unknown) {
       const message =
@@ -111,7 +106,7 @@ function VerifyOtpForm() {
     }
   };
 
-  // Verify the submitted OTP code
+  // Verifies the submitted OTP code
   const handleVerifyOtp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
@@ -128,7 +123,6 @@ function VerifyOtpForm() {
     try {
       const client = authClient as unknown as OtpAuthClient;
       if (otpType === "sign-in") {
-        // Sign in with the received OTP
         const result = await client.signIn.emailOtp({
           email: email.trim(),
           otp: cleanOtp,
@@ -138,13 +132,11 @@ function VerifyOtpForm() {
           setError(result.error.message || "Invalid or expired code. Please try again.");
           setIsPending(false);
         } else {
-          // Clear pending OTP lock cookie
           document.cookie =
             "autopulse_otp_pending=; path=/; max-age=0; SameSite=Lax";
           router.push("/onboarding");
         }
       } else {
-        // Verify email address with the OTP
         const result = await client.emailOtp.verifyEmail({
           email: email.trim(),
           otp: cleanOtp,
@@ -154,7 +146,6 @@ function VerifyOtpForm() {
           setError(result.error.message || "Invalid or expired code. Please try again.");
           setIsPending(false);
         } else {
-          // Clear pending OTP lock cookie and signed-out sentinel
           document.cookie =
             "autopulse_otp_pending=; path=/; max-age=0; SameSite=Lax";
           document.cookie =
@@ -177,216 +168,164 @@ function VerifyOtpForm() {
     }
   };
 
-  return (
-    <Card className="w-full max-w-[400px] p-6 sm:p-8 bg-card border-border text-left mx-auto lg:mx-0">
-      <h1 className="text-title font-display text-foreground mb-2">
-        {step === "send"
-          ? otpType === "sign-in"
-            ? "Sign in with code"
-            : "Verify your email"
-          : "Enter verification code"}
-      </h1>
-      <p className="text-body text-muted-foreground mb-6">
-        {step === "send"
-          ? "We will send a 6-digit passcode to your email inbox."
-          : `Enter the 6-digit code sent to ${email || "your email"}.`}
-      </p>
-
-      {/* Mode Selector only shown when manually sending */}
-      {step === "send" && (
-        <div className="flex border border-border rounded-md p-1 bg-secondary/50 mb-5">
-          <Button
-            type="button"
-            variant={otpType === "sign-in" ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setOtpType("sign-in")}
-            className="flex-1 font-medium"
-          >
-            Sign in
-          </Button>
-          <Button
-            type="button"
-            variant={otpType === "email-verification" ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setOtpType("email-verification")}
-            className="flex-1 font-medium"
-          >
-            Verify email
-          </Button>
+  // Initial step: enter email if arriving without email query parameter
+  if (step === "send") {
+    return (
+      <form onSubmit={handleSendOtp} className="space-y-4 text-left">
+        <div className="space-y-1.5">
+          <Label htmlFor="email" className="text-sm font-medium text-foreground">
+            Email address
+          </Label>
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+            placeholder="name@company.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="h-12 rounded-[8px] border-border-light dark:border-border bg-white dark:bg-card text-foreground"
+          />
         </div>
-      )}
 
-      {/* Success Notification */}
+        {error && (
+          <div
+            ref={errorRef}
+            tabIndex={-1}
+            role="alert"
+            className="p-3 rounded-[8px] bg-status-danger-bg text-status-danger-fg text-sm border border-destructive/20 outline-none"
+          >
+            {error}
+          </div>
+        )}
+
+        <Button
+          type="submit"
+          disabled={isPending || !email.trim()}
+          className="w-full h-12 rounded-[8px] bg-ink text-white hover:bg-neutral-800 dark:bg-white dark:text-ink dark:hover:bg-neutral-200 transition-colors font-medium text-sm"
+        >
+          {isPending ? "Sending code..." : "Send code"}
+        </Button>
+      </form>
+    );
+  }
+
+  // Verification step: input the 6-digit code
+  return (
+    <form onSubmit={handleVerifyOtp} className="space-y-4 text-left">
+      {/* Success notification */}
       {successMessage && (
-        <Alert className="mb-5 border-signal-line bg-signal-soft">
+        <Alert className="border-signal-line bg-signal-soft text-foreground">
           <CheckCircle2 className="size-4 text-primary shrink-0" aria-hidden="true" />
-          <AlertDescription className="text-meta text-foreground">
+          <AlertDescription className="text-sm">
             {successMessage}
           </AlertDescription>
         </Alert>
       )}
 
-      {/* Error Notification with programmatic focus */}
+      {/* Code input field */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <Label htmlFor="otp" className="text-sm font-medium text-foreground">
+            Verification code
+          </Label>
+          <button
+            type="button"
+            onClick={() => handleSendOtp()}
+            disabled={countdown > 0 || isPending}
+            className="text-xs text-primary hover:underline font-medium disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+          >
+            {countdown > 0 ? `Resend code in ${countdown}s` : "Resend code"}
+          </button>
+        </div>
+        <Input
+          id="otp"
+          name="otp"
+          type="text"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          maxLength={6}
+          placeholder="6-digit code"
+          value={otp}
+          onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+          className="h-12 rounded-[8px] border-border-light dark:border-border bg-white dark:bg-card text-foreground font-mono text-center tracking-widest text-lg"
+        />
+      </div>
+
+      {/* Inline error notice */}
       {error && (
-        <div ref={errorRef} tabIndex={-1} className="outline-none mb-5">
-          <Alert variant="destructive">
-            <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
-            <AlertDescription className="text-meta">
-              {error}
-            </AlertDescription>
-          </Alert>
+        <div
+          ref={errorRef}
+          tabIndex={-1}
+          role="alert"
+          className="p-3 rounded-[8px] bg-status-danger-bg text-status-danger-fg text-sm border border-destructive/20 outline-none"
+        >
+          {error}
         </div>
       )}
 
-      {step === "send" ? (
-        <form onSubmit={handleSendOtp} className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="email">
-              Email address
-            </Label>
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-              placeholder="you@company.com"
-            />
-          </div>
+      {/* Verification submission button */}
+      <Button
+        type="submit"
+        disabled={isPending || otp.trim().length < 6}
+        className="w-full h-12 rounded-[8px] bg-ink text-white hover:bg-neutral-800 dark:bg-white dark:text-ink dark:hover:bg-neutral-200 transition-colors font-medium text-sm"
+      >
+        {isPending ? "Verifying..." : "Verify code"}
+      </Button>
 
-          <Button
-            type="submit"
-            disabled={isPending || !email.trim()}
-            className="w-full"
-          >
-            {isPending ? "Sending code..." : "Send verification code"}
-          </Button>
-        </form>
-      ) : (
-        <form onSubmit={handleVerifyOtp} className="space-y-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="otp">
-                6-digit code
-              </Label>
-              <button
-                type="button"
-                onClick={() => {
-                  setStep("send");
-                  setOtp("");
-                }}
-                className="text-caption text-primary hover:underline cursor-pointer"
-              >
-                Change email
-              </button>
-            </div>
-            <Input
-              id="otp"
-              name="otp"
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              maxLength={6}
-              value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-              required
-              autoFocus
-              placeholder="123456"
-              className="text-center text-lead font-mono tracking-widest tabular-nums"
-            />
-          </div>
+      {/* Change email option */}
+      <div className="text-center pt-2">
+        <button
+          type="button"
+          onClick={() => {
+            setStep("send");
+            setOtp("");
+            setError(null);
+            setSuccessMessage(null);
+          }}
+          className="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer"
+        >
+          Use a different email address
+        </button>
+      </div>
+    </form>
+  );
+}
 
-          <Button
-            type="submit"
-            disabled={isPending || otp.length < 6}
-            className="w-full"
-          >
-            {isPending
-              ? "Verifying code..."
-              : otpType === "sign-in"
-              ? "Verify and sign in"
-              : "Verify email"}
-          </Button>
+// Verification page rendering the shared AuthShell split-screen layout
+export default function VerifyOtpPage() {
+  const searchParams = useSearchParams();
+  const emailParam = searchParams.get("email");
 
-          <div className="pt-2 flex items-center justify-between text-caption text-muted-foreground">
-            <span>Did not receive code?</span>
-            {countdown > 0 ? (
-              <span className="tabular-nums">Resend in {countdown}s</span>
-            ) : (
-              <button
-                type="button"
-                onClick={() => handleSendOtp()}
-                disabled={isPending}
-                className="text-primary font-medium hover:underline cursor-pointer disabled:opacity-50"
-              >
-                Resend code
-              </button>
-            )}
-          </div>
-        </form>
-      )}
+  const descriptionText = emailParam
+    ? `We sent a code to ${emailParam}.`
+    : "Enter your email to receive a verification code.";
 
-      <div className="mt-6 pt-5 border-t border-border text-meta text-muted-foreground space-y-2 text-left">
-        <div>
-          <span>Prefer standard password login? </span>
+  return (
+    <AuthShell
+      title="Check your email"
+      description={descriptionText}
+      footer={
+        <p className="text-sm text-muted-foreground text-left">
           <Link
             href="/auth/sign-in"
             className="text-primary font-medium hover:underline"
           >
-            Sign in with password
+            Back to sign in
           </Link>
-        </div>
-        <div>
-          <span>New to AutoPulse? </span>
-          <Link
-            href="/auth/sign-up"
-            className="text-primary font-medium hover:underline"
-          >
-            Create your account
-          </Link>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-export default function VerifyOtpPage() {
-  return (
-    <div className="min-h-screen flex flex-col bg-background text-foreground">
-      {/* Minimal Top Header */}
-      <header className="px-6 py-6 page-container w-full mx-auto">
-        <Link href="/" className="inline-flex items-center gap-2 group">
-          <div className="size-7 rounded-md bg-card border border-border flex items-center justify-center text-primary group-hover:border-primary/40 transition-colors">
-            <Activity className="size-4" strokeWidth={1.5} aria-hidden="true" />
+        </p>
+      }
+    >
+      <Suspense
+        fallback={
+          <div className="w-full py-8 text-center text-sm text-muted-foreground">
+            Loading verification...
           </div>
-          <span className="font-display font-semibold text-lg text-foreground">
-            AutoPulse
-          </span>
-        </Link>
-      </header>
-
-      {/* Main Two-Column Layout */}
-      <main className="flex-1 page-container w-full mx-auto px-6 py-8 md:py-12 flex items-center">
-        <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-          {/* Left Column wrapped in Suspense for useSearchParams */}
-          <Suspense
-            fallback={
-              <Card className="w-full max-w-[400px] p-6 sm:p-8 bg-card border-border text-left mx-auto lg:mx-0">
-                <p className="text-body text-muted-foreground">Loading verification form...</p>
-              </Card>
-            }
-          >
-            <VerifyOtpForm />
-          </Suspense>
-
-          {/* Right Column: Status legend (quiet panel on desktop only) */}
-          <div className="hidden lg:flex justify-end">
-            <AuthStatusLegend />
-          </div>
-        </div>
-      </main>
-    </div>
+        }
+      >
+        <VerifyOtpForm />
+      </Suspense>
+    </AuthShell>
   );
 }

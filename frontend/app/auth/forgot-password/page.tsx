@@ -3,14 +3,12 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Card } from "@/components/ui/card";
+import { AuthShell } from "../components/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AuthStatusLegend } from "../components/AuthStatusLegend";
-import { Activity, AlertCircle } from "lucide-react";
 
+// Forgot password page requesting an OTP code to reset user credentials
 export default function ForgotPasswordPage() {
   const router = useRouter();
   const errorRef = useRef<HTMLDivElement>(null);
@@ -18,14 +16,14 @@ export default function ForgotPasswordPage() {
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Focus error container when an error occurs
+  // Moves focus to error container when an error occurs
   useEffect(() => {
     if (error && errorRef.current) {
       errorRef.current.focus();
     }
   }, [error]);
 
-  // Send password reset OTP code via Neon Auth Email OTP endpoint
+  // Sends password reset code via the authentication service
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const cleanEmail = email.trim();
@@ -51,11 +49,16 @@ export default function ForgotPasswordPage() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok || data.error) {
-        const msg = data.error?.message || data.message || "Failed to send reset code. Please try again.";
+        const msg =
+          data.error?.message ||
+          data.message ||
+          "Failed to send reset code. Please try again.";
         setError(msg);
       } else {
-        // Redirect directly to the reset-password page with email prefilled
-        router.push(`/auth/reset-password?email=${encodeURIComponent(cleanEmail)}`);
+        // Navigate directly to the reset-password page with email prefilled
+        router.push(
+          `/auth/reset-password?email=${encodeURIComponent(cleanEmail)}`
+        );
       }
     } catch (err: unknown) {
       const message =
@@ -69,104 +72,61 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-background text-foreground">
-      {/* Minimal Top Header */}
-      <header className="px-6 py-6 page-container w-full mx-auto">
-        <Link href="/" className="inline-flex items-center gap-2 group">
-          <div className="size-7 rounded-md bg-card border border-border flex items-center justify-center text-primary group-hover:border-primary/40 transition-colors">
-            <Activity className="size-4" strokeWidth={1.5} aria-hidden="true" />
-          </div>
-          <span className="font-display font-semibold text-lg text-foreground">
-            AutoPulse
-          </span>
-        </Link>
-      </header>
-
-      {/* Main Two-Column Layout */}
-      <main className="flex-1 page-container w-full mx-auto px-6 py-8 md:py-12 flex items-center">
-        <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-          {/* Left Column: Forgot password form card (max 400px) */}
-          <Card className="w-full max-w-[400px] p-6 sm:p-8 bg-card border-border text-left mx-auto lg:mx-0">
-            <h1 className="text-title font-display text-foreground mb-2">
-              Reset your password
-            </h1>
-            <p className="text-body text-muted-foreground mb-6">
-              Enter your account email and we will send you a verification code to reset your password.
-            </p>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="email">
-                  Email address
-                </Label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  autoComplete="email"
-                  placeholder="you@company.com"
-                />
-              </div>
-
-              {error && (
-                <div ref={errorRef} tabIndex={-1} className="outline-none">
-                  <Alert variant="destructive">
-                    <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
-                    <AlertDescription className="text-meta">
-                      {error}
-                    </AlertDescription>
-                  </Alert>
-                </div>
-              )}
-
-              <Button
-                type="submit"
-                disabled={isPending || !email.trim()}
-                className="w-full"
-              >
-                {isPending ? "Sending code..." : "Send reset code"}
-              </Button>
-
-              <div className="pt-2 text-center space-y-2">
-                <div>
-                  <Link
-                    href={`/auth/reset-password${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ""}`}
-                    className="text-caption text-muted-foreground hover:text-foreground inline-block"
-                  >
-                    Already have a reset code? <span className="text-primary underline">Enter code</span>
-                  </Link>
-                </div>
-                <div>
-                  <Link
-                    href="/auth/sign-in"
-                    className="text-caption text-muted-foreground hover:text-foreground inline-block"
-                  >
-                    Remember your password? <span className="text-primary underline">Sign in</span>
-                  </Link>
-                </div>
-              </div>
-            </form>
-
-            <div className="mt-6 pt-5 border-t border-border text-meta text-muted-foreground text-left">
-              <span>Do not have an account? </span>
-              <Link
-                href="/auth/sign-up"
-                className="text-primary font-medium hover:underline"
-              >
-                Create your account
-              </Link>
-            </div>
-          </Card>
-
-          {/* Right Column: Status legend (quiet panel on desktop only) */}
-          <div className="hidden lg:flex justify-end">
-            <AuthStatusLegend />
-          </div>
+    <AuthShell
+      title="Reset your password"
+      description="Enter your email and we will send you a link."
+      footer={
+        <p className="text-sm text-muted-foreground text-left">
+          Remember your password?{" "}
+          <Link
+            href="/auth/sign-in"
+            className="text-primary font-medium hover:underline"
+          >
+            Sign in
+          </Link>
+        </p>
+      }
+    >
+      <form onSubmit={handleSubmit} className="space-y-4 text-left">
+        {/* Email input field */}
+        <div className="space-y-1.5">
+          <Label htmlFor="email" className="text-sm font-medium text-foreground">
+            Email address
+          </Label>
+          <Input
+            id="email"
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+            placeholder="name@company.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="h-12 rounded-[8px] border-border-light dark:border-border bg-white dark:bg-card text-foreground"
+          />
         </div>
-      </main>
-    </div>
+
+        {/* Inline error notice */}
+        {error && (
+          <div
+            ref={errorRef}
+            tabIndex={-1}
+            role="alert"
+            className="p-3 rounded-[8px] bg-status-danger-bg text-status-danger-fg text-sm border border-destructive/20 outline-none"
+          >
+            {error}
+          </div>
+        )}
+
+        {/* Primary submit action */}
+        <Button
+          type="submit"
+          disabled={isPending || !email.trim()}
+          className="w-full h-12 rounded-[8px] bg-ink text-white hover:bg-neutral-800 dark:bg-white dark:text-ink dark:hover:bg-neutral-200 transition-colors font-medium text-sm"
+        >
+          {isPending ? "Sending code..." : "Send reset code"}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }

@@ -9,15 +9,13 @@ import {
   isPasswordValid,
   generateSecurePassword,
 } from "@/lib/auth/password";
-import { Card } from "@/components/ui/card";
+import { AuthShell } from "../components/AuthShell";
+import { GoogleSignInButton } from "../components/GoogleSignInButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Separator } from "@/components/ui/separator";
-import { AuthStatusLegend } from "../components/AuthStatusLegend";
-import { GoogleSignInButton } from "../components/GoogleSignInButton";
-import { Activity, AlertCircle, Check, Circle } from "lucide-react";
+import { AlertCircle, Check, Circle } from "lucide-react";
 
 interface OtpClient {
   emailOtp: {
@@ -28,6 +26,7 @@ interface OtpClient {
   };
 }
 
+// Inner registration form with interactive password criteria and validation
 function SignUpForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -47,14 +46,14 @@ function SignUpForm() {
   const passwordIsValid = isPasswordValid(password);
   const canSubmit = !isPending && name.trim() && email.trim() && passwordIsValid;
 
-  // Move focus to error container when an error occurs for accessibility
+  // Moves focus to error container when an error occurs
   useEffect(() => {
     if (error && errorRef.current) {
       errorRef.current.focus();
     }
   }, [error]);
 
-  // Generate strong compliant password and populate input
+  // Generates a strong random password adhering to all security criteria
   const handleGeneratePassword = async () => {
     const generated = generateSecurePassword(16);
     setPassword(generated);
@@ -67,12 +66,12 @@ function SignUpForm() {
         setCopiedNotice(true);
         setTimeout(() => setCopiedNotice(false), 2500);
       } catch {
-        // Clipboard access failed silently
+        // Clipboard write failed
       }
     }
   };
 
-  // Submit sign up and automatically transition to OTP verification
+  // Submits the new account details and triggers verification OTP dispatch
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
@@ -154,84 +153,60 @@ function SignUpForm() {
   };
 
   return (
-    <Card className="w-full max-w-[400px] p-6 sm:p-8 bg-card border-border text-left mx-auto lg:mx-0">
-      <h1 className="text-title font-display text-foreground mb-2">
-        Create your account
-      </h1>
-      <p className="text-body text-muted-foreground mb-6">
-        Start generating and reviewing daily LinkedIn content.
-      </p>
-
-      {/* Warning when account with email already exists */}
+    <div className="w-full space-y-4">
+      {/* Existing account conflict alert */}
       {existingAccountEmail && (
-        <Alert className="mb-5 border-primary bg-signal-soft">
+        <Alert className="mb-4 border-signal-line bg-signal-soft text-foreground text-left">
           <AlertCircle className="size-4 text-primary shrink-0" aria-hidden="true" />
-          <AlertTitle className="text-meta font-semibold text-primary">
-            Account already exists
-          </AlertTitle>
-          <AlertDescription className="text-caption text-foreground space-y-3">
-            <p>
-              An account is already registered with <strong>{existingAccountEmail}</strong>. Please sign in to access your workspace.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-2 pt-1">
-              <Button size="sm" asChild>
-                <Link href={`/auth/sign-in?email=${encodeURIComponent(existingAccountEmail)}`}>
-                  Sign in to your account
-                </Link>
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setExistingAccountEmail(null);
-                  setEmail("");
-                }}
-              >
-                Use another email
-              </Button>
-            </div>
+          <AlertTitle className="text-body font-medium">Account already exists</AlertTitle>
+          <AlertDescription className="text-caption mt-1">
+            An account with {existingAccountEmail} is already registered. Please sign in instead.
+          </AlertDescription>
+          <div className="mt-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              asChild
+              className="text-xs font-medium"
+            >
+              <Link href={`/auth/sign-in?email=${encodeURIComponent(existingAccountEmail)}`}>
+                Sign in with this email
+              </Link>
+            </Button>
+          </div>
+        </Alert>
+      )}
+
+      {/* URL parameter error */}
+      {urlError && (
+        <Alert variant="destructive" className="mb-4 text-left">
+          <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+          <AlertDescription className="text-meta">
+            Authentication error ({urlError}). Please register with your email address below.
           </AlertDescription>
         </Alert>
       )}
 
-      {/* Account exists warning if user tried OAuth with existing email */}
-      {urlError === "account_not_linked" ? (
-        <Alert variant="destructive" className="mb-5">
-          <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
-          <AlertTitle>Account already exists</AlertTitle>
-          <AlertDescription className="text-caption leading-relaxed">
-            An account with this email already exists. Please{" "}
-            <Link href="/auth/sign-in" className="text-primary underline font-medium">
-              sign in with your password
-            </Link>{" "}
-            instead.
-          </AlertDescription>
-        </Alert>
-      ) : urlError ? (
-        <Alert variant="destructive" className="mb-5">
-          <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
-          <AlertDescription className="text-meta">
-            Authentication error ({urlError}). Please continue with email and password below.
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
       {/* Google Social Sign In */}
-      <div className="mb-5">
+      <div className="w-full">
         <GoogleSignInButton text="Sign up with Google" />
       </div>
 
-      {/* Visual separator */}
-      <div className="flex items-center gap-3 mb-5">
-        <Separator className="flex-1" />
-        <span className="text-caption text-muted-foreground">or continue with email</span>
-        <Separator className="flex-1" />
+      {/* Visual divider */}
+      <div className="relative py-2 flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-border-light dark:border-border" />
+        </div>
+        <div className="relative bg-white dark:bg-background px-3 text-xs text-muted-foreground uppercase tracking-wider">
+          or
+        </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-4 text-left">
+        {/* Full Name input */}
         <div className="space-y-1.5">
-          <Label htmlFor="name">
+          <Label htmlFor="name" className="text-sm font-medium text-foreground">
             Full name
           </Label>
           <Input
@@ -243,12 +218,14 @@ function SignUpForm() {
             placeholder="Jane Doe"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            className="h-12 rounded-[8px] border-border-light dark:border-border bg-white dark:bg-card text-foreground"
           />
         </div>
 
+        {/* Email input */}
         <div className="space-y-1.5">
-          <Label htmlFor="email">
-            Email address
+          <Label htmlFor="email" className="text-sm font-medium text-foreground">
+            Email
           </Label>
           <Input
             id="email"
@@ -256,32 +233,33 @@ function SignUpForm() {
             type="email"
             required
             autoComplete="email"
-            placeholder="you@company.com"
+            placeholder="name@company.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            className="h-12 rounded-[8px] border-border-light dark:border-border bg-white dark:bg-card text-foreground"
           />
         </div>
 
+        {/* Password input with generator helper */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <Label htmlFor="password">
+            <Label htmlFor="password" className="text-sm font-medium text-foreground">
               Password
             </Label>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleGeneratePassword}
-                className="text-caption text-primary hover:underline font-medium cursor-pointer"
-              >
-                Generate secure
-              </button>
-              <span className="text-caption text-border" aria-hidden="true">|</span>
+            <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => setShowPassword((prev) => !prev)}
-                className="text-caption text-muted-foreground hover:text-foreground cursor-pointer"
+                className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
               >
                 {showPassword ? "Hide" : "Show"}
+              </button>
+              <button
+                type="button"
+                onClick={handleGeneratePassword}
+                className="text-xs text-primary hover:underline font-medium cursor-pointer"
+              >
+                Generate strong
               </button>
             </div>
           </div>
@@ -294,146 +272,121 @@ function SignUpForm() {
             placeholder="Create a strong password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="font-mono text-meta"
+            className="h-12 rounded-[8px] border-border-light dark:border-border bg-white dark:bg-card text-foreground"
           />
+        </div>
 
-          {copiedNotice && (
-            <p className="mt-1 text-caption text-primary font-medium">
-              Generated password copied to clipboard.
+        {/* Notice after generating and copying password */}
+        {copiedNotice && (
+          <p className="text-xs text-primary font-medium">
+            Generated password copied to clipboard.
+          </p>
+        )}
+
+        {/* Password security condition checklist */}
+        {password.length > 0 && (
+          <div className="p-3 rounded-[8px] bg-secondary/40 border border-border-light dark:border-border space-y-1.5">
+            <p className="text-xs font-medium text-muted-foreground mb-1">
+              Password requirements:
             </p>
-          )}
-
-          {/* Password complexity checklist */}
-          <div className="mt-3 p-3 rounded-md bg-secondary/50 border border-border space-y-2">
-            <p className="text-caption font-medium text-muted-foreground">
-              Password requirements
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-caption">
-              <div
-                className={`flex items-center gap-1.5 transition-colors ${
-                  criteria.minLength ? "text-primary font-medium" : "text-muted-foreground"
-                }`}
-              >
+            <div className="grid grid-cols-2 gap-1 text-xs">
+              <div className="flex items-center gap-1.5">
                 {criteria.minLength ? (
-                  <Check className="size-3.5 text-primary shrink-0" strokeWidth={2} aria-hidden="true" />
+                  <Check className="size-3 text-primary shrink-0" />
                 ) : (
-                  <Circle className="size-3.5 text-muted-foreground/40 shrink-0" aria-hidden="true" />
+                  <Circle className="size-3 text-muted-foreground shrink-0" />
                 )}
-                <span>At least 8 characters</span>
+                <span className={criteria.minLength ? "text-foreground font-medium" : "text-muted-foreground"}>
+                  8+ characters
+                </span>
               </div>
-
-              <div
-                className={`flex items-center gap-1.5 transition-colors ${
-                  criteria.hasUppercase ? "text-primary font-medium" : "text-muted-foreground"
-                }`}
-              >
+              <div className="flex items-center gap-1.5">
                 {criteria.hasUppercase ? (
-                  <Check className="size-3.5 text-primary shrink-0" strokeWidth={2} aria-hidden="true" />
+                  <Check className="size-3 text-primary shrink-0" />
                 ) : (
-                  <Circle className="size-3.5 text-muted-foreground/40 shrink-0" aria-hidden="true" />
+                  <Circle className="size-3 text-muted-foreground shrink-0" />
                 )}
-                <span>One uppercase letter</span>
+                <span className={criteria.hasUppercase ? "text-foreground font-medium" : "text-muted-foreground"}>
+                  1 uppercase letter
+                </span>
               </div>
-
-              <div
-                className={`flex items-center gap-1.5 transition-colors ${
-                  criteria.hasNumber ? "text-primary font-medium" : "text-muted-foreground"
-                }`}
-              >
+              <div className="flex items-center gap-1.5">
                 {criteria.hasNumber ? (
-                  <Check className="size-3.5 text-primary shrink-0" strokeWidth={2} aria-hidden="true" />
+                  <Check className="size-3 text-primary shrink-0" />
                 ) : (
-                  <Circle className="size-3.5 text-muted-foreground/40 shrink-0" aria-hidden="true" />
+                  <Circle className="size-3 text-muted-foreground shrink-0" />
                 )}
-                <span>One number (0-9)</span>
+                <span className={criteria.hasNumber ? "text-foreground font-medium" : "text-muted-foreground"}>
+                  1 number
+                </span>
               </div>
-
-              <div
-                className={`flex items-center gap-1.5 transition-colors ${
-                  criteria.hasSpecial ? "text-primary font-medium" : "text-muted-foreground"
-                }`}
-              >
+              <div className="flex items-center gap-1.5">
                 {criteria.hasSpecial ? (
-                  <Check className="size-3.5 text-primary shrink-0" strokeWidth={2} aria-hidden="true" />
+                  <Check className="size-3 text-primary shrink-0" />
                 ) : (
-                  <Circle className="size-3.5 text-muted-foreground/40 shrink-0" aria-hidden="true" />
+                  <Circle className="size-3 text-muted-foreground shrink-0" />
                 )}
-                <span>One special symbol</span>
+                <span className={criteria.hasSpecial ? "text-foreground font-medium" : "text-muted-foreground"}>
+                  1 special symbol
+                </span>
               </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Error display with programmatic focus */}
+        {/* Error notification display */}
         {error && (
           <div
             ref={errorRef}
             tabIndex={-1}
             role="alert"
-            className="p-3 rounded-md bg-status-danger-bg text-status-danger-fg text-body border border-destructive/20 outline-none"
+            className="p-3 rounded-[8px] bg-status-danger-bg text-status-danger-fg text-sm border border-destructive/20 outline-none"
           >
             {error}
           </div>
         )}
 
+        {/* Primary submission button */}
         <Button
           type="submit"
           disabled={!canSubmit}
-          className="w-full mt-2"
+          className="w-full h-12 rounded-[8px] bg-ink text-white hover:bg-neutral-800 dark:bg-white dark:text-ink dark:hover:bg-neutral-200 transition-colors font-medium text-sm"
         >
           {isPending ? "Creating account..." : "Create account"}
         </Button>
       </form>
-
-      <div className="mt-6 pt-5 border-t border-border text-meta text-muted-foreground text-left">
-        <span>Already have an account? </span>
-        <Link
-          href="/auth/sign-in"
-          className="text-primary font-medium hover:underline"
-        >
-          Sign in
-        </Link>
-      </div>
-    </Card>
+    </div>
   );
 }
 
+// Sign-up page rendering the shared AuthShell split-screen layout
 export default function SignUpPage() {
   return (
-    <div className="min-h-screen flex flex-col bg-background text-foreground">
-      {/* Minimal Top Header */}
-      <header className="px-6 py-6 page-container w-full mx-auto">
-        <Link href="/" className="inline-flex items-center gap-2 group">
-          <div className="size-7 rounded-md bg-card border border-border flex items-center justify-center text-primary group-hover:border-primary/40 transition-colors">
-            <Activity className="size-4" strokeWidth={1.5} aria-hidden="true" />
-          </div>
-          <span className="font-display font-semibold text-lg text-foreground">
-            AutoPulse
-          </span>
-        </Link>
-      </header>
-
-      {/* Main Two-Column Layout */}
-      <main className="flex-1 page-container w-full mx-auto px-6 py-8 md:py-12 flex items-center">
-        <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-          {/* Left Column: Sign-up form (max 400px) */}
-          <Suspense
-            fallback={
-              <Card className="w-full max-w-[400px] p-6 sm:p-8 bg-card border-border text-left mx-auto lg:mx-0">
-                <p className="text-body text-muted-foreground">Loading sign up form...</p>
-              </Card>
-            }
+    <AuthShell
+      title="Create your AutoPulse account"
+      description="Setup takes a few minutes. You approve every post before it goes live."
+      agreementType="sign-up"
+      footer={
+        <p className="text-sm text-muted-foreground text-left">
+          Already have an account?{" "}
+          <Link
+            href="/auth/sign-in"
+            className="text-primary font-medium hover:underline"
           >
-            <SignUpForm />
-          </Suspense>
-
-          {/* Right Column: Status legend (desktop only) */}
-          <div className="hidden lg:flex justify-end">
-            <AuthStatusLegend />
+            Sign in
+          </Link>
+        </p>
+      }
+    >
+      <Suspense
+        fallback={
+          <div className="w-full py-8 text-center text-sm text-muted-foreground">
+            Loading sign up form...
           </div>
-        </div>
-      </main>
-    </div>
+        }
+      >
+        <SignUpForm />
+      </Suspense>
+    </AuthShell>
   );
 }

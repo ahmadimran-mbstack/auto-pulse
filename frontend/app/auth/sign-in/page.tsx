@@ -4,15 +4,13 @@ import { Suspense, useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth/client";
-import { Card } from "@/components/ui/card";
+import { AuthShell } from "../components/AuthShell";
+import { GoogleSignInButton } from "../components/GoogleSignInButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Separator } from "@/components/ui/separator";
-import { AuthStatusLegend } from "../components/AuthStatusLegend";
-import { GoogleSignInButton } from "../components/GoogleSignInButton";
-import { Activity, AlertCircle, CheckCircle2 } from "lucide-react";
+import { AlertCircle, CheckCircle2 } from "lucide-react";
 
 interface OtpClient {
   emailOtp: {
@@ -23,6 +21,7 @@ interface OtpClient {
   };
 }
 
+// Inner form handling user authentication inputs and submissions
 function SignInForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -37,13 +36,14 @@ function SignInForm() {
   const urlError = searchParams.get("error");
   const urlMessage = searchParams.get("message");
 
-  // Move focus to error container when an error occurs for accessibility
+  // Moves focus to the error banner for accessibility when an error occurs
   useEffect(() => {
     if (error && errorRef.current) {
       errorRef.current.focus();
     }
   }, [error]);
 
+  // Authenticates the user with email and password, then proceeds to OTP verification
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
@@ -103,17 +103,10 @@ function SignInForm() {
   };
 
   return (
-    <Card className="w-full max-w-[400px] p-6 sm:p-8 bg-card border-border text-left mx-auto lg:mx-0">
-      <h1 className="text-title font-display text-foreground mb-2">
-        Sign in
-      </h1>
-      <p className="text-body text-muted-foreground mb-6">
-        Access your AutoPulse drafts and review queue.
-      </p>
-
+    <div className="w-full space-y-4">
       {/* Account linking error notification */}
       {urlError === "account_not_linked" ? (
-        <Alert variant="destructive" className="mb-5">
+        <Alert variant="destructive" className="mb-4">
           <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
           <AlertTitle>Account already exists</AlertTitle>
           <AlertDescription className="text-caption leading-relaxed">
@@ -121,14 +114,14 @@ function SignInForm() {
           </AlertDescription>
         </Alert>
       ) : urlError === "access_denied" ? (
-        <Alert variant="destructive" className="mb-5">
+        <Alert variant="destructive" className="mb-4">
           <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
           <AlertDescription className="text-meta">
             Google sign in was cancelled or access was denied. Please try again.
           </AlertDescription>
         </Alert>
       ) : urlError ? (
-        <Alert variant="destructive" className="mb-5">
+        <Alert variant="destructive" className="mb-4">
           <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
           <AlertDescription className="text-meta">
             Authentication error ({urlError}). Please sign in with your email and password.
@@ -138,7 +131,7 @@ function SignInForm() {
 
       {/* Password reset success notification */}
       {urlMessage === "password_reset_success" && (
-        <Alert className="mb-5 border-signal-line bg-signal-soft text-foreground">
+        <Alert className="mb-4 border-signal-line bg-signal-soft text-foreground">
           <CheckCircle2 className="size-4 text-primary shrink-0" aria-hidden="true" />
           <AlertDescription className="text-meta">
             Your password has been successfully reset. Please sign in with your new password.
@@ -147,21 +140,26 @@ function SignInForm() {
       )}
 
       {/* Google Social Sign In */}
-      <div className="mb-5">
-        <GoogleSignInButton text="Sign in with Google" />
+      <div className="w-full">
+        <GoogleSignInButton text="Continue with Google" />
       </div>
 
-      {/* Visual separator */}
-      <div className="flex items-center gap-3 mb-5">
-        <Separator className="flex-1" />
-        <span className="text-caption text-muted-foreground">or continue with email</span>
-        <Separator className="flex-1" />
+      {/* Visual divider */}
+      <div className="relative py-2 flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-border-light dark:border-border" />
+        </div>
+        <div className="relative bg-white dark:bg-background px-3 text-xs text-muted-foreground uppercase tracking-wider">
+          or
+        </div>
       </div>
 
+      {/* Email and Password Form */}
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-1.5">
-          <Label htmlFor="email">
-            Email address
+        {/* Email field */}
+        <div className="space-y-1.5 text-left">
+          <Label htmlFor="email" className="text-sm font-medium text-foreground">
+            Email
           </Label>
           <Input
             id="email"
@@ -169,28 +167,30 @@ function SignInForm() {
             type="email"
             required
             autoComplete="email"
-            placeholder="you@company.com"
+            placeholder="name@company.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            className="h-12 rounded-[8px] border-border-light dark:border-border bg-white dark:bg-card text-foreground"
           />
         </div>
 
-        <div className="space-y-1.5">
+        {/* Password field with show/hide and forgot password link */}
+        <div className="space-y-1.5 text-left">
           <div className="flex items-center justify-between">
-            <Label htmlFor="password">
+            <Label htmlFor="password" className="text-sm font-medium text-foreground">
               Password
             </Label>
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => setShowPassword((prev) => !prev)}
-                className="text-caption text-muted-foreground hover:text-foreground cursor-pointer"
+                className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
               >
                 {showPassword ? "Hide" : "Show"}
               </button>
               <Link
                 href="/auth/forgot-password"
-                className="text-caption text-primary hover:underline"
+                className="text-xs text-primary hover:underline font-medium"
               >
                 Forgot password?
               </Link>
@@ -202,81 +202,66 @@ function SignInForm() {
             type={showPassword ? "text" : "password"}
             required
             autoComplete="current-password"
-            placeholder="Your password"
+            placeholder="Enter your password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            className="h-12 rounded-[8px] border-border-light dark:border-border bg-white dark:bg-card text-foreground"
           />
         </div>
 
-        {/* Error display with programmatic focus */}
+        {/* Inline error notice */}
         {error && (
           <div
             ref={errorRef}
             tabIndex={-1}
             role="alert"
-            className="p-3 rounded-md bg-status-danger-bg text-status-danger-fg text-body border border-destructive/20 outline-none"
+            className="p-3 rounded-[8px] bg-status-danger-bg text-status-danger-fg text-sm border border-destructive/20 outline-none text-left"
           >
             {error}
           </div>
         )}
 
+        {/* Primary submit button */}
         <Button
           type="submit"
           disabled={isPending || !email.trim() || !password}
-          className="w-full"
+          className="w-full h-12 rounded-[8px] bg-ink text-white hover:bg-neutral-800 dark:bg-white dark:text-ink dark:hover:bg-neutral-200 transition-colors font-medium text-sm"
         >
           {isPending ? "Signing in..." : "Sign in"}
         </Button>
       </form>
-
-      <div className="mt-6 pt-5 border-t border-border text-meta text-muted-foreground text-left">
-        <span>New here? </span>
-        <Link
-          href="/auth/sign-up"
-          className="text-primary font-medium hover:underline"
-        >
-          Create your account
-        </Link>
-      </div>
-    </Card>
+    </div>
   );
 }
 
+// Sign-in page rendering the shared AuthShell split-screen layout
 export default function SignInPage() {
   return (
-    <div className="min-h-screen flex flex-col bg-background text-foreground">
-      {/* Minimal Top Header */}
-      <header className="px-6 py-6 page-container w-full mx-auto">
-        <Link href="/" className="inline-flex items-center gap-2 group">
-          <div className="size-7 rounded-md bg-card border border-border flex items-center justify-center text-primary group-hover:border-primary/40 transition-colors">
-            <Activity className="size-4" strokeWidth={1.5} aria-hidden="true" />
-          </div>
-          <span className="font-display font-semibold text-lg text-foreground">
-            AutoPulse
-          </span>
-        </Link>
-      </header>
-
-      {/* Main Two-Column Layout */}
-      <main className="flex-1 page-container w-full mx-auto px-6 py-8 md:py-12 flex items-center">
-        <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-          {/* Left Column: Sign-in form (max 400px) */}
-          <Suspense
-            fallback={
-              <Card className="w-full max-w-[400px] p-6 sm:p-8 bg-card border-border text-left mx-auto lg:mx-0">
-                <p className="text-body text-muted-foreground">Loading sign in form...</p>
-              </Card>
-            }
+    <AuthShell
+      title="Sign in to AutoPulse"
+      description="Welcome back. Sign in to manage your LinkedIn posts."
+      agreementType="sign-in"
+      footer={
+        <p className="text-sm text-muted-foreground text-left">
+          New here?{" "}
+          <Link
+            href="/auth/sign-up"
+            className="text-primary font-medium hover:underline"
           >
-            <SignInForm />
-          </Suspense>
-
-          {/* Right Column: Status legend (quiet panel on desktop only) */}
-          <div className="hidden lg:flex justify-end">
-            <AuthStatusLegend />
+            Create your account
+          </Link>
+        </p>
+      }
+    >
+      <Suspense
+        fallback={
+          <div className="w-full py-8 text-center text-sm text-muted-foreground">
+            Loading sign in form...
           </div>
-        </div>
-      </main>
-    </div>
+        }
+      >
+        <SignInForm />
+      </Suspense>
+    </AuthShell>
   );
 }

@@ -4,13 +4,12 @@ import { Suspense, useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth/client";
-import { Card } from "@/components/ui/card";
+import { AuthShell } from "../components/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AuthStatusLegend } from "../components/AuthStatusLegend";
-import { Activity, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { CheckCircle2 } from "lucide-react";
 
 interface LegacyResetClient {
   resetPassword?: (options: {
@@ -19,6 +18,7 @@ interface LegacyResetClient {
   }) => Promise<{ data?: { status: boolean }; error?: { message?: string } }>;
 }
 
+// Inner form managing OTP code input and new password submission
 function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -39,21 +39,21 @@ function ResetPasswordForm() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const [resendNotice, setResendNotice] = useState<string | null>(null);
 
-  // Focus error container when an error occurs
+  // Moves focus to error container when an error occurs
   useEffect(() => {
     if (error && errorRef.current) {
       errorRef.current.focus();
     }
   }, [error]);
 
-  // Resend cooldown timer
+  // Resend cooldown countdown timer
   useEffect(() => {
     if (resendCooldown <= 0) return;
     const timer = setTimeout(() => setResendCooldown((prev) => prev - 1), 1000);
     return () => clearTimeout(timer);
   }, [resendCooldown]);
 
-  // Request a fresh OTP code
+  // Requests a fresh OTP code
   const handleResendCode = async () => {
     const cleanEmail = email.trim();
     if (!cleanEmail) {
@@ -87,7 +87,7 @@ function ResetPasswordForm() {
     }
   };
 
-  // Submit password reset
+  // Submits the new password with OTP verification
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
@@ -119,7 +119,7 @@ function ResetPasswordForm() {
     setIsPending(true);
 
     try {
-      // If a token was provided via link, use token reset
+      // If a reset token was provided via email link
       if (token) {
         const client = authClient as unknown as LegacyResetClient;
         if (typeof client.resetPassword === "function") {
@@ -140,7 +140,7 @@ function ResetPasswordForm() {
         }
       }
 
-      // Standard Neon Auth Email OTP password reset
+      // Standard Email OTP password reset
       const res = await fetch("/api/auth/email-otp/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -173,207 +173,182 @@ function ResetPasswordForm() {
     }
   };
 
+  // Success confirmation screen
+  if (isSuccess) {
+    return (
+      <div className="space-y-4 text-left">
+        <Alert className="border-signal-line bg-signal-soft text-foreground">
+          <CheckCircle2 className="size-4 text-primary shrink-0" aria-hidden="true" />
+          <AlertDescription className="text-sm">
+            Your password has been successfully updated. You can now sign in with your new password.
+          </AlertDescription>
+        </Alert>
+        <Button
+          type="button"
+          onClick={() => router.push("/auth/sign-in")}
+          className="w-full h-12 rounded-[8px] bg-ink text-white hover:bg-neutral-800 dark:bg-white dark:text-ink dark:hover:bg-neutral-200 transition-colors font-medium text-sm"
+        >
+          Sign in now
+        </Button>
+      </div>
+    );
+  }
+
   return (
-    <Card className="w-full max-w-[400px] p-6 sm:p-8 bg-card border-border text-left mx-auto lg:mx-0">
-      <h1 className="text-title font-display text-foreground mb-2">
-        Set new password
-      </h1>
-      <p className="text-body text-muted-foreground mb-6">
-        {token
-          ? "Choose a secure password for your AutoPulse account."
-          : `Enter the 6-digit code sent to ${email || "your email"} and your new password.`}
-      </p>
+    <form onSubmit={handleSubmit} className="space-y-4 text-left">
+      {/* Email input field */}
+      <div className="space-y-1.5">
+        <Label htmlFor="email" className="text-sm font-medium text-foreground">
+          Email address
+        </Label>
+        <Input
+          id="email"
+          name="email"
+          type="email"
+          required
+          autoComplete="email"
+          placeholder="name@company.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="h-12 rounded-[8px] border-border-light dark:border-border bg-white dark:bg-card text-foreground"
+        />
+      </div>
 
-      {isSuccess ? (
-        <div className="space-y-4">
-          <Alert className="border-signal-line bg-signal-soft">
-            <CheckCircle2 className="size-4 text-primary shrink-0" aria-hidden="true" />
-            <AlertTitle className="text-meta font-medium text-foreground">
-              Password updated
-            </AlertTitle>
-            <AlertDescription className="text-caption text-muted-foreground leading-relaxed">
-              Your password has been changed successfully. You can now sign in with your new credentials.
-            </AlertDescription>
-          </Alert>
-
-          <Button
-            type="button"
-            onClick={() => router.push("/auth/sign-in")}
-            className="w-full"
-          >
-            Sign in with new password
-          </Button>
+      {/* 6-digit verification code input (shown unless token link is present) */}
+      {!token && (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="otp" className="text-sm font-medium text-foreground">
+              Verification code
+            </Label>
+            <button
+              type="button"
+              onClick={handleResendCode}
+              disabled={resendCooldown > 0}
+              className="text-xs text-primary hover:underline font-medium disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+            >
+              {resendCooldown > 0
+                ? `Resend code in ${resendCooldown}s`
+                : "Resend code"}
+            </button>
+          </div>
+          <Input
+            id="otp"
+            name="otp"
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            placeholder="6-digit code"
+            value={otp}
+            onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+            className="h-12 rounded-[8px] border-border-light dark:border-border bg-white dark:bg-card text-foreground font-mono text-center tracking-widest text-lg"
+          />
         </div>
-      ) : (
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Email address field */}
-          <div className="space-y-1.5">
-            <Label htmlFor="email">
-              Account email
-            </Label>
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              placeholder="you@company.com"
-            />
-          </div>
-
-          {/* Verification Code field (when not using URL token) */}
-          {!token && (
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="otp">
-                  6-digit reset code
-                </Label>
-                <button
-                  type="button"
-                  onClick={handleResendCode}
-                  disabled={resendCooldown > 0}
-                  className="text-caption text-primary hover:underline disabled:text-muted-foreground disabled:no-underline cursor-pointer disabled:cursor-not-allowed"
-                >
-                  {resendCooldown > 0
-                    ? `Resend in ${resendCooldown}s`
-                    : "Resend code"}
-                </button>
-              </div>
-              <Input
-                id="otp"
-                name="otp"
-                type="text"
-                maxLength={6}
-                value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-                required
-                placeholder="123456"
-                className="font-mono text-center tracking-widest text-lead tabular-nums"
-              />
-            </div>
-          )}
-
-          {/* New password field */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="newPassword">
-                New password
-              </Label>
-              <button
-                type="button"
-                onClick={() => setShowPassword((prev) => !prev)}
-                className="text-caption text-muted-foreground hover:text-foreground cursor-pointer"
-              >
-                {showPassword ? "Hide" : "Show"}
-              </button>
-            </div>
-            <Input
-              id="newPassword"
-              name="newPassword"
-              type={showPassword ? "text" : "password"}
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              required
-              minLength={8}
-              placeholder="Minimum 8 characters"
-            />
-          </div>
-
-          {/* Confirm password field */}
-          <div className="space-y-1.5">
-            <Label htmlFor="confirmPassword">
-              Confirm new password
-            </Label>
-            <Input
-              id="confirmPassword"
-              name="confirmPassword"
-              type={showPassword ? "text" : "password"}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              required
-              minLength={8}
-              placeholder="Re-enter your new password"
-            />
-          </div>
-
-          {resendNotice && (
-            <Alert className="border-signal-line bg-signal-soft">
-              <AlertDescription className="text-caption text-foreground">
-                {resendNotice}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {error && (
-            <div ref={errorRef} tabIndex={-1} className="outline-none">
-              <Alert variant="destructive">
-                <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
-                <AlertDescription className="text-meta">
-                  {error}
-                </AlertDescription>
-              </Alert>
-            </div>
-          )}
-
-          <Button
-            type="submit"
-            disabled={isPending || !newPassword || !confirmPassword || (!token && !otp)}
-            className="w-full"
-          >
-            {isPending ? "Updating password..." : "Update password"}
-          </Button>
-        </form>
       )}
 
-      <div className="mt-6 pt-5 border-t border-border text-meta text-muted-foreground text-left">
-        <span>Remember your password? </span>
-        <Link
-          href="/auth/sign-in"
-          className="text-primary font-medium hover:underline"
-        >
-          Sign in
-        </Link>
+      {/* Resend notice alert */}
+      {resendNotice && (
+        <p className="text-xs text-primary font-medium">
+          {resendNotice}
+        </p>
+      )}
+
+      {/* New password input */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <Label htmlFor="newPassword" className="text-sm font-medium text-foreground">
+            New password
+          </Label>
+          <button
+            type="button"
+            onClick={() => setShowPassword((prev) => !prev)}
+            className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+          >
+            {showPassword ? "Hide" : "Show"}
+          </button>
+        </div>
+        <Input
+          id="newPassword"
+          name="newPassword"
+          type={showPassword ? "text" : "password"}
+          required
+          autoComplete="new-password"
+          placeholder="At least 8 characters"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          className="h-12 rounded-[8px] border-border-light dark:border-border bg-white dark:bg-card text-foreground"
+        />
       </div>
-    </Card>
+
+      {/* Confirm password input */}
+      <div className="space-y-1.5">
+        <Label htmlFor="confirmPassword" className="text-sm font-medium text-foreground">
+          Confirm new password
+        </Label>
+        <Input
+          id="confirmPassword"
+          name="confirmPassword"
+          type={showPassword ? "text" : "password"}
+          required
+          autoComplete="new-password"
+          placeholder="Retype your new password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          className="h-12 rounded-[8px] border-border-light dark:border-border bg-white dark:bg-card text-foreground"
+        />
+      </div>
+
+      {/* Inline error notice */}
+      {error && (
+        <div
+          ref={errorRef}
+          tabIndex={-1}
+          role="alert"
+          className="p-3 rounded-[8px] bg-status-danger-bg text-status-danger-fg text-sm border border-destructive/20 outline-none"
+        >
+          {error}
+        </div>
+      )}
+
+      {/* Submit button */}
+      <Button
+        type="submit"
+        disabled={isPending || newPassword.length < 8 || newPassword !== confirmPassword}
+        className="w-full h-12 rounded-[8px] bg-ink text-white hover:bg-neutral-800 dark:bg-white dark:text-ink dark:hover:bg-neutral-200 transition-colors font-medium text-sm"
+      >
+        {isPending ? "Resetting password..." : "Reset password"}
+      </Button>
+    </form>
   );
 }
 
+// Reset password page rendering the shared AuthShell split-screen layout
 export default function ResetPasswordPage() {
   return (
-    <div className="min-h-screen flex flex-col bg-background text-foreground">
-      {/* Minimal Top Header */}
-      <header className="px-6 py-6 page-container w-full mx-auto">
-        <Link href="/" className="inline-flex items-center gap-2 group">
-          <div className="size-7 rounded-md bg-card border border-border flex items-center justify-center text-primary group-hover:border-primary/40 transition-colors">
-            <Activity className="size-4" strokeWidth={1.5} aria-hidden="true" />
-          </div>
-          <span className="font-display font-semibold text-lg text-foreground">
-            AutoPulse
-          </span>
-        </Link>
-      </header>
-
-      {/* Main Two-Column Layout */}
-      <main className="flex-1 page-container w-full mx-auto px-6 py-8 md:py-12 flex items-center">
-        <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-          {/* Left Column wrapped in Suspense for useSearchParams */}
-          <Suspense
-            fallback={
-              <Card className="w-full max-w-[400px] p-6 sm:p-8 bg-card border-border text-left mx-auto lg:mx-0">
-                <p className="text-body text-muted-foreground">Loading password reset...</p>
-              </Card>
-            }
+    <AuthShell
+      title="Choose a new password"
+      description="Pick a password you do not use anywhere else."
+      footer={
+        <p className="text-sm text-muted-foreground text-left">
+          <Link
+            href="/auth/sign-in"
+            className="text-primary font-medium hover:underline"
           >
-            <ResetPasswordForm />
-          </Suspense>
-
-          {/* Right Column: Status legend (quiet panel on desktop only) */}
-          <div className="hidden lg:flex justify-end">
-            <AuthStatusLegend />
+            Back to sign in
+          </Link>
+        </p>
+      }
+    >
+      <Suspense
+        fallback={
+          <div className="w-full py-8 text-center text-sm text-muted-foreground">
+            Loading reset form...
           </div>
-        </div>
-      </main>
-    </div>
+        }
+      >
+        <ResetPasswordForm />
+      </Suspense>
+    </AuthShell>
   );
 }
