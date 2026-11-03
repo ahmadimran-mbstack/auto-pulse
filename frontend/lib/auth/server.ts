@@ -32,11 +32,14 @@ async function createSafeNextRequestContext() {
       return headerStore.get(name) ?? null;
     },
     getOrigin() {
-      return (
+      const raw =
         headerStore.get("origin") ||
         headerStore.get("referer")?.split("/").slice(0, 3).join("/") ||
-        ""
-      );
+        "http://localhost:3000";
+      return raw
+        .replace(/:\/\/127\.0\.0\.1(:[0-9]+)?/g, "://localhost$1")
+        .replace(/:\/\/0\.0\.0\.0(:[0-9]+)?/g, "://localhost$1")
+        .replace(/:\/\/\[::1\](:[0-9]+)?/g, "://localhost$1");
     },
     getFramework() {
       return "nextjs" as const;

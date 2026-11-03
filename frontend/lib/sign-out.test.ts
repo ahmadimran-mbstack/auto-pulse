@@ -106,6 +106,24 @@ describe("Sign Out & Cookie Invalidation", () => {
   });
 
   describe("POST /api/auth/[...path] Route Handler", () => {
+    it("normalizes loopback IP (127.0.0.1) origin to localhost", async () => {
+      const mockRequest = new Request("http://127.0.0.1:3000/api/auth/sign-in/email", {
+        method: "POST",
+        headers: {
+          "Origin": "http://127.0.0.1:3000",
+          "Referer": "http://127.0.0.1:3000/auth/sign-in",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: "test@example.com", password: "password123" }),
+      });
+      const context = {
+        params: Promise.resolve({ path: ["sign-in", "email"] }),
+      };
+
+      const response = await authProxyPost(mockRequest, context);
+      expect(response.status).toBe(200);
+    });
+
     it("attaches comprehensive Set-Cookie deletion headers on sign-out requests", async () => {
       const mockRequest = new Request("https://autopulse.example.com/api/auth/sign-out", {
         method: "POST",

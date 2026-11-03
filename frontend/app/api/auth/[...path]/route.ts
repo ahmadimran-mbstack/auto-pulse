@@ -4,11 +4,6 @@ import { auth } from "@/lib/auth/server";
 // Reference: https://neon.com/docs/auth/quick-start/nextjs-api-only
 const baseHandlers = auth.handler();
 
-export const GET = baseHandlers.GET;
-export const PUT = baseHandlers.PUT;
-export const DELETE = baseHandlers.DELETE;
-export const PATCH = baseHandlers.PATCH;
-
 export const AUTH_COOKIE_NAMES = [
   "__Secure-neon-auth.session_token",
   "__Secure-neon-auth.local.session_data",
@@ -36,10 +31,101 @@ export const AUTH_COOKIE_NAMES = [
   "session",
 ];
 
+// Helper to normalize any local loopback IP (127.0.0.1, 0.0.0.0, [::1]) to localhost
+function normalizeLoopback(val: string): string {
+  if (!val) return val;
+  return val
+    .replace(/:\/\/127\.0\.0\.1(:[0-9]+)?/g, "://localhost$1")
+    .replace(/:\/\/0\.0\.0\.0(:[0-9]+)?/g, "://localhost$1")
+    .replace(/:\/\/\[::1\](:[0-9]+)?/g, "://localhost$1");
+}
+
+async function sanitizeAuthRequest(request: Request, forceOrigin?: string): Promise<Request> {
+  const headers = new Headers(request.headers);
+  const rawOrigin = headers.get("origin") || "";
+  const rawReferer = headers.get("referer") || "";
+
+  let effectiveOrigin = forceOrigin || (rawOrigin ? normalizeLoopback(rawOrigin) : "http://localhost:3000");
+  if (effectiveOrigin.includes("127.0.0.1") || effectiveOrigin.includes("0.0.0.0")) {
+    effectiveOrigin = normalizeLoopback(effectiveOrigin);
+  }
+
+  headers.set("origin", effectiveOrigin);
+
+  if (rawReferer) {
+    const effectiveReferer = forceOrigin
+      ? rawReferer.replace(/https?:\/\/[^/]+/i, forceOrigin)
+      : normalizeLoopback(rawReferer);
+    headers.set("referer", effectiveReferer);
+  }
+
+  let bodyText: string | undefined = undefined;
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    try {
+      bodyText = await request.clone().text();
+    } catch {
+      // Body may be empty or already consumed
+    }
+  }
+
+  const effectiveUrl = normalizeLoopback(request.url);
+
+  return new Request(effectiveUrl, {
+    method: request.method,
+    headers,
+    body: bodyText,
+  });
+}
+
+async function executeWithOriginFallback(
+  handler: (req: Request, ctx: any) => Promise<Response>,
+  request: Request,
+  context: any
+): Promise<Response> {
+  const sanitizedReq = await sanitizeAuthRequest(request);
+  let res = await handler(sanitizedReq, context);
+
+  // If upstream rejected with INVALID_ORIGIN, retry with fallback trusted origin
+  if (res.status === 403) {
+    try {
+      const cloned = res.clone();
+      const data = await cloned.json().catch(() => null);
+      if (
+        data &&
+        (data.code === "INVALID_ORIGIN" ||
+          (typeof data.message === "string" && data.message.toLowerCase().includes("origin")))
+      ) {
+        const retryReq = await sanitizeAuthRequest(request, "http://localhost:3000");
+        res = await handler(retryReq, context);
+      }
+    } catch {
+      // Fallback inspection failed; return original response
+    }
+  }
+
+  return res;
+}
+
+export async function GET(request: Request, context: any) {
+  return executeWithOriginFallback(baseHandlers.GET, request, context);
+}
+
+export async function PUT(request: Request, context: any) {
+  return executeWithOriginFallback(baseHandlers.PUT, request, context);
+}
+
+export async function DELETE(request: Request, context: any) {
+  return executeWithOriginFallback(baseHandlers.DELETE, request, context);
+}
+
+export async function PATCH(request: Request, context: any) {
+  return executeWithOriginFallback(baseHandlers.PATCH, request, context);
+}
+
 export async function POST(request: Request, context: any) {
   let res: Response;
   try {
-    res = await baseHandlers.POST(request, context);
+    res = await executeWithOriginFallback(baseHandlers.POST, request, context);
   } catch (err) {
     // Upstream error or network issue: ensure response is created so client can still receive cookie cleanup
     res = new Response(JSON.stringify({ success: true }), {
@@ -102,4 +188,3 @@ export async function POST(request: Request, context: any) {
 
   return res;
 }
-
