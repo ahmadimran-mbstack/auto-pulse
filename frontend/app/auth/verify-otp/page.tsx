@@ -141,7 +141,7 @@ function VerifyOtpForm() {
           // Clear pending OTP lock cookie
           document.cookie =
             "autopulse_otp_pending=; path=/; max-age=0; SameSite=Lax";
-          router.push("/app");
+          router.push("/onboarding");
         }
       } else {
         // Verify email address with the OTP
@@ -160,10 +160,10 @@ function VerifyOtpForm() {
           document.cookie =
             "autopulse_signed_out=; path=/; max-age=0; SameSite=Lax";
           setSuccessMessage(
-            "Email successfully verified. Redirecting to your dashboard..."
+            "Email successfully verified. Redirecting to setup..."
           );
           setTimeout(() => {
-            router.push("/app");
+            router.push("/onboarding");
           }, 800);
         }
       }

@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   useDashboardQuery,
   usePostsQuery,
@@ -29,6 +29,7 @@ interface AppDashboardClientProps {
 }
 
 export function AppDashboardClient({ user }: AppDashboardClientProps) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const statusParam = searchParams.get("status") as PostsTabFilter | null;
   const mappedStatus = statusParam ? mapTabToStatusFilter(statusParam) : undefined;
@@ -40,6 +41,13 @@ export function AppDashboardClient({ user }: AppDashboardClientProps) {
     isError: isDashError,
     refetch: refetchDash,
   } = useDashboardQuery(user.id);
+
+  // Guard: If profile has not completed onboarding, route to onboarding wizard
+  React.useEffect(() => {
+    if (dashboardData?.profile && dashboardData.profile.onboarding_complete === false) {
+      router.replace("/app/onboarding");
+    }
+  }, [dashboardData, router]);
 
   // 2. TanStack Query: Fetch posts with status filter
   const [limit, setLimit] = React.useState(20);

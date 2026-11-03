@@ -43,9 +43,9 @@ export default async function AuthLayout({ children }: AuthLayoutProps) {
   }
 
   // If user is already authenticated and email is verified, and not awaiting OTP verification,
-  // redirect them to the dashboard
+  // redirect them to onboarding (which automatically advances to /app if onboarding is completed)
   if (session?.user && session.user.emailVerified && !isOtpPending) {
-    redirect("/app");
+    redirect("/onboarding");
   }
 
   return <>{children}</>;
