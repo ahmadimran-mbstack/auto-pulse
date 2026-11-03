@@ -4,21 +4,22 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getProfile, saveStep1, ApiClientError } from "@/lib/api";
 import { OnboardingShell, OnboardingSkeleton } from "../components/OnboardingShell";
-import { TagInput } from "@/components/app/TagInput";
+import { TagInput } from "../components/TagInput";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 
-export default function OnboardingStep1Page() {
+// Step 1: Topics and niche definition for the user's LinkedIn profile
+export default function OnboardingTopicsPage() {
   const router = useRouter();
 
-  // Loading and submission state
+  // Loading, saving, and error states
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  // Controlled form state
+  // Controlled form input states
   const [roleTitle, setRoleTitle] = useState("");
   const [industry, setIndustry] = useState("");
   const [nicheDescription, setNicheDescription] = useState("");
@@ -26,13 +27,13 @@ export default function OnboardingStep1Page() {
   const [topicsInclude, setTopicsInclude] = useState<string[]>([]);
   const [topicsAvoid, setTopicsAvoid] = useState<string[]>([]);
 
-  // Element references for focusing the first invalid input
+  // Input references for focusing fields that fail validation
   const nicheRef = useRef<HTMLTextAreaElement>(null);
   const roleTitleRef = useRef<HTMLInputElement>(null);
   const industryRef = useRef<HTMLInputElement>(null);
   const audienceRef = useRef<HTMLInputElement>(null);
 
-  // Load existing saved profile to prefill all fields
+  // Loads any previously saved profile data so progress is never lost on refresh
   useEffect(() => {
     let isMounted = true;
 
@@ -63,7 +64,7 @@ export default function OnboardingStep1Page() {
     };
   }, []);
 
-  // Validate form inputs locally for instant feedback
+  // Validates field length and required constraints before submitting
   const validateForm = (): Record<string, string> => {
     const errors: Record<string, string> = {};
     const trimmedNiche = nicheDescription.trim();
@@ -96,7 +97,7 @@ export default function OnboardingStep1Page() {
     return errors;
   };
 
-  // Focus the first invalid field
+  // Focuses the first field that produced a validation error
   const focusFirstError = (errors: Record<string, string>) => {
     if (errors.role_title) {
       roleTitleRef.current?.focus();
@@ -109,6 +110,7 @@ export default function OnboardingStep1Page() {
     }
   };
 
+  // Handles form submission to save Step 1 on the server and move to Step 2
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setGeneralError(null);
@@ -132,8 +134,8 @@ export default function OnboardingStep1Page() {
         topics_avoid: topicsAvoid,
       });
 
-      // Proceed to Step 2 upon successful save
-      router.push("/app/onboarding/2");
+      // Navigate to Step 2 upon successful save
+      router.push("/onboarding/voice");
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
         if (err.status === 422 && err.fields) {
@@ -159,12 +161,11 @@ export default function OnboardingStep1Page() {
       step={1}
       title="What do you post about?"
       subtitle="Tell us about your work and the topics you want to explore on LinkedIn."
-      backHref="/app"
       onSubmit={handleSubmit}
       isSaving={isSaving}
       errorMessage={generalError}
     >
-      {/* Role or title */}
+      {/* Role or title input */}
       <div className="space-y-1.5 text-left">
         <Label htmlFor="role_title">
           Role or title <span className="text-muted-foreground font-normal">(optional)</span>
@@ -187,7 +188,7 @@ export default function OnboardingStep1Page() {
         )}
       </div>
 
-      {/* Industry */}
+      {/* Industry input */}
       <div className="space-y-1.5 text-left">
         <Label htmlFor="industry">
           Industry <span className="text-muted-foreground font-normal">(optional)</span>
@@ -210,7 +211,7 @@ export default function OnboardingStep1Page() {
         )}
       </div>
 
-      {/* Niche description (required) */}
+      {/* Niche description required textarea */}
       <div className="space-y-1.5 text-left">
         <div className="flex items-center justify-between">
           <Label htmlFor="niche_description">
@@ -246,7 +247,7 @@ export default function OnboardingStep1Page() {
         )}
       </div>
 
-      {/* Audience */}
+      {/* Target audience input */}
       <div className="space-y-1.5 text-left">
         <Label htmlFor="audience">
           Audience <span className="text-muted-foreground font-normal">(optional)</span>
@@ -274,7 +275,7 @@ export default function OnboardingStep1Page() {
         )}
       </div>
 
-      {/* Topics to cover */}
+      {/* Topics to cover tag list */}
       <div className="space-y-1.5 text-left">
         <Label htmlFor="topics_include">Topics to cover</Label>
         <p className="text-caption text-muted-foreground">
@@ -292,7 +293,7 @@ export default function OnboardingStep1Page() {
         )}
       </div>
 
-      {/* Topics to avoid */}
+      {/* Topics to avoid tag list */}
       <div className="space-y-1.5 text-left">
         <Label htmlFor="topics_avoid">Topics to avoid</Label>
         <p className="text-caption text-muted-foreground">
@@ -312,3 +313,4 @@ export default function OnboardingStep1Page() {
     </OnboardingShell>
   );
 }
+

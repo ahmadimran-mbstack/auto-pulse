@@ -3,6 +3,7 @@
 import { TagInput as SharedTagInput } from "@/components/app/TagInput";
 import { Label } from "@/components/ui/label";
 
+// Props for the onboarding tag selector
 interface TagInputProps {
   id?: string;
   label?: string;
@@ -16,7 +17,7 @@ interface TagInputProps {
   disabled?: boolean;
 }
 
-// Compatibility wrapper for onboarding form fields
+// Reusable tag input for onboarding topic selection
 export function TagInput({
   id,
   label,
@@ -63,3 +64,4 @@ export function TagInput({
     </div>
   );
 }
+

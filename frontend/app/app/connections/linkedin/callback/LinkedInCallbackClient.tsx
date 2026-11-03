@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { callbackLinkedInConnection, startLinkedInConnection } from "@/lib/api";
+import { callbackLinkedInConnection, startLinkedInConnection, getProfile } from "@/lib/api";
 import { parseCallbackParams } from "@/lib/connections-state";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -56,13 +56,28 @@ export function LinkedInCallbackClient() {
     const performCallback = async (code: string, state: string) => {
       try {
         await callbackLinkedInConnection({ code, state });
-        // Return to caller page if specified (such as /app/playground), otherwise default to /app
+        // Return to caller page if specified, otherwise check onboarding status before redirecting
         const returnUrl = typeof window !== "undefined" ? sessionStorage.getItem("linkedin_oauth_return_url") : null;
         if (returnUrl) {
           sessionStorage.removeItem("linkedin_oauth_return_url");
-          const target = returnUrl.includes("?") ? `${returnUrl}&connected=linkedin` : `${returnUrl}?connected=linkedin`;
+          let cleanReturnUrl = returnUrl;
+          if (cleanReturnUrl.includes("/app/onboarding")) {
+            cleanReturnUrl = cleanReturnUrl.replace(/\/app\/onboarding(\/\d+)?/, "/onboarding/approvals");
+          }
+          const target = cleanReturnUrl.includes("?")
+            ? `${cleanReturnUrl}&connected=linkedin`
+            : `${cleanReturnUrl}?connected=linkedin`;
           router.push(target);
         } else {
+          try {
+            const profile = await getProfile();
+            if (!profile.onboarding_complete) {
+              router.push("/onboarding?connected=linkedin");
+              return;
+            }
+          } catch {
+            // Ignore error and fall back to dashboard
+          }
           router.push("/app?connected=linkedin");
         }
 

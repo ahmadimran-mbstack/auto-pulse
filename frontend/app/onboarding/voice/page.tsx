@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { getProfile, saveStep2, ApiClientError } from "@/lib/api";
 import { OnboardingShell, OnboardingSkeleton } from "../components/OnboardingShell";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import type { ToneChoice } from "@/types/profile";
 
@@ -48,25 +47,26 @@ const TONE_OPTIONS: ToneOption[] = [
   },
 ];
 
-export default function OnboardingStep2Page() {
+// Step 2: Writing voice and tone configuration for generated drafts
+export default function OnboardingVoicePage() {
   const router = useRouter();
 
-  // Loading and submission state
+  // Loading, saving, and error states
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  // Controlled form state
+  // Controlled form input states
   const [tone, setTone] = useState<ToneChoice>("professional");
   const [voiceNotes, setVoiceNotes] = useState("");
   const [samplePosts, setSamplePosts] = useState("");
 
-  // References for error focus
+  // References for focusing fields that fail validation
   const voiceNotesRef = useRef<HTMLTextAreaElement>(null);
   const samplePostsRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load existing profile to prefill fields and ensure Step 1 was completed
+  // Guard: prevents jumping ahead if earlier steps were skipped
   useEffect(() => {
     let isMounted = true;
 
@@ -75,9 +75,9 @@ export default function OnboardingStep2Page() {
         const profile = await getProfile();
         if (!isMounted) return;
 
-        // Guard: Step 1 required fields check. If niche_description is missing, redirect to Step 1
+        // If Step 1 has not been completed, redirect back to Step 1
         if (!profile.niche_description || (profile.onboarding_step ?? 0) < 1) {
-          router.replace("/app/onboarding/1");
+          router.replace("/onboarding/topics");
           return;
         }
 
@@ -100,18 +100,16 @@ export default function OnboardingStep2Page() {
     };
   }, [router]);
 
-  // Client validation
+  // Validates field length limits
   const validateForm = (): Record<string, string> => {
     const errors: Record<string, string> = {};
 
     if (!tone) {
       errors.tone = "Please select a tone for your posts.";
     }
-
     if (voiceNotes.trim().length > 500) {
       errors.voice_notes = "Use at most 500 characters.";
     }
-
     if (samplePosts.trim().length > 3000) {
       errors.sample_posts = "Use at most 3000 characters.";
     }
@@ -119,7 +117,7 @@ export default function OnboardingStep2Page() {
     return errors;
   };
 
-  // Focus the first invalid field
+  // Focuses the first field that produced an error
   const focusFirstError = (errors: Record<string, string>) => {
     if (errors.voice_notes) {
       voiceNotesRef.current?.focus();
@@ -128,6 +126,7 @@ export default function OnboardingStep2Page() {
     }
   };
 
+  // Saves Step 2 data to the backend and advances to Step 3
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setGeneralError(null);
@@ -148,8 +147,8 @@ export default function OnboardingStep2Page() {
         sample_posts: samplePosts.trim() || null,
       });
 
-      // Proceed to Step 3 upon successful save
-      router.push("/app/onboarding/3");
+      // Navigate to Step 3 upon successful save
+      router.push("/onboarding/brand");
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
         if (err.status === 422 && err.fields) {
@@ -175,12 +174,12 @@ export default function OnboardingStep2Page() {
       step={2}
       title="How should your posts sound?"
       subtitle="Select your preferred tone and provide guidelines to match your authentic writing style."
-      backHref="/app/onboarding/1"
+      backHref="/onboarding/topics"
       onSubmit={handleSubmit}
       isSaving={isSaving}
       errorMessage={generalError}
     >
-      {/* Tone radio options */}
+      {/* Radio options for writing tone */}
       <fieldset className="space-y-3 text-left">
         <legend className="text-body font-medium text-foreground mb-1">
           Writing tone <span className="text-primary">*</span>
@@ -240,12 +239,12 @@ export default function OnboardingStep2Page() {
         )}
       </fieldset>
 
-      {/* Voice notes (optional) */}
+      {/* Voice guidelines textarea */}
       <div className="space-y-1.5 text-left pt-2">
         <div className="flex items-center justify-between">
-          <Label htmlFor="voice_notes">
+          <label htmlFor="voice_notes" className="text-body font-medium text-foreground">
             Notes about your voice <span className="text-muted-foreground font-normal">(optional)</span>
-          </Label>
+          </label>
           <span
             className={`text-caption font-mono tabular-nums ${
               voiceNotes.length > 500 ? "text-destructive" : "text-muted-foreground"
@@ -277,12 +276,12 @@ export default function OnboardingStep2Page() {
         )}
       </div>
 
-      {/* Sample posts (optional) */}
+      {/* Sample posts past writing sample */}
       <div className="space-y-1.5 text-left pt-2">
         <div className="flex items-center justify-between">
-          <Label htmlFor="sample_posts">
+          <label htmlFor="sample_posts" className="text-body font-medium text-foreground">
             Sample posts <span className="text-muted-foreground font-normal">(optional)</span>
-          </Label>
+          </label>
           <span
             className={`text-caption font-mono tabular-nums ${
               samplePosts.length > 3000 ? "text-destructive" : "text-muted-foreground"
@@ -316,3 +315,4 @@ export default function OnboardingStep2Page() {
     </OnboardingShell>
   );
 }
+

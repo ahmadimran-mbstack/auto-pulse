@@ -2,6 +2,10 @@ import * as React from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/server";
+import {
+  verifyOnboardingCookie,
+  ONBOARDING_COMPLETED_COOKIE,
+} from "@/lib/onboarding-cookie";
 import { AppQueryProvider } from "@/components/providers/query-provider";
 import { UserProvider, type AppUser } from "@/components/providers/user-provider";
 import { AppSidebarProvider } from "@/components/providers/sidebar-provider";
@@ -32,6 +36,41 @@ export default async function AppShellLayout({
     redirect("/auth/sign-in");
   }
 
+  // Guard: Users who have not finished onboarding are redirected to /onboarding
+  // Check the signed httpOnly cookie first to avoid hitting the database on every visit
+  const completedCookie = cookieStore.get(ONBOARDING_COMPLETED_COOKIE)?.value;
+  const isCompletedByCookie = verifyOnboardingCookie(session.user.id, completedCookie);
+
+  if (!isCompletedByCookie) {
+    // If the cookie is not present, check profile via backend to handle users switching devices
+    let backendComplete = false;
+    const token = (session as any)?.session?.token;
+
+    if (token) {
+      try {
+        const backendBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const profileRes = await fetch(`${backendBase.replace(/\/$/, "")}/profile`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        });
+
+        if (profileRes.ok) {
+          const profileData = await profileRes.json();
+          if (profileData?.onboarding_complete) {
+            backendComplete = true;
+          }
+        }
+      } catch {
+        // Backend lookup failed
+      }
+    }
+
+    // Redirect to onboarding if user has not completed setup
+    if (!backendComplete) {
+      redirect("/onboarding");
+    }
+  }
+
   const user: AppUser = {
     id: session.user.id,
     name: session.user.name,
@@ -53,5 +92,3 @@ export default async function AppShellLayout({
     </AppQueryProvider>
   );
 }
-
-

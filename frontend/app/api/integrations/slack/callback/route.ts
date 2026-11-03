@@ -23,6 +23,8 @@ export async function GET(request: NextRequest) {
       const locUrl = new URL(location, request.nextUrl.origin);
       if (locUrl.pathname === "/dashboard") {
         locUrl.pathname = "/app/connections";
+      } else if (locUrl.pathname.includes("onboarding")) {
+        locUrl.pathname = "/onboarding/approvals";
       }
       return NextResponse.redirect(locUrl);
     }

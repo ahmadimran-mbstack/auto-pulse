@@ -13,7 +13,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-export default function OnboardingStep4Page() {
+// Step 4: Approval channels and optional Slack workspace connection
+export default function OnboardingApprovalsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -22,10 +23,10 @@ export default function OnboardingStep4Page() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [generalError, setGeneralError] = useState<string | null>(null);
 
-  // Read Slack integration status
+  // Read current Slack integration status
   const { data: slackStatus, isLoading: slackLoading, refetch: refetchSlack } = useSlackStatusQuery();
 
-  // Guard: Ensure Steps 1, 2, and 3 are completed
+  // Guard: checks that earlier steps 1 through 3 were completed
   useEffect(() => {
     let isMounted = true;
 
@@ -35,17 +36,17 @@ export default function OnboardingStep4Page() {
         if (!isMounted) return;
 
         if (!profile.niche_description || (profile.onboarding_step ?? 0) < 1) {
-          router.replace("/app/onboarding/1");
+          router.replace("/onboarding/topics");
           return;
         }
 
         if (!profile.tone || (profile.onboarding_step ?? 0) < 2) {
-          router.replace("/app/onboarding/2");
+          router.replace("/onboarding/voice");
           return;
         }
 
         if (!profile.brand_name || (profile.onboarding_step ?? 0) < 3) {
-          router.replace("/app/onboarding/3");
+          router.replace("/onboarding/brand");
           return;
         }
       } catch (err: unknown) {
@@ -64,7 +65,7 @@ export default function OnboardingStep4Page() {
     };
   }, [router]);
 
-  // Handle return parameters from Slack OAuth redirect (?slack=connected | denied | error)
+  // Handle return parameters from Slack OAuth redirect
   useEffect(() => {
     const slackParam = searchParams.get("slack");
     if (!slackParam) return;
@@ -78,13 +79,13 @@ export default function OnboardingStep4Page() {
       toast.error("Failed to connect Slack workspace. Please try again.");
     }
 
-    // Clean up URL parameters cleanly without triggering a navigation refresh
+    // Clean up query parameters without full page reload
     if (typeof window !== "undefined") {
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, [searchParams, refetchSlack]);
 
-  // Initiate Slack OAuth flow with return_to set to "onboarding"
+  // Starts the Slack OAuth authorization flow with return_to set to onboarding
   const handleConnectSlack = async () => {
     setIsConnecting(true);
     try {
@@ -103,9 +104,10 @@ export default function OnboardingStep4Page() {
     }
   };
 
+  // Continues to Step 5 (Schedule)
   const handleContinue = (e?: React.FormEvent) => {
     e?.preventDefault();
-    router.push("/app/onboarding/5");
+    router.push("/onboarding/schedule");
   };
 
   if (loading || slackLoading) {
@@ -119,14 +121,14 @@ export default function OnboardingStep4Page() {
       step={4}
       title="How would you like to approve posts?"
       subtitle="Choose how you review drafts before publishing."
-      backHref="/app/onboarding/3"
+      backHref="/onboarding/brand"
       onSubmit={handleContinue}
       isSaving={false}
       saveButtonText="Continue"
       errorMessage={generalError}
     >
       <div className="space-y-6 text-left">
-        {/* Core two-line explanation */}
+        {/* Core approval flow explanation */}
         <div className="p-4 rounded-lg border border-border bg-card space-y-2">
           <div className="flex items-center gap-2 text-body text-foreground">
             <PlatformLabel platform="email" size="sm" showName={false} />
@@ -216,7 +218,7 @@ export default function OnboardingStep4Page() {
               asChild
               className="text-xs text-muted-foreground hover:text-foreground"
             >
-              <Link href="/app/onboarding/5">
+              <Link href="/onboarding/schedule">
                 Skip for now
               </Link>
             </Button>
@@ -226,3 +228,4 @@ export default function OnboardingStep4Page() {
     </OnboardingShell>
   );
 }
+

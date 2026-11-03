@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getProfile, saveStep4, completeOnboarding, ApiClientError } from "@/lib/api";
+import { setOnboardingCompletedCookieAction } from "../actions";
 import { OnboardingShell, OnboardingSkeleton } from "../components/OnboardingShell";
 import { TimezoneSelect } from "../components/TimezoneSelect";
 import { Input } from "@/components/ui/input";
@@ -25,16 +26,17 @@ const DAY_OPTIONS: DayOption[] = [
   { day: 6, label: "Sun", name: "Sunday" },
 ];
 
-export default function OnboardingStep5Page() {
+// Step 5: Publishing schedule and final onboarding completion
+export default function OnboardingSchedulePage() {
   const router = useRouter();
 
-  // Loading and submission state
+  // Loading, saving, and error states
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  // Controlled form state
+  // Controlled form input states
   const [timezone, setTimezone] = useState(() => {
     try {
       return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -44,12 +46,12 @@ export default function OnboardingStep5Page() {
   });
   const [postTime, setPostTime] = useState("09:00");
   const [postDays, setPostDays] = useState<number[]>([0, 1, 2, 3, 4]); // Default Mon-Fri
-  const approvalMethod = "email"; // Fixed to email today
+  const approvalMethod = "email";
 
-  // Element references for focusing the first invalid input
+  // Reference for focusing post time input on error
   const postTimeRef = useRef<HTMLInputElement>(null);
 
-  // Load existing profile to prefill fields and ensure earlier steps were completed
+  // Guard: checks that earlier steps were completed
   useEffect(() => {
     let isMounted = true;
 
@@ -58,19 +60,18 @@ export default function OnboardingStep5Page() {
         const profile = await getProfile();
         if (!isMounted) return;
 
-        // Guard: check that Steps 1, 2, and 3 are completed
         if (!profile.niche_description || (profile.onboarding_step ?? 0) < 1) {
-          router.replace("/app/onboarding/1");
+          router.replace("/onboarding/topics");
           return;
         }
 
         if (!profile.tone || (profile.onboarding_step ?? 0) < 2) {
-          router.replace("/app/onboarding/2");
+          router.replace("/onboarding/voice");
           return;
         }
 
         if (!profile.brand_name || (profile.onboarding_step ?? 0) < 3) {
-          router.replace("/app/onboarding/3");
+          router.replace("/onboarding/brand");
           return;
         }
 
@@ -95,7 +96,7 @@ export default function OnboardingStep5Page() {
     };
   }, [router]);
 
-  // Toggle selection of a day
+  // Toggles day selection in the post days array
   const toggleDay = (day: number) => {
     if (postDays.includes(day)) {
       setPostDays(postDays.filter((d) => d !== day));
@@ -104,7 +105,7 @@ export default function OnboardingStep5Page() {
     }
   };
 
-  // Client validation
+  // Client-side validation of schedule inputs
   const validateForm = (): Record<string, string> => {
     const errors: Record<string, string> = {};
 
@@ -129,27 +130,22 @@ export default function OnboardingStep5Page() {
     }
   };
 
-  // Route 422 errors from POST /profile/onboarding/complete back to earlier steps if needed
+  // Handles redirecting the user to earlier steps if server reports missing fields
   const handleCompleteFailure = (fields: Record<string, string>) => {
     const step1Fields = ["role_title", "industry", "niche_description", "audience", "topics_include", "topics_avoid"];
     const step2Fields = ["tone", "voice_notes", "sample_posts"];
     const step3Fields = ["brand_name", "brand_primary_hex", "brand_accent_hex"];
 
-    const hasStep1 = Object.keys(fields).some((f) => step1Fields.includes(f));
-    if (hasStep1) {
-      router.push("/app/onboarding/1");
+    if (Object.keys(fields).some((f) => step1Fields.includes(f))) {
+      router.push("/onboarding/topics");
       return;
     }
-
-    const hasStep2 = Object.keys(fields).some((f) => step2Fields.includes(f));
-    if (hasStep2) {
-      router.push("/app/onboarding/2");
+    if (Object.keys(fields).some((f) => step2Fields.includes(f))) {
+      router.push("/onboarding/voice");
       return;
     }
-
-    const hasStep3 = Object.keys(fields).some((f) => step3Fields.includes(f));
-    if (hasStep3) {
-      router.push("/app/onboarding/3");
+    if (Object.keys(fields).some((f) => step3Fields.includes(f))) {
+      router.push("/onboarding/brand");
       return;
     }
 
@@ -157,6 +153,7 @@ export default function OnboardingStep5Page() {
     focusFirstError(fields);
   };
 
+  // Saves schedule, marks onboarding complete, caches cookie, and redirects to dashboard
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setGeneralError(null);
@@ -171,7 +168,7 @@ export default function OnboardingStep5Page() {
 
     setIsSaving(true);
     try {
-      // Step 1: Save Step 4 data (scheduling preferences)
+      // 1. Save schedule settings
       await saveStep4({
         timezone,
         post_time: postTime,
@@ -179,10 +176,13 @@ export default function OnboardingStep5Page() {
         approval_method: approvalMethod,
       });
 
-      // Step 2: Finalize onboarding via complete endpoint
+      // 2. Mark onboarding as finalized in backend database
       await completeOnboarding();
 
-      // Step 3: Navigate to active dashboard
+      // 3. Set signed httpOnly cookie to prevent database checks on subsequent page loads
+      await setOnboardingCompletedCookieAction();
+
+      // 4. Send user straight to active dashboard
       router.push("/app");
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
@@ -208,13 +208,13 @@ export default function OnboardingStep5Page() {
       step={5}
       title="When should we draft your posts?"
       subtitle="Set your preferred publishing rhythm and review schedule for daily LinkedIn drafts."
-      backHref="/app/onboarding/4"
+      backHref="/onboarding/approvals"
       onSubmit={handleSubmit}
       isSaving={isSaving}
       saveButtonText="Finish setup"
       errorMessage={generalError}
     >
-      {/* Searchable Timezone */}
+      {/* Timezone picker dropdown */}
       <TimezoneSelect
         id="timezone"
         value={timezone}
@@ -222,7 +222,7 @@ export default function OnboardingStep5Page() {
         error={fieldErrors.timezone}
       />
 
-      {/* Time to Post */}
+      {/* Daily post creation time input */}
       <div className="space-y-1.5 text-left pt-2">
         <Label htmlFor="post_time">
           Time to post <span className="text-primary">*</span>
@@ -250,7 +250,7 @@ export default function OnboardingStep5Page() {
         )}
       </div>
 
-      {/* Days of the Week as Seven Toggle Buttons */}
+      {/* Days of the week selection buttons */}
       <div className="space-y-2 text-left pt-2">
         <Label>
           Days of the week <span className="text-primary">*</span>
@@ -297,7 +297,7 @@ export default function OnboardingStep5Page() {
         )}
       </div>
 
-      {/* Approval Method (Single Radio) */}
+      {/* Approval method display */}
       <div className="space-y-2 text-left pt-4">
         <Label>
           Approval method <span className="text-primary">*</span>
@@ -325,3 +325,4 @@ export default function OnboardingStep5Page() {
     </OnboardingShell>
   );
 }
+

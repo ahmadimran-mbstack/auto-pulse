@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 
+// Props for the timezone dropdown
 interface TimezoneSelectProps {
   id: string;
   value: string;
@@ -16,7 +17,7 @@ interface TimezoneSelectProps {
   error?: string;
 }
 
-// Fallback timezone list in case Intl.supportedValuesOf is unavailable
+// Fallback timezone list when browser Intl API values are not fully available
 const FALLBACK_TIMEZONES = [
   "UTC",
   "America/New_York",
@@ -34,13 +35,14 @@ const FALLBACK_TIMEZONES = [
   "Australia/Sydney",
 ];
 
-// Timezone selector built using shadcn Select
+// Timezone selector with device timezone auto-detection
 export function TimezoneSelect({
   id,
   value,
   onChange,
   error,
 }: TimezoneSelectProps) {
+  // Reads supported timezones from the browser environment
   const timezones = (() => {
     try {
       if (
@@ -55,6 +57,7 @@ export function TimezoneSelect({
     return FALLBACK_TIMEZONES;
   })();
 
+  // Detects the user's current device timezone
   const detectedTz = (() => {
     try {
       return Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -63,6 +66,7 @@ export function TimezoneSelect({
     }
   })();
 
+  // Formats current local time in the selected timezone
   const currentTimeInTz = (() => {
     try {
       return new Date().toLocaleTimeString("en-US", {
@@ -93,6 +97,7 @@ export function TimezoneSelect({
         Select your local timezone so AutoPulse creates and publishes your posts at your desired local hours.
       </p>
 
+      {/* Helper to switch to device timezone if different from current selection */}
       {detectedTz && detectedTz !== value && (
         <div className="flex items-center gap-2 p-2 rounded-md bg-muted/60 border border-border text-xs">
           <span className="text-muted-foreground">Detected device timezone:</span>
@@ -106,6 +111,7 @@ export function TimezoneSelect({
         </div>
       )}
 
+      {/* Dropdown list of all valid timezones */}
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger
           id={id}
@@ -135,3 +141,4 @@ export function TimezoneSelect({
     </div>
   );
 }
+

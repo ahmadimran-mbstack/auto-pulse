@@ -11,24 +11,25 @@ import { Label } from "@/components/ui/label";
 
 const HEX_REGEX = /^#[0-9A-Fa-f]{6}$/;
 
-export default function OnboardingStep3Page() {
+// Step 3: Brand name and color palette for automatically generated LinkedIn graphics
+export default function OnboardingBrandPage() {
   const router = useRouter();
 
-  // Loading and submission state
+  // Loading, saving, and error states
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  // Controlled form state
+  // Controlled form input states
   const [brandName, setBrandName] = useState("");
-  const [primaryHex, setPrimaryHex] = useState(() => ["#", "0B7F70"].join(""));
-  const [accentHex, setAccentHex] = useState(() => ["#", "14B8A6"].join(""));
+  const [primaryHex, setPrimaryHex] = useState("#0B7F70");
+  const [accentHex, setAccentHex] = useState("#14B8A6");
 
-  // Element references for focusing the first invalid input
+  // Element reference for focusing the brand name field on error
   const brandNameRef = useRef<HTMLInputElement>(null);
 
-  // Load existing profile to prefill fields and ensure earlier steps were completed
+  // Guard: checks that earlier steps were completed before allowing access
   useEffect(() => {
     let isMounted = true;
 
@@ -37,14 +38,13 @@ export default function OnboardingStep3Page() {
         const profile = await getProfile();
         if (!isMounted) return;
 
-        // Guard: check that Step 1 and Step 2 are completed
         if (!profile.niche_description || (profile.onboarding_step ?? 0) < 1) {
-          router.replace("/app/onboarding/1");
+          router.replace("/onboarding/topics");
           return;
         }
 
         if (!profile.tone || (profile.onboarding_step ?? 0) < 2) {
-          router.replace("/app/onboarding/2");
+          router.replace("/onboarding/voice");
           return;
         }
 
@@ -67,7 +67,7 @@ export default function OnboardingStep3Page() {
     };
   }, [router]);
 
-  // Validates hex code and brand name locally
+  // Validates brand name and hex colors
   const validateForm = (): Record<string, string> => {
     const errors: Record<string, string> = {};
     const trimmedBrand = brandName.trim();
@@ -95,6 +95,7 @@ export default function OnboardingStep3Page() {
     }
   };
 
+  // Saves Step 3 to the server and advances to Step 4
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setGeneralError(null);
@@ -115,8 +116,8 @@ export default function OnboardingStep3Page() {
         brand_accent_hex: accentHex.toUpperCase(),
       });
 
-      // Proceed to Step 4 upon successful save
-      router.push("/app/onboarding/4");
+      // Navigate to Step 4 upon successful save
+      router.push("/onboarding/approvals");
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
         if (err.status === 422 && err.fields) {
@@ -142,12 +143,12 @@ export default function OnboardingStep3Page() {
       step={3}
       title="Your brand"
       subtitle="Define your brand identity and color palette for automatically generated LinkedIn graphics."
-      backHref="/app/onboarding/2"
+      backHref="/onboarding/voice"
       onSubmit={handleSubmit}
       isSaving={isSaving}
       errorMessage={generalError}
     >
-      {/* Brand Name */}
+      {/* Brand Name field */}
       <div className="space-y-1.5 text-left">
         <div className="flex items-center justify-between">
           <Label htmlFor="brand_name">
@@ -186,7 +187,7 @@ export default function OnboardingStep3Page() {
 
       {/* Primary and Accent Color Controls */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-        {/* Primary Color */}
+        {/* Primary Color Picker */}
         <div className="space-y-1.5 text-left">
           <Label htmlFor="brand_primary_hex">
             Primary color <span className="text-primary">*</span>
@@ -206,7 +207,7 @@ export default function OnboardingStep3Page() {
           )}
         </div>
 
-        {/* Accent Color */}
+        {/* Accent Color Picker */}
         <div className="space-y-1.5 text-left">
           <Label htmlFor="brand_accent_hex">
             Accent color <span className="text-primary">*</span>
@@ -227,7 +228,7 @@ export default function OnboardingStep3Page() {
         </div>
       </div>
 
-      {/* Live Preview Card */}
+      {/* Live Graphic Rendering Preview */}
       <div className="pt-4 space-y-2 text-left">
         <Label>
           Live graphics preview
@@ -248,3 +249,4 @@ export default function OnboardingStep3Page() {
     </OnboardingShell>
   );
 }
+
