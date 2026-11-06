@@ -46,7 +46,12 @@ async function sanitizeAuthRequest(request: Request, forceOrigin?: string): Prom
   const rawOrigin = headers.get("origin") || "";
   const rawReferer = headers.get("referer") || "";
 
-  let effectiveOrigin = forceOrigin || (rawOrigin ? normalizeLoopback(rawOrigin) : "http://localhost:3000");
+  const proto = headers.get("x-forwarded-proto") || "https";
+  const host = headers.get("x-forwarded-host") || headers.get("host");
+  const hostOrigin = host ? `${proto}://${host}` : null;
+  const fallbackOrigin = hostOrigin || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+
+  let effectiveOrigin = forceOrigin || (rawOrigin ? normalizeLoopback(rawOrigin) : fallbackOrigin);
   if (effectiveOrigin.includes("127.0.0.1") || effectiveOrigin.includes("0.0.0.0")) {
     effectiveOrigin = normalizeLoopback(effectiveOrigin);
   }

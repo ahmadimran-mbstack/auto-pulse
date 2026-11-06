@@ -32,9 +32,14 @@ async function createSafeNextRequestContext() {
       return headerStore.get(name) ?? null;
     },
     getOrigin() {
+      const proto = headerStore.get("x-forwarded-proto") || "https";
+      const host = headerStore.get("x-forwarded-host") || headerStore.get("host");
+      const hostOrigin = host ? `${proto}://${host}` : null;
       const raw =
         headerStore.get("origin") ||
         headerStore.get("referer")?.split("/").slice(0, 3).join("/") ||
+        hostOrigin ||
+        process.env.NEXT_PUBLIC_SITE_URL ||
         "http://localhost:3000";
       return raw
         .replace(/:\/\/127\.0\.0\.1(:[0-9]+)?/g, "://localhost$1")

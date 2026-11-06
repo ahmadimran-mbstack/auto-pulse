@@ -123,7 +123,9 @@ export async function apiCall<T>(
     });
   }
 
-  const url = `${env.apiUrl}${path}`;
+  const baseApiUrl = env.apiUrl.replace(/\/+$/, "");
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const url = `${baseApiUrl}${normalizedPath}`;
   const headers = new Headers(options.headers || {});
   headers.set("Authorization", `Bearer ${token}`);
   // Do not set Content-Type header when sending FormData so the browser sets the boundary automatically
@@ -409,7 +411,8 @@ export async function fetchPostImageBlob(
     });
   }
 
-  const url = `${env.apiUrl}/posts/${id}/image.png?w=${width}`;
+  const baseApiUrl = env.apiUrl.replace(/\/+$/, "");
+  const url = `${baseApiUrl}/posts/${id}/image.png?w=${width}`;
   let response: Response;
   try {
     response = await fetch(url, {
