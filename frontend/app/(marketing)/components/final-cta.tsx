@@ -5,6 +5,7 @@ import React from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
+import PixelBlast from "@/components/PixelBlast";
 import { ScrollReveal } from "./scroll-reveal";
 
 // This component renders the final conversion section with a white pill button on navy-deep background.
@@ -25,12 +26,25 @@ export function FinalCta() {
         />
       </div>
 
+      {/* WebGL PixelBlast background */}
+      <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+        <PixelBlast
+          variant="square"
+          color="#1A56B8"
+          accentColor="#BFD2EE"
+          transparent={true}
+          pixelSize={4}
+          patternScale={2}
+          glow={0.5}
+        />
+      </div>
+
       <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 text-center">
         <ScrollReveal>
           {/* Main closing headline */}
-          <h2 className="landing-heading text-4xl sm:text-5xl md:text-6xl text-white max-w-2xl mx-auto">
-            Let your LinkedIn run itself.
-          </h2>
+          <p className="landing-heading text-4xl sm:text-5xl md:text-6xl text-white max-w-6xl mx-auto">
+            Let your LinkedIn run itself
+          </p>
 
           {/* Quiet supporting text */}
           <p className="mt-6 text-base sm:text-lg text-text-muted-dark max-w-xl mx-auto font-normal leading-relaxed">
