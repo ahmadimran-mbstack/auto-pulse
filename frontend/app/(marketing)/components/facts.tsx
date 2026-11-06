@@ -22,8 +22,14 @@ export function ThreeFacts() {
   ];
 
   return (
-    <section className="bg-paper pt-32 sm:pt-40 md:pt-48 pb-16">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6">
+    <section className="relative bg-paper pt-32 sm:pt-40 md:pt-48 pb-16 overflow-hidden">
+      {/* Smooth transition fade from dark hero background into paper canvas */}
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 h-30 sm:h-38 md:h-44 bg-gradient-to-b from-navy-deep via-navy-deep/40 to-transparent"
+        aria-hidden="true"
+      />
+
+      <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6">
         {/* Hairline bordered container with 60ms stagger entrance */}
         <ScrollReveal
           stagger
@@ -32,9 +38,8 @@ export function ThreeFacts() {
           {facts.map((fact, index) => (
             <ScrollRevealItem
               key={index}
-              className={`text-center px-4 ${index > 0 ? "pt-6 md:pt-0" : ""} ${
-                index < facts.length - 1 ? "pb-6 md:pb-0" : ""
-              }`}
+              className={`text-center px-4 ${index > 0 ? "pt-6 md:pt-0" : ""} ${index < facts.length - 1 ? "pb-6 md:pb-0" : ""
+                }`}
             >
               {/* Big metric title with regular font weight */}
               <div className="landing-heading text-2xl sm:text-3xl text-ink">
