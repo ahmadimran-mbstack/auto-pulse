@@ -45,7 +45,7 @@ export function AppDashboardClient({ user }: AppDashboardClientProps) {
   // Guard: If profile has not completed onboarding, route to onboarding wizard
   React.useEffect(() => {
     if (dashboardData?.profile && dashboardData.profile.onboarding_complete === false) {
-      router.replace("/app/onboarding");
+      router.replace("/onboarding");
     }
   }, [dashboardData, router]);
 

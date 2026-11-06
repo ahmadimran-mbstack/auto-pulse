@@ -13,8 +13,13 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       {
-        source: "/onboarding",
-        destination: "/app/onboarding",
+        source: "/app/onboarding",
+        destination: "/onboarding",
+        permanent: false,
+      },
+      {
+        source: "/app/onboarding/:path*",
+        destination: "/onboarding",
         permanent: false,
       },
       {
