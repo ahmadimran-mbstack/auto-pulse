@@ -18,6 +18,7 @@ import { AlertCircle, Globe } from "lucide-react";
 import { toast } from "sonner";
 import { patchProfile } from "@/lib/api";
 import { SlackDisconnectedBanner } from "@/components/app/SlackDisconnectedBanner";
+import { setOnboardingCompletedCookieAction } from "@/app/onboarding/actions";
 
 interface AppDashboardClientProps {
   user: {
@@ -42,10 +43,14 @@ export function AppDashboardClient({ user }: AppDashboardClientProps) {
     refetch: refetchDash,
   } = useDashboardQuery(user.id);
 
-  // Guard: If profile has not completed onboarding, route to onboarding wizard
+  // Guard: If profile has not completed onboarding, route to onboarding wizard; otherwise persist completion cookie
   React.useEffect(() => {
-    if (dashboardData?.profile && dashboardData.profile.onboarding_complete === false) {
-      router.replace("/onboarding");
+    if (dashboardData?.profile) {
+      if (dashboardData.profile.onboarding_complete === false) {
+        router.replace("/onboarding");
+      } else if (dashboardData.profile.onboarding_complete === true) {
+        setOnboardingCompletedCookieAction().catch(() => {});
+      }
     }
   }, [dashboardData, router]);
 

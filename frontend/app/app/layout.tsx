@@ -43,7 +43,7 @@ export default async function AppShellLayout({
 
   if (!isCompletedByCookie) {
     // If the cookie is not present, check profile via backend to handle users switching devices
-    let backendComplete = false;
+    let backendComplete: boolean | null = null;
     const token = (session as any)?.session?.token;
 
     if (token) {
@@ -56,17 +56,18 @@ export default async function AppShellLayout({
 
         if (profileRes.ok) {
           const profileData = await profileRes.json();
-          if (profileData?.onboarding_complete) {
-            backendComplete = true;
-          }
+          backendComplete = Boolean(profileData?.onboarding_complete);
         }
       } catch {
         // Backend lookup failed
       }
     }
 
-    // Redirect to onboarding if user has not completed setup
-    if (!backendComplete) {
+    // Only redirect if backend definitively reported that onboarding is NOT complete.
+    // If the backend call failed or returned 401 (e.g. server-side session token isn't a JWT),
+    // do not blindly redirect to /onboarding; allow AppDashboardClient to check using the
+    // client-side JWT to prevent circular redirect loops.
+    if (backendComplete === false) {
       redirect("/onboarding");
     }
   }

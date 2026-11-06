@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getProfile } from "@/lib/api";
+import { setOnboardingCompletedCookieAction } from "./actions";
 import { OnboardingSkeleton } from "./components/OnboardingShell";
 import { ErrorState } from "@/components/app/ErrorState";
 import { Card } from "@/components/ui/card";
@@ -29,8 +30,13 @@ export default function OnboardingIndexPage() {
         const profile = await getProfile();
         if (!isMounted) return;
 
-        // If user already finished onboarding, send them straight to dashboard
+        // If user already finished onboarding, ensure cookie is set and send straight to dashboard
         if (profile.onboarding_complete) {
+          try {
+            await setOnboardingCompletedCookieAction();
+          } catch {
+            // Ignore cookie setting errors
+          }
           router.replace("/app");
           return;
         }

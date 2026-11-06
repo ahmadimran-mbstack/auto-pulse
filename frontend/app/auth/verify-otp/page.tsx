@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CheckCircle2 } from "lucide-react";
+import { setOnboardingCompletedCookieAction } from "@/app/onboarding/actions";
 
 interface OtpAuthClient {
   emailOtp: {
@@ -134,7 +135,11 @@ function VerifyOtpForm() {
         } else {
           document.cookie =
             "autopulse_otp_pending=; path=/; max-age=0; SameSite=Lax";
-          router.push("/onboarding");
+          document.cookie =
+            "autopulse_signed_out=; path=/; max-age=0; SameSite=Lax";
+          // Returning user signing back in -> redirect straight to dashboard
+          setOnboardingCompletedCookieAction().catch(() => {});
+          router.push("/app");
         }
       } else {
         const result = await client.emailOtp.verifyEmail({
