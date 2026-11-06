@@ -30,7 +30,7 @@ vi.mock("next/headers", () => ({
 }));
 
 // Mock auth server
-vi.mock("./auth/server", () => ({
+vi.mock("@/lib/auth/server", () => ({
   auth: {
     signOut: vi.fn(async () => {}),
     handler: vi.fn(() => ({
