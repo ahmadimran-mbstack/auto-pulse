@@ -155,7 +155,7 @@ function FeatureMockContent({
     const currentTopic = topicSamples[activeRowIndex] || topicSamples[0];
 
     return (
-      <Card className="bg-white text-ink rounded-2xl border border-border-light p-5 sm:p-6 max-w-sm w-full mx-auto shadow-none">
+      <Card className="bg-white text-ink rounded-2xl border border-border-light p-5 sm:p-6 max-w-sm w-full mx-auto">
         <div className="flex items-center justify-between pb-3 border-b border-border-light">
           <span className="text-xs text-text-muted-light">Discovered topic</span>
           <Badge
@@ -203,7 +203,7 @@ function FeatureMockContent({
     const currentDraft = draftSamples[activeRowIndex] || draftSamples[0];
 
     return (
-      <Card className="bg-white text-ink rounded-2xl border border-border-light p-5 sm:p-6 max-w-sm w-full mx-auto shadow-none">
+      <Card className="bg-white text-ink rounded-2xl border border-border-light p-5 sm:p-6 max-w-sm w-full mx-auto">
         <div className="flex items-center justify-between pb-3 border-b border-border-light">
           <span className="text-xs text-text-muted-light">{currentDraft.hook}</span>
           <Badge

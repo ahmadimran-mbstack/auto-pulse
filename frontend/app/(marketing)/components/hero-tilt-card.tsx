@@ -87,7 +87,7 @@ export function HeroTiltCard({ className }: HeroTiltCardProps) {
           transformStyle: "preserve-3d",
           transition: "transform 0.18s cubic-bezier(0.22, 1, 0.36, 1)",
         }}
-        className="relative bg-white text-ink rounded-2xl border border-border-light p-6 sm:p-7 shadow-none select-none will-change-transform"
+        className="relative bg-white text-ink rounded-2xl border border-border-light p-6 sm:p-7 select-none will-change-transform"
       >
         {/* Soft light sheen following the pointer */}
         {!isTouch && !reducedMotion && (

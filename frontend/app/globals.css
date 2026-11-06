@@ -21,8 +21,8 @@
   --ice: #BFD2EE;
   --text-muted-light: #5C6370;
   --text-muted-dark: #9AA3B2;
-  --border-light: #E7E7EA;
-  --border-dark: rgba(255, 255, 255, 0.08);
+  --border-light: rgba(8, 9, 12, 0.05);
+  --border-dark: rgba(255, 255, 255, 0.06);
 
   /* Base canvas and text */
   --background: #fafafa;
@@ -54,9 +54,9 @@
   --destructive-foreground: #ffffff;
 
   /* Borders and controls: light, smooth, non-harsh */
-  --border: #ebebeb;
+  --border: rgba(8, 9, 12, 0.05);
   /* dividers, table borders, and edges */
-  --card-border: #ebebeb;
+  --card-border: rgba(8, 9, 12, 0.05);
   /* card outlines and inputs */
   --input: #ebebeb;
   --input-focus: #666666;
@@ -105,8 +105,8 @@
   /* Radius rules: 8px for cards, inputs, menus; 6px for small buttons and keys */
   --radius: 8px;
 
-  /* Soft shadow for light mode cards */
-  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  /* Flat cards with no shadow */
+  --card-shadow: none;
   --elevation-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
@@ -142,9 +142,9 @@
   --destructive-foreground: #ffffff;
 
   /* Borders and controls: soft, smooth, non-harsh in dark mode */
-  --border: #242424;
+  --border: rgba(255, 255, 255, 0.06);
   /* dividers, table borders, and edges */
-  --card-border: #242424;
+  --card-border: rgba(255, 255, 255, 0.06);
   /* card outlines and inputs */
   --input: #242424;
   --input-focus: #808080;
@@ -376,10 +376,11 @@ h4 {
   outline-offset: 2px;
 }
 
-/* Cards use the card border and soft card shadow in light mode, none in dark mode */
-[data-slot="card"] {
+/* Flat cards: clean, slightly visible light border with no shadow */
+[data-slot="card"],
+[data-slot="card-spotlight"] {
   border-color: var(--card-border);
-  box-shadow: var(--card-shadow);
+  box-shadow: none;
 }
 
 /* Elevated floating surfaces get elevation shadow */
