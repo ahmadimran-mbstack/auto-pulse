@@ -177,13 +177,21 @@ export default function OnboardingSchedulePage() {
       });
 
       // 2. Mark onboarding as finalized in backend database
-      await completeOnboarding();
+      const profile = await completeOnboarding();
 
-      // 3. Set signed httpOnly cookie to prevent database checks on subsequent page loads
-      await setOnboardingCompletedCookieAction();
+      // 3. Set signed httpOnly cookie (non-blocking best-effort)
+      try {
+        await setOnboardingCompletedCookieAction();
+      } catch (cookieErr) {
+        console.warn("Failed to set onboarding completion cookie:", cookieErr);
+      }
 
-      // 4. Send user straight to active dashboard
-      router.push("/app");
+      // 4. Send user straight to active dashboard with a clean window transition
+      if (typeof window !== "undefined") {
+        window.location.replace("/app");
+      } else {
+        router.replace("/app");
+      }
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
         if (err.status === 422 && err.fields) {

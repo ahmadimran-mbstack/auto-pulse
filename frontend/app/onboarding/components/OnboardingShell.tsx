@@ -38,10 +38,16 @@ export function OnboardingShell({
   errorMessage,
 }: OnboardingShellProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const isFirstMount = useRef(true);
 
   // Moves screen reader and keyboard focus to the main step heading on step change
+  // Skips initial page mount so refresh/landing never shows focus outlines
   useEffect(() => {
-    headingRef.current?.focus();
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
+    headingRef.current?.focus({ preventScroll: true });
   }, [step]);
 
   return (
@@ -75,7 +81,8 @@ export function OnboardingShell({
         <h1
           ref={headingRef}
           tabIndex={-1}
-          className="text-title font-display text-foreground mb-2 outline-none"
+          style={{ outline: "none", boxShadow: "none" }}
+          className="text-title font-display text-foreground mb-2 outline-none focus:outline-none focus-visible:outline-none ring-0 focus:ring-0 focus-visible:ring-0 border-none"
         >
           {title}
         </h1>

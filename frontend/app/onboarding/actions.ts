@@ -9,16 +9,25 @@ import {
 
 // Sets the signed httpOnly cookie marking onboarding as completed
 // This allows subsequent /app requests to skip database queries
-export async function setOnboardingCompletedCookieAction(): Promise<{ success: boolean }> {
+export async function setOnboardingCompletedCookieAction(
+  providedUserId?: string
+): Promise<{ success: boolean }> {
   try {
-    const res = await auth.getSession();
-    const session = res?.data;
+    let userId = providedUserId;
+    if (!userId) {
+      try {
+        const res = await auth.getSession();
+        userId = res?.data?.user?.id;
+      } catch {
+        // Safe fallback if session retrieval fails in Server Action
+      }
+    }
 
-    if (!session?.user?.id) {
+    if (!userId) {
       return { success: false };
     }
 
-    const cookieVal = createOnboardingCookieValue(session.user.id);
+    const cookieVal = createOnboardingCookieValue(userId);
     const cookieStore = await cookies();
 
     // 1-year expiration for completed onboarding

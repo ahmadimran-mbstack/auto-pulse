@@ -8,7 +8,13 @@ import { env } from "@/lib/env";
 export const dynamic = "force-dynamic";
 
 export default async function AppPage() {
-  const { data: session } = await auth.getSession();
+  let session = null;
+  try {
+    const res = await auth.getSession();
+    session = res?.data;
+  } catch {
+    // Session retrieval failed
+  }
 
   if (!session?.user) {
     redirect("/auth/sign-in");
