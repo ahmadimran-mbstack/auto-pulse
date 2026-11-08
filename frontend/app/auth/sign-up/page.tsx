@@ -14,8 +14,9 @@ import { GoogleSignInButton } from "../components/GoogleSignInButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, Check, Circle } from "lucide-react";
+import { AlertCircle, Check, Circle, Eye, EyeOff, Loader2 } from "lucide-react";
 
 interface OtpClient {
   emailOtp: {
@@ -153,13 +154,13 @@ function SignUpForm() {
   };
 
   return (
-    <div className="w-full space-y-4">
+    <div className="w-full space-y-4 font-normal">
       {/* Existing account conflict alert */}
       {existingAccountEmail && (
-        <Alert className="mb-4 border-signal-line bg-signal-soft text-foreground text-left">
+        <Alert className="mb-4 border-signal-line bg-signal-soft text-foreground text-left font-normal">
           <AlertCircle className="size-4 text-primary shrink-0" aria-hidden="true" />
-          <AlertTitle className="text-body font-medium">Account already exists</AlertTitle>
-          <AlertDescription className="text-caption mt-1">
+          <AlertTitle className="font-normal">Account already exists</AlertTitle>
+          <AlertDescription className="text-caption mt-1 font-normal">
             An account with {existingAccountEmail} is already registered. Please sign in instead.
           </AlertDescription>
           <div className="mt-3">
@@ -168,7 +169,7 @@ function SignUpForm() {
               variant="outline"
               size="sm"
               asChild
-              className="text-xs font-medium"
+              className="text-xs font-normal"
             >
               <Link href={`/auth/sign-in?email=${encodeURIComponent(existingAccountEmail)}`}>
                 Sign in with this email
@@ -180,9 +181,9 @@ function SignUpForm() {
 
       {/* URL parameter error */}
       {urlError && (
-        <Alert variant="destructive" className="mb-4 text-left">
+        <Alert variant="destructive" className="mb-4 text-left font-normal">
           <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
-          <AlertDescription className="text-meta">
+          <AlertDescription className="text-meta font-normal">
             Authentication error ({urlError}). Please register with your email address below.
           </AlertDescription>
         </Alert>
@@ -193,12 +194,12 @@ function SignUpForm() {
         <GoogleSignInButton text="Sign up with Google" />
       </div>
 
-      {/* Visual divider */}
+      {/* Visual divider using shadcn Separator */}
       <div className="relative py-2 flex items-center justify-center">
         <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-border-light dark:border-border" />
+          <Separator className="w-full bg-neutral-200 dark:bg-border" />
         </div>
-        <div className="relative bg-white dark:bg-background px-3 text-xs text-muted-foreground uppercase tracking-wider">
+        <div className="relative bg-white dark:bg-background px-3 text-xs text-muted-foreground uppercase tracking-wider font-normal">
           or
         </div>
       </div>
@@ -206,7 +207,7 @@ function SignUpForm() {
       <form onSubmit={handleSubmit} className="space-y-4 text-left">
         {/* Full Name input */}
         <div className="space-y-1.5">
-          <Label htmlFor="name" className="text-sm font-medium text-foreground">
+          <Label htmlFor="name" className="text-sm font-normal text-foreground">
             Full name
           </Label>
           <Input
@@ -218,13 +219,13 @@ function SignUpForm() {
             placeholder="Jane Doe"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="h-12 rounded-[8px] border-border-light dark:border-border bg-white dark:bg-card text-foreground"
+            className="h-11 rounded-lg border border-neutral-200 dark:border-border bg-white dark:bg-card px-3.5 text-sm text-foreground font-normal placeholder:text-muted-foreground focus-visible:border-neutral-900 focus-visible:ring-1 focus-visible:ring-neutral-900/20 outline-none"
           />
         </div>
 
         {/* Email input */}
         <div className="space-y-1.5">
-          <Label htmlFor="email" className="text-sm font-medium text-foreground">
+          <Label htmlFor="email" className="text-sm font-normal text-foreground">
             Email
           </Label>
           <Input
@@ -236,97 +237,102 @@ function SignUpForm() {
             placeholder="name@company.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="h-12 rounded-[8px] border-border-light dark:border-border bg-white dark:bg-card text-foreground"
+            className="h-11 rounded-lg border border-neutral-200 dark:border-border bg-white dark:bg-card px-3.5 text-sm text-foreground font-normal placeholder:text-muted-foreground focus-visible:border-neutral-900 focus-visible:ring-1 focus-visible:ring-neutral-900/20 outline-none"
           />
         </div>
 
-        {/* Password input with generator helper */}
+        {/* Password input with generator helper and eye toggle */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <Label htmlFor="password" className="text-sm font-medium text-foreground">
+            <Label htmlFor="password" className="text-sm font-normal text-foreground">
               Password
             </Label>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setShowPassword((prev) => !prev)}
-                className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
-              >
-                {showPassword ? "Hide" : "Show"}
-              </button>
-              <button
-                type="button"
-                onClick={handleGeneratePassword}
-                className="text-xs text-primary hover:underline font-medium cursor-pointer"
-              >
-                Generate strong
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleGeneratePassword}
+              className="text-xs text-neutral-600 dark:text-muted-foreground hover:text-foreground hover:underline font-normal cursor-pointer"
+            >
+              Generate strong
+            </button>
           </div>
-          <Input
-            id="password"
-            name="password"
-            type={showPassword ? "text" : "password"}
-            required
-            autoComplete="new-password"
-            placeholder="Create a strong password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="h-12 rounded-[8px] border-border-light dark:border-border bg-white dark:bg-card text-foreground"
-          />
+          <div className="relative">
+            <Input
+              id="password"
+              name="password"
+              type={showPassword ? "text" : "password"}
+              required
+              autoComplete="new-password"
+              placeholder="Create a strong password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="h-11 rounded-lg border border-neutral-200 dark:border-border bg-white dark:bg-card px-3.5 pr-10 text-sm text-foreground font-normal placeholder:text-muted-foreground focus-visible:border-neutral-900 focus-visible:ring-1 focus-visible:ring-neutral-900/20 outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none transition-colors"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? (
+                <EyeOff className="size-4 shrink-0" aria-hidden="true" />
+              ) : (
+                <Eye className="size-4 shrink-0" aria-hidden="true" />
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Notice after generating and copying password */}
         {copiedNotice && (
-          <p className="text-xs text-primary font-medium">
+          <p className="text-xs text-primary font-normal">
             Generated password copied to clipboard.
           </p>
         )}
 
         {/* Password security condition checklist */}
         {password.length > 0 && (
-          <div className="p-3 rounded-[8px] bg-secondary/40 border border-border-light dark:border-border space-y-1.5">
-            <p className="text-xs font-medium text-muted-foreground mb-1">
+          <div className="p-3 rounded-lg bg-neutral-50 dark:bg-card border border-neutral-200 dark:border-border space-y-1.5 font-normal">
+            <p className="text-xs font-normal text-muted-foreground mb-1">
               Password requirements:
             </p>
             <div className="grid grid-cols-2 gap-1 text-xs">
               <div className="flex items-center gap-1.5">
                 {criteria.minLength ? (
-                  <Check className="size-3 text-primary shrink-0" />
+                  <Check className="size-3 text-emerald-600 shrink-0" />
                 ) : (
                   <Circle className="size-3 text-muted-foreground shrink-0" />
                 )}
-                <span className={criteria.minLength ? "text-foreground font-medium" : "text-muted-foreground"}>
+                <span className={criteria.minLength ? "text-foreground font-normal" : "text-muted-foreground font-normal"}>
                   8+ characters
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
                 {criteria.hasUppercase ? (
-                  <Check className="size-3 text-primary shrink-0" />
+                  <Check className="size-3 text-emerald-600 shrink-0" />
                 ) : (
                   <Circle className="size-3 text-muted-foreground shrink-0" />
                 )}
-                <span className={criteria.hasUppercase ? "text-foreground font-medium" : "text-muted-foreground"}>
+                <span className={criteria.hasUppercase ? "text-foreground font-normal" : "text-muted-foreground font-normal"}>
                   1 uppercase letter
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
                 {criteria.hasNumber ? (
-                  <Check className="size-3 text-primary shrink-0" />
+                  <Check className="size-3 text-emerald-600 shrink-0" />
                 ) : (
                   <Circle className="size-3 text-muted-foreground shrink-0" />
                 )}
-                <span className={criteria.hasNumber ? "text-foreground font-medium" : "text-muted-foreground"}>
+                <span className={criteria.hasNumber ? "text-foreground font-normal" : "text-muted-foreground font-normal"}>
                   1 number
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
                 {criteria.hasSpecial ? (
-                  <Check className="size-3 text-primary shrink-0" />
+                  <Check className="size-3 text-emerald-600 shrink-0" />
                 ) : (
                   <Circle className="size-3 text-muted-foreground shrink-0" />
                 )}
-                <span className={criteria.hasSpecial ? "text-foreground font-medium" : "text-muted-foreground"}>
+                <span className={criteria.hasSpecial ? "text-foreground font-normal" : "text-muted-foreground font-normal"}>
                   1 special symbol
                 </span>
               </div>
@@ -340,7 +346,7 @@ function SignUpForm() {
             ref={errorRef}
             tabIndex={-1}
             role="alert"
-            className="p-3 rounded-[8px] bg-status-danger-bg text-status-danger-fg text-sm border border-destructive/20 outline-none"
+            className="p-3 rounded-lg bg-status-danger-bg text-status-danger-fg text-sm border border-destructive/20 outline-none font-normal"
           >
             {error}
           </div>
@@ -350,9 +356,16 @@ function SignUpForm() {
         <Button
           type="submit"
           disabled={!canSubmit}
-          className="w-full h-12 rounded-[8px] bg-ink text-white hover:bg-neutral-800 dark:bg-white dark:text-ink dark:hover:bg-neutral-200 transition-colors font-medium text-sm"
+          className="w-full h-11 rounded-lg bg-neutral-950 text-white hover:bg-neutral-900 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200 transition-colors font-normal text-sm flex items-center justify-center gap-2"
         >
-          {isPending ? "Creating account..." : "Create account"}
+          {isPending ? (
+            <>
+              <Loader2 className="size-4 animate-spin shrink-0" aria-hidden="true" />
+              <span>Creating account...</span>
+            </>
+          ) : (
+            "Create account"
+          )}
         </Button>
       </form>
     </div>
@@ -367,11 +380,11 @@ export default function SignUpPage() {
       description="Setup takes a few minutes. You approve every post before it goes live."
       agreementType="sign-up"
       footer={
-        <p className="text-sm text-muted-foreground text-left">
+        <p className="text-sm text-muted-foreground text-left font-normal">
           Already have an account?{" "}
           <Link
             href="/auth/sign-in"
-            className="text-primary font-medium hover:underline"
+            className="text-foreground hover:underline font-normal"
           >
             Sign in
           </Link>
@@ -380,7 +393,7 @@ export default function SignUpPage() {
     >
       <Suspense
         fallback={
-          <div className="w-full py-8 text-center text-sm text-muted-foreground">
+          <div className="w-full py-8 text-center text-sm text-muted-foreground font-normal">
             Loading sign up form...
           </div>
         }

@@ -9,8 +9,9 @@ import { GoogleSignInButton } from "../components/GoogleSignInButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Eye, EyeOff, Loader2 } from "lucide-react";
 
 interface OtpClient {
   emailOtp: {
@@ -103,27 +104,27 @@ function SignInForm() {
   };
 
   return (
-    <div className="w-full space-y-4">
+    <div className="w-full space-y-4 font-normal">
       {/* Account linking error notification */}
       {urlError === "account_not_linked" ? (
-        <Alert variant="destructive" className="mb-4">
+        <Alert variant="destructive" className="mb-4 font-normal">
           <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
-          <AlertTitle>Account already exists</AlertTitle>
-          <AlertDescription className="text-caption leading-relaxed">
+          <AlertTitle className="font-normal">Account already exists</AlertTitle>
+          <AlertDescription className="text-caption leading-relaxed font-normal">
             An account with this email was previously registered using email and password. Please sign in with your password below. Once signed in, you can link your Google account in Settings.
           </AlertDescription>
         </Alert>
       ) : urlError === "access_denied" ? (
-        <Alert variant="destructive" className="mb-4">
+        <Alert variant="destructive" className="mb-4 font-normal">
           <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
-          <AlertDescription className="text-meta">
+          <AlertDescription className="text-meta font-normal">
             Google sign in was cancelled or access was denied. Please try again.
           </AlertDescription>
         </Alert>
       ) : urlError ? (
-        <Alert variant="destructive" className="mb-4">
+        <Alert variant="destructive" className="mb-4 font-normal">
           <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
-          <AlertDescription className="text-meta">
+          <AlertDescription className="text-meta font-normal">
             Authentication error ({urlError}). Please sign in with your email and password.
           </AlertDescription>
         </Alert>
@@ -131,9 +132,9 @@ function SignInForm() {
 
       {/* Password reset success notification */}
       {urlMessage === "password_reset_success" && (
-        <Alert className="mb-4 border-signal-line bg-signal-soft text-foreground">
+        <Alert className="mb-4 border-signal-line bg-signal-soft text-foreground font-normal">
           <CheckCircle2 className="size-4 text-primary shrink-0" aria-hidden="true" />
-          <AlertDescription className="text-meta">
+          <AlertDescription className="text-meta font-normal">
             Your password has been successfully reset. Please sign in with your new password.
           </AlertDescription>
         </Alert>
@@ -144,12 +145,12 @@ function SignInForm() {
         <GoogleSignInButton text="Continue with Google" />
       </div>
 
-      {/* Visual divider */}
+      {/* Visual divider using shadcn Separator */}
       <div className="relative py-2 flex items-center justify-center">
         <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-border-light dark:border-border" />
+          <Separator className="w-full bg-neutral-200 dark:bg-border" />
         </div>
-        <div className="relative bg-white dark:bg-background px-3 text-xs text-muted-foreground uppercase tracking-wider">
+        <div className="relative bg-white dark:bg-background px-3 text-xs text-muted-foreground uppercase tracking-wider font-normal">
           or
         </div>
       </div>
@@ -158,7 +159,7 @@ function SignInForm() {
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Email field */}
         <div className="space-y-1.5 text-left">
-          <Label htmlFor="email" className="text-sm font-medium text-foreground">
+          <Label htmlFor="email" className="text-sm font-normal text-foreground">
             Email
           </Label>
           <Input
@@ -170,43 +171,48 @@ function SignInForm() {
             placeholder="name@company.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="h-12 rounded-[8px] border-border-light dark:border-border bg-white dark:bg-card text-foreground"
+            className="h-11 rounded-lg border border-neutral-200 dark:border-border bg-white dark:bg-card px-3.5 text-sm text-foreground font-normal placeholder:text-muted-foreground focus-visible:border-neutral-900 focus-visible:ring-1 focus-visible:ring-neutral-900/20 outline-none"
           />
         </div>
 
-        {/* Password field with show/hide and forgot password link */}
+        {/* Password field with eye toggle and forgot password link */}
         <div className="space-y-1.5 text-left">
           <div className="flex items-center justify-between">
-            <Label htmlFor="password" className="text-sm font-medium text-foreground">
+            <Label htmlFor="password" className="text-sm font-normal text-foreground">
               Password
             </Label>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setShowPassword((prev) => !prev)}
-                className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
-              >
-                {showPassword ? "Hide" : "Show"}
-              </button>
-              <Link
-                href="/auth/forgot-password"
-                className="text-xs text-primary hover:underline font-medium"
-              >
-                Forgot password?
-              </Link>
-            </div>
+            <Link
+              href="/auth/forgot-password"
+              className="text-sm text-neutral-600 dark:text-muted-foreground hover:text-foreground hover:underline font-normal"
+            >
+              Forgot password?
+            </Link>
           </div>
-          <Input
-            id="password"
-            name="password"
-            type={showPassword ? "text" : "password"}
-            required
-            autoComplete="current-password"
-            placeholder="Enter your password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="h-12 rounded-[8px] border-border-light dark:border-border bg-white dark:bg-card text-foreground"
-          />
+          <div className="relative">
+            <Input
+              id="password"
+              name="password"
+              type={showPassword ? "text" : "password"}
+              required
+              autoComplete="current-password"
+              placeholder="Enter your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="h-11 rounded-lg border border-neutral-200 dark:border-border bg-white dark:bg-card px-3.5 pr-10 text-sm text-foreground font-normal placeholder:text-muted-foreground focus-visible:border-neutral-900 focus-visible:ring-1 focus-visible:ring-neutral-900/20 outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none transition-colors"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? (
+                <EyeOff className="size-4 shrink-0" aria-hidden="true" />
+              ) : (
+                <Eye className="size-4 shrink-0" aria-hidden="true" />
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Inline error notice */}
@@ -215,7 +221,7 @@ function SignInForm() {
             ref={errorRef}
             tabIndex={-1}
             role="alert"
-            className="p-3 rounded-[8px] bg-status-danger-bg text-status-danger-fg text-sm border border-destructive/20 outline-none text-left"
+            className="p-3 rounded-lg bg-status-danger-bg text-status-danger-fg text-sm border border-destructive/20 outline-none text-left font-normal"
           >
             {error}
           </div>
@@ -225,9 +231,16 @@ function SignInForm() {
         <Button
           type="submit"
           disabled={isPending || !email.trim() || !password}
-          className="w-full h-12 rounded-[8px] bg-ink text-white hover:bg-neutral-800 dark:bg-white dark:text-ink dark:hover:bg-neutral-200 transition-colors font-medium text-sm"
+          className="w-full h-11 rounded-lg bg-neutral-950 text-white hover:bg-neutral-900 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200 transition-colors font-normal text-sm flex items-center justify-center gap-2"
         >
-          {isPending ? "Signing in..." : "Sign in"}
+          {isPending ? (
+            <>
+              <Loader2 className="size-4 animate-spin shrink-0" aria-hidden="true" />
+              <span>Signing in...</span>
+            </>
+          ) : (
+            "Sign in"
+          )}
         </Button>
       </form>
     </div>
@@ -242,11 +255,11 @@ export default function SignInPage() {
       description="Welcome back. Sign in to manage your LinkedIn posts."
       agreementType="sign-in"
       footer={
-        <p className="text-sm text-muted-foreground text-left">
+        <p className="text-sm text-muted-foreground text-left font-normal">
           New here?{" "}
           <Link
             href="/auth/sign-up"
-            className="text-primary font-medium hover:underline"
+            className="text-foreground hover:underline font-normal"
           >
             Create your account
           </Link>
@@ -255,7 +268,7 @@ export default function SignInPage() {
     >
       <Suspense
         fallback={
-          <div className="w-full py-8 text-center text-sm text-muted-foreground">
+          <div className="w-full py-8 text-center text-sm text-muted-foreground font-normal">
             Loading sign in form...
           </div>
         }
