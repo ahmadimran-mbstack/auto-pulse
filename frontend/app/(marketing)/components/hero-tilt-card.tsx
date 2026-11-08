@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Clock, CheckCircle2 } from "lucide-react";
+import { GmailIcon, SlackIcon } from "./platform-icons";
 
 interface HeroTiltCardProps {
   className?: string;
@@ -153,7 +154,14 @@ export function HeroTiltCard({ className }: HeroTiltCardProps) {
             <CheckCircle2 className="w-3.5 h-3.5 text-navy" />
             AI writing score: 11 / 100 (Passed check)
           </span>
-          <span>Channel: Email link and Slack</span>
+          <span className="flex items-center gap-1.5 font-normal text-neutral-800">
+            <span className="text-text-muted-light">Channel:</span>
+            <GmailIcon className="w-3.5 h-3.5 shrink-0" />
+            <span>Email</span>
+            <span className="text-text-muted-light">&amp;</span>
+            <SlackIcon className="w-3.5 h-3.5 shrink-0" />
+            <span>Slack</span>
+          </span>
         </div>
 
         {/* Action buttons with raised depth */}

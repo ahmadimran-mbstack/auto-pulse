@@ -7,6 +7,7 @@ import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import PixelBlast from "@/components/PixelBlast";
 import { ScrollReveal } from "./scroll-reveal";
+import { LinkedInIcon } from "./platform-icons";
 
 // This component renders the final conversion section with a white pill button on navy-deep background.
 export function FinalCta() {
@@ -39,15 +40,20 @@ export function FinalCta() {
         />
       </div>
 
-      <div className="relative z-10 max-w-4xl mx-auto px-4 sm:px-6 text-center">
+      <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 text-center">
         <ScrollReveal>
           {/* Main closing headline */}
-          <p className="landing-heading text-4xl sm:text-5xl md:text-6xl text-white max-w-6xl mx-auto">
-            Let your LinkedIn run itself
+          <p className="landing-heading text-5xl sm:text-6xl md:text-7xl lg:text-[76px] text-white max-w-6xl mx-auto flex items-center justify-center flex-wrap gap-x-3 gap-y-2">
+            <span>Let your</span>
+            <span className="inline-flex items-center gap-2.5">
+              <LinkedInIcon className="w-9 h-9 sm:w-11 sm:h-11 md:w-14 md:h-14 lg:w-16 lg:h-16 shrink-0" />
+              <span>LinkedIn</span>
+            </span>
+            <span>run itself</span>
           </p>
 
           {/* Quiet supporting text */}
-          <p className="mt-6 text-base sm:text-lg text-text-muted-dark max-w-xl mx-auto font-normal leading-relaxed">
+          <p className="mt-6 text-lg sm:text-xl text-text-muted-dark max-w-2xl mx-auto font-normal leading-relaxed">
             Daily drafts prepared from your profile and current industry topics. You approve each one before it goes live.
           </p>
 

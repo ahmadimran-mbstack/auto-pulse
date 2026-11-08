@@ -13,6 +13,7 @@ import {
   MockSlackCard,
   MockLinkedInStatusCard,
 } from "./mock-cards";
+import { LinkedInIcon, SlackIcon, GmailIcon } from "./platform-icons";
 
 // Feature data structure containing headline, eyebrow badge, panel configuration, and three sub-rows
 interface FeatureItem {
@@ -22,7 +23,7 @@ interface FeatureItem {
   panelVariant: GrainyPalette;
   panelAngle?: number;
   rows: {
-    title: string;
+    title: React.ReactNode;
     description: string;
   }[];
 }
@@ -107,17 +108,47 @@ const features: FeatureItem[] = [
     panelAngle: 145,
     rows: [
       {
-        title: "Approve by email link or in Slack",
+        title: (
+          <span className="inline-flex items-center gap-1.5 flex-wrap">
+            <span className="inline-flex items-center gap-1">
+              <GmailIcon className="w-4 h-4 shrink-0" />
+              <span>Approve by email link</span>
+            </span>
+            <span>or in</span>
+            <span className="inline-flex items-center gap-1">
+              <SlackIcon className="w-4 h-4 shrink-0" />
+              <span>Slack</span>
+            </span>
+          </span>
+        ),
         description:
           "Review drafts on your phone or computer and confirm publication with one tap.",
       },
       {
-        title: "Publishes to LinkedIn after approval",
+        title: (
+          <span className="inline-flex items-center gap-1.5 flex-wrap">
+            <span>Publishes to</span>
+            <span className="inline-flex items-center gap-1">
+              <LinkedInIcon className="w-4 h-4 shrink-0" />
+              <span>LinkedIn</span>
+            </span>
+            <span>after approval</span>
+          </span>
+        ),
         description:
           "Connects securely to your verified LinkedIn account and posts only after explicit approval.",
       },
       {
-        title: "Tells you when your LinkedIn connection needs renewing",
+        title: (
+          <span className="inline-flex items-center gap-1.5 flex-wrap">
+            <span>Tells you when your</span>
+            <span className="inline-flex items-center gap-1">
+              <LinkedInIcon className="w-4 h-4 shrink-0" />
+              <span>LinkedIn</span>
+            </span>
+            <span>connection needs renewing</span>
+          </span>
+        ),
         description:
           "Sends timely email notifications before the 60-day connection token expires so posting never stops.",
       },
@@ -333,7 +364,7 @@ function FeatureRowBlock({
           </Badge>
 
           {/* Quiet headline */}
-          <h2 className="landing-heading text-3xl sm:text-4xl text-ink mb-6">
+          <h2 className="landing-heading text-4xl sm:text-5xl text-ink mb-6">
             {feature.headline}
           </h2>
 
@@ -350,7 +381,7 @@ function FeatureRowBlock({
                 >
                   <div className="flex items-center justify-between">
                     <span
-                      className={`text-base sm:text-lg font-normal transition-colors ${
+                      className={`text-lg sm:text-xl font-normal transition-colors ${
                         isActive
                           ? "text-ink"
                           : "text-text-muted-light group-hover:text-ink"
@@ -366,7 +397,7 @@ function FeatureRowBlock({
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: "auto" }}
                       transition={{ duration: 0.24, ease: "easeOut" }}
-                      className="mt-2 text-sm text-text-muted-light font-normal leading-relaxed overflow-hidden"
+                      className="mt-2 text-sm sm:text-base text-text-muted-light font-normal leading-relaxed overflow-hidden"
                     >
                       {row.description}
                     </motion.p>

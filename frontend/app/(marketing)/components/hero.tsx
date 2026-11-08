@@ -8,6 +8,7 @@ import { motion } from "motion/react";
 import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import GradientBlinds from "@/components/GradientBlinds";
+import { LinkedInIcon } from "./platform-icons";
 
 // Headline words to animate sequentially 40ms apart
 const headlineWords = [
@@ -26,20 +27,6 @@ const headlineWords = [
 export function Hero() {
   return (
     <section className="relative overflow-hidden bg-navy-deep text-white min-h-screen flex flex-col justify-end pt-20 pb-8 sm:pb-10 md:pb-12">
-      {/* Huge cropped faceted logo mark at 5 to 6 percent opacity (allowed in hero and final CTA only) */}
-      <div
-        className="pointer-events-none absolute -left-28 -top-28 sm:-left-36 sm:-top-36 w-[440px] sm:w-[600px] h-[440px] sm:h-[600px] select-none opacity-[0.055]"
-        aria-hidden="true"
-      >
-        <Image
-          src="/logo-mark-blue-bg.png"
-          alt=""
-          width={600}
-          height={600}
-          className="w-full h-full object-contain"
-        />
-      </div>
-
       {/* WebGL gradient blinds background with smooth bottom fade */}
       <div
         className="absolute inset-0 pointer-events-none"
@@ -57,9 +44,9 @@ export function Hero() {
       </div>
 
       <div className="relative z-10 w-full px-6 sm:px-10 md:px-12 lg:px-16">
-        <div className="max-w-4xl">
+        <div className="max-w-5xl">
           {/* Main headline with 40ms blur-to-sharp word reveal */}
-          <p className="landing-heading text-4xl sm:text-5xl md:text-6xl text-white flex flex-wrap text-left font-normal sm:font-medium tracking-tight">
+          <p className="landing-heading text-3xl sm:text-4xl md:text-5xl text-white flex flex-wrap text-left font-normal tracking-tight">
             {headlineWords.map((word, index) => (
               <motion.span
                 key={index}
@@ -82,9 +69,14 @@ export function Hero() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.35, ease: [0.22, 1, 0.36, 1] }}
-            className="mt-6 text-base sm:text-lg md:text-xl text-text-muted-dark max-w-xl font-normal leading-relaxed text-left"
+            className="mt-2 text-lg md:text-xl text-text-muted-dark max-w-2xl font-normal leading-relaxed text-left flex items-center flex-wrap gap-x-2 gap-y-1"
           >
-            AI Agents that help you build your brand on LinkedIn by managing your entire pipeline
+            <span>AI Agents that help you build your brand on</span>
+            <span className="inline-flex items-center gap-1.5 text-white font-normal">
+              <LinkedInIcon className="w-5 h-5 shrink-0" />
+              <span>LinkedIn</span>
+            </span>
+            <span>by managing your entire pipeline</span>
           </motion.p>
 
           {/* Action buttons with layout and styles matching reference */}
@@ -92,7 +84,7 @@ export function Hero() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.45, ease: [0.22, 1, 0.36, 1] }}
-            className="mt-8 flex flex-wrap items-center justify-start gap-3.5"
+            className="mt-6 flex flex-wrap items-center justify-start gap-3.5"
           >
             <Link href="/auth/sign-up">
               <Button className="rounded-xl bg-white text-ink hover:bg-neutral-100 px-6 h-10 text-md font-medium gap-1.5 flex items-center">

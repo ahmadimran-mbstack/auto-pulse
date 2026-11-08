@@ -2,6 +2,7 @@
 import React from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { LinkedInIcon } from "./platform-icons";
 
 // This component provides the quiet dark footer on navy-deep background.
 export function Footer() {
@@ -85,7 +86,10 @@ export function Footer() {
         {/* Bottom copyright notice */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between text-xs text-text-muted-dark gap-4">
           <p>(c) 2026 AutoPulse Inc. All rights reserved.</p>
-          <p>LinkedIn is a trademark of LinkedIn Corporation.</p>
+          <p className="flex items-center gap-1.5">
+            <LinkedInIcon className="w-3.5 h-3.5 shrink-0" />
+            <span>LinkedIn is a trademark of LinkedIn Corporation.</span>
+          </p>
         </div>
       </div>
     </footer>

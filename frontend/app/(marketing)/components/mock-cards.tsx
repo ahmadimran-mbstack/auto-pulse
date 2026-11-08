@@ -8,12 +8,15 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
-  MessageSquare,
   Shield,
   Layers,
   Sparkles,
   ExternalLink,
 } from "lucide-react";
+import {
+  LinkedInIcon,
+  SlackIcon,
+} from "./platform-icons";
 
 // Mock 1: A complete drafted post awaiting founder review and one-tap approval
 export function MockDraftCard({ className }: { className?: string }) {
@@ -64,7 +67,11 @@ export function MockDraftCard({ className }: { className?: string }) {
           <CheckCircle2 className="w-3.5 h-3.5 text-navy" />
           AI writing score: 11 / 100 (Passed check)
         </span>
-        <span>Target: LinkedIn</span>
+        <span className="flex items-center gap-1.5 text-ink font-normal">
+          <span className="text-text-muted-light">Target:</span>
+          <LinkedInIcon className="w-3.5 h-3.5 shrink-0" />
+          <span>LinkedIn</span>
+        </span>
       </div>
 
       {/* Action buttons inside the draft card */}
@@ -94,8 +101,8 @@ export function MockSlackCard({ className }: { className?: string }) {
       {/* Slack channel and bot metadata header */}
       <div className="flex items-center justify-between pb-3 border-b border-border-light text-xs text-text-muted-light">
         <span className="flex items-center gap-1.5 font-normal text-neutral-700">
-          <MessageSquare className="w-3.5 h-3.5" />
-          #autopulse-approvals
+          <SlackIcon className="w-3.5 h-3.5 shrink-0" />
+          <span>#autopulse-approvals</span>
         </span>
         <span>Today at 9:00 AM</span>
       </div>
@@ -113,7 +120,7 @@ export function MockSlackCard({ className }: { className?: string }) {
         </div>
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-normal text-ink">AutoPulse</span>
+            <span className="text-sm font-normal text-ink">AutoPulse</span>
             <Badge
               variant="outline"
               className="text-[10px] py-0 px-1.5 border-neutral-300 text-text-muted-light rounded font-normal"
@@ -121,8 +128,13 @@ export function MockSlackCard({ className }: { className?: string }) {
               APP
             </Badge>
           </div>
-          <p className="text-xs text-neutral-700 font-normal leading-snug">
-            Your daily draft for LinkedIn is ready for review.
+          <p className="text-xs text-neutral-700 font-normal leading-snug flex items-center gap-1 flex-wrap">
+            <span>Your daily draft for</span>
+            <span className="inline-flex items-center gap-1 font-normal text-ink">
+              <LinkedInIcon className="w-3 h-3 shrink-0" />
+              <span>LinkedIn</span>
+            </span>
+            <span>is ready for review.</span>
           </p>
         </div>
       </div>
@@ -166,7 +178,7 @@ export function MockScoreMeterCard({ className }: { className?: string }) {
 
       {/* Score number and threshold indicator */}
       <div className="py-4 text-center space-y-1">
-        <div className="landing-heading text-4xl text-ink">
+        <div className="landing-heading text-5xl text-ink">
           11 / 100
         </div>
         <div className="text-xs text-text-muted-light font-normal">
@@ -217,7 +229,10 @@ export function MockLinkedInStatusCard({ className }: { className?: string }) {
     >
       {/* Connection status header */}
       <div className="flex items-center justify-between pb-3 border-b border-border-light">
-        <span className="text-xs text-text-muted-light">LinkedIn Connection</span>
+        <span className="text-xs text-text-muted-light flex items-center gap-1.5 font-normal">
+          <LinkedInIcon className="w-3.5 h-3.5 shrink-0" />
+          <span>LinkedIn Connection</span>
+        </span>
         <Badge
           variant="outline"
           className="text-xs font-normal border-border-light text-navy bg-ice/20"
@@ -228,8 +243,8 @@ export function MockLinkedInStatusCard({ className }: { className?: string }) {
 
       {/* LinkedIn profile info */}
       <div className="py-3 flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-[#0077B5]/10 text-[#0077B5] flex items-center justify-center font-bold text-sm">
-          in
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 overflow-hidden shadow-xs">
+          <LinkedInIcon className="w-10 h-10" />
         </div>
         <div>
           <div className="text-sm font-normal text-ink">Alex Rivera</div>

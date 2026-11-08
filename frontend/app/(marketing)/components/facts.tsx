@@ -3,17 +3,31 @@
 
 import React from "react";
 import { ScrollReveal, ScrollRevealItem } from "./scroll-reveal";
+import { LinkedInIcon, SlackIcon, GmailIcon } from "./platform-icons";
 
 // This component renders the three plain facts row on the paper canvas.
 export function ThreeFacts() {
   const facts = [
     {
       metric: "2 ways to approve",
-      caption: "Email link or Slack",
+      caption: (
+        <span className="inline-flex items-center justify-center gap-1.5 text-text-muted-light">
+          <GmailIcon className="w-3.5 h-3.5 shrink-0" />
+          <span>Email link</span>
+          <span className="text-text-muted-light/60">or</span>
+          <SlackIcon className="w-3.5 h-3.5 shrink-0" />
+          <span>Slack</span>
+        </span>
+      ),
     },
     {
       metric: "1 platform at launch",
-      caption: "LinkedIn",
+      caption: (
+        <span className="inline-flex items-center justify-center gap-1.5 text-text-muted-light">
+          <LinkedInIcon className="w-3.5 h-3.5 shrink-0" />
+          <span>LinkedIn</span>
+        </span>
+      ),
     },
     {
       metric: "Checked before you see it",
@@ -42,11 +56,11 @@ export function ThreeFacts() {
                 }`}
             >
               {/* Big metric title with regular font weight */}
-              <div className="landing-heading text-2xl sm:text-3xl text-ink">
+              <div className="landing-heading text-3xl sm:text-4xl lg:text-[40px] text-ink">
                 {fact.metric}
               </div>
               {/* Quiet descriptive caption */}
-              <p className="mt-2 text-sm text-text-muted-light font-normal">
+              <p className="mt-2.5 text-sm sm:text-base text-text-muted-light font-normal flex items-center justify-center">
                 {fact.caption}
               </p>
             </ScrollRevealItem>
