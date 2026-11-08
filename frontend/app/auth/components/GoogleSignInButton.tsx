@@ -46,7 +46,7 @@ export function GoogleSignInButton({
         variant="outline"
         onClick={handleGoogleSignIn}
         disabled={isPending}
-        className="w-full h-12 rounded-[8px] border-border-light dark:border-border bg-white text-ink hover:bg-neutral-50 dark:bg-card dark:text-foreground dark:hover:bg-secondary/40 justify-center gap-3 font-medium transition-colors"
+        className="w-full h-11 rounded-lg border border-neutral-200 dark:border-border bg-white text-neutral-900 hover:bg-neutral-50 dark:bg-card dark:text-foreground dark:hover:bg-secondary/40 justify-center gap-2.5 font-normal transition-colors text-sm"
       >
         {/* Official Google Monochrome / Full-color SVG mark */}
         <svg

@@ -11,7 +11,7 @@ interface LogoProps {
   className?: string;
 }
 
-export function Logo({ href = "/", size = 48, className }: LogoProps) {
+export function Logo({ href = "/", size = 32, className }: LogoProps) {
   const content = (
     <div
       className={cn("relative flex items-center shrink-0", className)}
