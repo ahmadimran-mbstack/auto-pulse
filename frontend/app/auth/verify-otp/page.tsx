@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import { setOnboardingCompletedCookieAction } from "@/app/onboarding/actions";
 
 interface OtpAuthClient {
@@ -176,9 +176,9 @@ function VerifyOtpForm() {
   // Initial step: enter email if arriving without email query parameter
   if (step === "send") {
     return (
-      <form onSubmit={handleSendOtp} className="space-y-4 text-left">
+      <form onSubmit={handleSendOtp} className="space-y-4 text-left font-normal">
         <div className="space-y-1.5">
-          <Label htmlFor="email" className="text-sm font-medium text-foreground">
+          <Label htmlFor="email" className="text-sm font-normal text-foreground">
             Email address
           </Label>
           <Input
@@ -190,7 +190,7 @@ function VerifyOtpForm() {
             placeholder="name@company.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="h-12 rounded-[8px] border-border-light dark:border-border bg-white dark:bg-card text-foreground"
+            className="h-11 rounded-lg border border-neutral-200 dark:border-border bg-white dark:bg-card px-3.5 text-sm text-foreground font-normal placeholder:text-muted-foreground focus-visible:border-neutral-900 focus-visible:ring-1 focus-visible:ring-neutral-900/20 outline-none"
           />
         </div>
 
@@ -199,7 +199,7 @@ function VerifyOtpForm() {
             ref={errorRef}
             tabIndex={-1}
             role="alert"
-            className="p-3 rounded-[8px] bg-status-danger-bg text-status-danger-fg text-sm border border-destructive/20 outline-none"
+            className="p-3 rounded-lg bg-status-danger-bg text-status-danger-fg text-sm border border-destructive/20 outline-none font-normal"
           >
             {error}
           </div>
@@ -208,9 +208,16 @@ function VerifyOtpForm() {
         <Button
           type="submit"
           disabled={isPending || !email.trim()}
-          className="w-full h-12 rounded-[8px] bg-ink text-white hover:bg-neutral-800 dark:bg-white dark:text-ink dark:hover:bg-neutral-200 transition-colors font-medium text-sm"
+          className="w-full h-11 rounded-lg bg-neutral-950 text-white hover:bg-neutral-900 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200 transition-colors font-normal text-sm flex items-center justify-center gap-2"
         >
-          {isPending ? "Sending code..." : "Send code"}
+          {isPending ? (
+            <>
+              <Loader2 className="size-4 animate-spin shrink-0" aria-hidden="true" />
+              <span>Sending code...</span>
+            </>
+          ) : (
+            "Send code"
+          )}
         </Button>
       </form>
     );
@@ -218,12 +225,12 @@ function VerifyOtpForm() {
 
   // Verification step: input the 6-digit code
   return (
-    <form onSubmit={handleVerifyOtp} className="space-y-4 text-left">
+    <form onSubmit={handleVerifyOtp} className="space-y-4 text-left font-normal">
       {/* Success notification */}
       {successMessage && (
-        <Alert className="border-signal-line bg-signal-soft text-foreground">
+        <Alert className="border-signal-line bg-signal-soft text-foreground font-normal">
           <CheckCircle2 className="size-4 text-primary shrink-0" aria-hidden="true" />
-          <AlertDescription className="text-sm">
+          <AlertDescription className="text-sm font-normal">
             {successMessage}
           </AlertDescription>
         </Alert>
@@ -232,14 +239,14 @@ function VerifyOtpForm() {
       {/* Code input field */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <Label htmlFor="otp" className="text-sm font-medium text-foreground">
+          <Label htmlFor="otp" className="text-sm font-normal text-foreground">
             Verification code
           </Label>
           <button
             type="button"
             onClick={() => handleSendOtp()}
             disabled={countdown > 0 || isPending}
-            className="text-xs text-primary hover:underline font-medium disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+            className="text-xs text-neutral-600 dark:text-muted-foreground hover:text-foreground hover:underline font-normal disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
           >
             {countdown > 0 ? `Resend code in ${countdown}s` : "Resend code"}
           </button>
@@ -254,7 +261,7 @@ function VerifyOtpForm() {
           placeholder="6-digit code"
           value={otp}
           onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-          className="h-12 rounded-[8px] border-border-light dark:border-border bg-white dark:bg-card text-foreground font-mono text-center tracking-widest text-lg"
+          className="h-11 rounded-lg border border-neutral-200 dark:border-border bg-white dark:bg-card px-3.5 text-foreground font-mono text-center tracking-widest text-lg font-normal placeholder:text-muted-foreground focus-visible:border-neutral-900 focus-visible:ring-1 focus-visible:ring-neutral-900/20 outline-none"
         />
       </div>
 
@@ -264,7 +271,7 @@ function VerifyOtpForm() {
           ref={errorRef}
           tabIndex={-1}
           role="alert"
-          className="p-3 rounded-[8px] bg-status-danger-bg text-status-danger-fg text-sm border border-destructive/20 outline-none"
+          className="p-3 rounded-lg bg-status-danger-bg text-status-danger-fg text-sm border border-destructive/20 outline-none font-normal"
         >
           {error}
         </div>
@@ -274,9 +281,16 @@ function VerifyOtpForm() {
       <Button
         type="submit"
         disabled={isPending || otp.trim().length < 6}
-        className="w-full h-12 rounded-[8px] bg-ink text-white hover:bg-neutral-800 dark:bg-white dark:text-ink dark:hover:bg-neutral-200 transition-colors font-medium text-sm"
+        className="w-full h-11 rounded-lg bg-neutral-950 text-white hover:bg-neutral-900 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200 transition-colors font-normal text-sm flex items-center justify-center gap-2"
       >
-        {isPending ? "Verifying..." : "Verify code"}
+        {isPending ? (
+          <>
+            <Loader2 className="size-4 animate-spin shrink-0" aria-hidden="true" />
+            <span>Verifying...</span>
+          </>
+        ) : (
+          "Verify code"
+        )}
       </Button>
 
       {/* Change email option */}
@@ -289,7 +303,7 @@ function VerifyOtpForm() {
             setError(null);
             setSuccessMessage(null);
           }}
-          className="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer"
+          className="text-xs text-muted-foreground hover:text-foreground underline cursor-pointer font-normal"
         >
           Use a different email address
         </button>
@@ -312,10 +326,10 @@ export default function VerifyOtpPage() {
       title="Check your email"
       description={descriptionText}
       footer={
-        <p className="text-sm text-muted-foreground text-left">
+        <p className="text-sm text-muted-foreground text-left font-normal">
           <Link
             href="/auth/sign-in"
-            className="text-primary font-medium hover:underline"
+            className="text-foreground hover:underline font-normal"
           >
             Back to sign in
           </Link>
@@ -324,7 +338,7 @@ export default function VerifyOtpPage() {
     >
       <Suspense
         fallback={
-          <div className="w-full py-8 text-center text-sm text-muted-foreground">
+          <div className="w-full py-8 text-center text-sm text-muted-foreground font-normal">
             Loading verification...
           </div>
         }

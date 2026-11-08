@@ -7,6 +7,7 @@ import { AuthShell } from "../components/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Loader2 } from "lucide-react";
 
 // Forgot password page requesting an OTP code to reset user credentials
 export default function ForgotPasswordPage() {
@@ -76,21 +77,21 @@ export default function ForgotPasswordPage() {
       title="Reset your password"
       description="Enter your email and we will send you a link."
       footer={
-        <p className="text-sm text-muted-foreground text-left">
+        <p className="text-sm text-muted-foreground text-left font-normal">
           Remember your password?{" "}
           <Link
             href="/auth/sign-in"
-            className="text-primary font-medium hover:underline"
+            className="text-foreground hover:underline font-normal"
           >
             Sign in
           </Link>
         </p>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-4 text-left">
+      <form onSubmit={handleSubmit} className="space-y-4 text-left font-normal">
         {/* Email input field */}
         <div className="space-y-1.5">
-          <Label htmlFor="email" className="text-sm font-medium text-foreground">
+          <Label htmlFor="email" className="text-sm font-normal text-foreground">
             Email address
           </Label>
           <Input
@@ -102,7 +103,7 @@ export default function ForgotPasswordPage() {
             placeholder="name@company.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="h-12 rounded-[8px] border-border-light dark:border-border bg-white dark:bg-card text-foreground"
+            className="h-11 rounded-lg border border-neutral-200 dark:border-border bg-white dark:bg-card px-3.5 text-sm text-foreground font-normal placeholder:text-muted-foreground focus-visible:border-neutral-900 focus-visible:ring-1 focus-visible:ring-neutral-900/20 outline-none"
           />
         </div>
 
@@ -112,7 +113,7 @@ export default function ForgotPasswordPage() {
             ref={errorRef}
             tabIndex={-1}
             role="alert"
-            className="p-3 rounded-[8px] bg-status-danger-bg text-status-danger-fg text-sm border border-destructive/20 outline-none"
+            className="p-3 rounded-lg bg-status-danger-bg text-status-danger-fg text-sm border border-destructive/20 outline-none font-normal"
           >
             {error}
           </div>
@@ -122,9 +123,16 @@ export default function ForgotPasswordPage() {
         <Button
           type="submit"
           disabled={isPending || !email.trim()}
-          className="w-full h-12 rounded-[8px] bg-ink text-white hover:bg-neutral-800 dark:bg-white dark:text-ink dark:hover:bg-neutral-200 transition-colors font-medium text-sm"
+          className="w-full h-11 rounded-lg bg-neutral-950 text-white hover:bg-neutral-900 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200 transition-colors font-normal text-sm flex items-center justify-center gap-2"
         >
-          {isPending ? "Sending code..." : "Send reset code"}
+          {isPending ? (
+            <>
+              <Loader2 className="size-4 animate-spin shrink-0" aria-hidden="true" />
+              <span>Sending code...</span>
+            </>
+          ) : (
+            "Send reset code"
+          )}
         </Button>
       </form>
     </AuthShell>
