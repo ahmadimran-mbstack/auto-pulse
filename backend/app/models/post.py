@@ -190,6 +190,10 @@ class GenerationRun(Base):
         DateTime(timezone=True), nullable=True
     )
     error_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    internal_trace: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    cancel_requested: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
 
     # Timestamps for run duration tracking
     started_at: Mapped[datetime.datetime] = mapped_column(
@@ -201,7 +205,7 @@ class GenerationRun(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('queued', 'started', 'running', 'succeeded', 'needs_review', 'completed', 'failed', 'failed_quality', 'failed_error', 'timed_out', 'interrupted', 'skipped')",
+            "status IN ('queued', 'started', 'running', 'succeeded', 'needs_review', 'completed', 'failed', 'failed_quality', 'failed_error', 'timed_out', 'interrupted', 'cancelled', 'skipped')",
             name="ck_generation_runs_status",
         ),
         # Scheduled runs are limited to at most one record per user per date
@@ -264,6 +268,14 @@ class PlaygroundRun(Base):
     # Comprehensive multi-agent audit trace across all rounds
     trace: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
 
+    # Private internal trace (candidates, combined scores, stop reason, model calls) - never returned by any API
+    internal_trace: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+
+    # Cancel flag checked between agent steps
+    cancel_requested: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+
     # Lifecycle timestamps
     started_at: Mapped[Optional[datetime.datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -277,9 +289,37 @@ class PlaygroundRun(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('queued', 'started', 'running', 'succeeded', 'completed', 'failed', 'failed_quality', 'failed_error', 'timed_out', 'interrupted')",
+            "status IN ('queued', 'started', 'running', 'succeeded', 'completed', 'failed', 'failed_quality', 'failed_error', 'timed_out', 'interrupted', 'cancelled')",
             name="ck_playground_runs_status",
         ),
         Index("ix_playground_runs_user_id_created_at", "user_id", "created_at"),
+    )
+
+
+class RunEvent(Base):
+    """Stores public real-time timeline events emitted during a playground run."""
+
+    __tablename__ = "run_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    run_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    type: Mapped[str] = mapped_column(Text, nullable=False)
+    agent: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    payload: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("run_id", "seq", name="uq_run_events_run_id_seq"),
+        Index("ix_run_events_run_id_seq", "run_id", "seq"),
     )
 
