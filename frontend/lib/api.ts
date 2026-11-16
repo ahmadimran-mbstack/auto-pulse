@@ -556,6 +556,48 @@ export async function createPlaygroundRun(topicHint?: string): Promise<{ run_id:
   });
 }
 
+export interface RunEventItem {
+  seq: number;
+  time: string;
+  type: string;
+  agent?: string | null;
+  status?: string | null;
+  message: string;
+  payload: Record<string, any>;
+}
+
+export interface RunEventsResponse {
+  run_id: string;
+  status: string;
+  events: RunEventItem[];
+  last_seq: number;
+}
+
+// Fetches incremental public timeline events for a playground run after afterSeq
+export async function getPlaygroundRunEvents(
+  runId: string,
+  afterSeq: number = 0
+): Promise<RunEventsResponse> {
+  return apiCall<RunEventsResponse>(`/playground/runs/${runId}/events?after_seq=${afterSeq}`, {
+    method: "GET",
+    cache: "no-store",
+    headers: {
+      "Cache-Control": "no-cache, no-store",
+      "Pragma": "no-cache",
+    },
+  });
+}
+
+// Requests cancellation of an active playground run
+export async function cancelPlaygroundRun(
+  runId: string
+): Promise<{ run_id: string; status: string; best_draft?: Record<string, any> | null }> {
+  return apiCall(`/playground/runs/${runId}/cancel`, {
+    method: "POST",
+    cache: "no-store",
+  });
+}
+
 // Retrieves status, step, round, and audit trace for a run (daily or playground) (always uncached)
 export async function getRun(runId: string): Promise<RunResponse> {
   const data = await apiCall<RunResponse & { agent_trace?: AgentTrace | null }>(`/runs/${runId}`, {

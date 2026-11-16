@@ -24,9 +24,12 @@ import {
   getSlackStatus,
   disconnectSlack,
   createPlaygroundRun,
+  cancelPlaygroundRun,
+  getPlaygroundRunEvents,
   getRun,
   getPostAgentTrace,
   getAnalytics,
+  type RunEventsResponse,
 } from "./api";
 import type { DashboardData } from "../types/dashboard";
 import type { AnalyticsDashboardData, AnalyticsRange } from "../types/analytics";
@@ -357,12 +360,23 @@ export function usePostToLinkedInMutation(userId: string) {
 
 // Mutation to trigger an experimental playground run
 export function useCreatePlaygroundRunMutation() {
-  return useMutation<{ run_id: string }, Error, string | undefined>({
+  return useMutation<{ run_id: string; status?: string }, Error, string | undefined>({
     mutationFn: (topicHint?: string) => createPlaygroundRun(topicHint),
   });
 }
 
-// Query to inspect or poll run status (refetches every 2s while running)
+// Mutation to cancel an active playground run
+export function useCancelPlaygroundRunMutation() {
+  return useMutation<
+    { run_id: string; status: string; best_draft?: Record<string, any> | null },
+    Error,
+    string
+  >({
+    mutationFn: (runId: string) => cancelPlaygroundRun(runId),
+  });
+}
+
+// Query to inspect or poll run status (refetches while running, stops on terminal or hidden tab)
 export function useRunQuery(
   userId: string,
   runId: string | null,
@@ -372,6 +386,7 @@ export function useRunQuery(
     queryKey: queryKeys.run(userId, runId || ""),
     queryFn: () => getRun(runId!),
     enabled: !!userId && !!runId,
+    refetchIntervalInBackground: false,
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       const isTerminal =
@@ -382,7 +397,8 @@ export function useRunQuery(
         status === "failed_quality" ||
         status === "failed_error" ||
         status === "timed_out" ||
-        status === "interrupted";
+        status === "interrupted" ||
+        status === "cancelled";
       if (isTerminal) {
         return false;
       }

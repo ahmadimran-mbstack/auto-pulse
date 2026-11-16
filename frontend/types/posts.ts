@@ -172,7 +172,8 @@ export type RunStatus =
   | "failed_error"
   | "timed_out"
   | "interrupted"
-  | "needs_review";
+  | "needs_review"
+  | "cancelled";
 export type RunStep = "finder" | "gtm" | "drafter" | "detector" | "rewrite" | null;
 
 export interface RunResponse {
@@ -182,6 +183,7 @@ export interface RunResponse {
   current_node?: string | null;
   round: number;
   max_rounds: number;
+  best_draft?: Record<string, any> | null;
   elapsed_seconds?: number | null;
   last_progress_at?: string | null;
   stalled?: boolean;
