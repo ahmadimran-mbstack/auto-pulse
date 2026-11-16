@@ -21,18 +21,19 @@ import {
 // This component presents four distinct capability cards with subtle border highlights
 export function BentoGrid() {
   return (
-    /* Mark the bento grid section as light so the floating navbar uses dark text */
+    /* Mark the bento grid section as light and use 64px mobile vertical spacing */
     <section
       data-nav-theme="light"
-      className="bg-paper py-16 md:py-24 border-t border-border-light"
+      className="bg-paper py-16 lg:py-24 border-t border-border-light"
     >
-      <div className="max-w-6xl mx-auto px-4 sm:px-6">
+      {/* Consistent 20px mobile container padding */}
+      <div className="max-w-6xl mx-auto px-5 lg:px-6">
         {/* Section title and description with scroll reveal */}
-        <ScrollReveal className="max-w-3xl mb-12 sm:mb-16">
-          <p className="landing-heading text-4xl text-ink">
+        <ScrollReveal className="max-w-3xl mb-10 lg:mb-16">
+          <p className="landing-heading text-[clamp(1.75rem,7vw,2.25rem)] lg:text-4xl text-ink">
             Built to run on its own, safely
           </p>
-          <p className="mt-3 text-base sm:text-lg text-text-muted-light font-normal">
+          <p className="mt-3 text-[15px] lg:text-lg text-text-muted-light font-normal">
             Every safeguard is designed so you maintain full control of your reputation.
           </p>
         </ScrollReveal>
@@ -44,7 +45,7 @@ export function BentoGrid() {
         >
           {/* Card 1: Approve anywhere (Wide card, spans 7 columns on desktop) */}
           <ScrollRevealItem className="md:col-span-7 flex">
-            <CardSpotlight className="h-full w-full p-6 sm:p-8 flex flex-col justify-between">
+            <CardSpotlight className="h-full w-full p-5 sm:p-6 lg:p-8 flex flex-col justify-between">
               <div>
                 <div className="flex items-center gap-2 mb-4 text-text-muted-light">
                   <div className="flex items-center gap-1">
@@ -53,16 +54,16 @@ export function BentoGrid() {
                   </div>
                   <span className="text-xs font-normal">Delivery channels</span>
                 </div>
-                <h3 className="landing-heading text-3xl text-ink mb-3">
+                <h3 className="landing-heading text-[clamp(1.5rem,6vw,1.875rem)] lg:text-3xl text-ink mb-3">
                   Approve anywhere
                 </h3>
-                <p className="text-sm sm:text-base text-text-muted-light font-normal leading-relaxed max-w-md">
+                <p className="text-[15px] lg:text-base text-text-muted-light font-normal leading-relaxed max-w-md">
                   Review your daily draft by email link or inside your Slack workspace. A single tap approves the draft and schedules it for publication.
                 </p>
               </div>
 
               {/* Visual mock showing email and slack delivery options */}
-              <div className="mt-8 pt-6 border-t border-border-light/80 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="mt-6 lg:mt-8 pt-5 lg:pt-6 border-t border-border-light/80 grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="p-4 rounded-xl bg-neutral-50/70 border border-border-light/80 space-y-2">
                   <div className="text-sm font-normal text-ink flex items-center gap-2">
                     <GmailIcon className="w-4 h-4 shrink-0" />
@@ -87,22 +88,22 @@ export function BentoGrid() {
 
           {/* Card 2: Built to publish once (spans 5 columns on desktop) */}
           <ScrollRevealItem className="md:col-span-5 flex">
-            <CardSpotlight className="h-full w-full p-6 sm:p-8 flex flex-col justify-between">
+            <CardSpotlight className="h-full w-full p-5 sm:p-6 lg:p-8 flex flex-col justify-between">
               <div>
                 <div className="flex items-center gap-2 mb-4 text-text-muted-light">
                   <ShieldCheck className="w-4 h-4 text-navy" />
                   <span className="text-xs font-normal">Idempotent publishing</span>
                 </div>
-                <h3 className="landing-heading text-3xl text-ink mb-3">
+                <h3 className="landing-heading text-[clamp(1.5rem,6vw,1.875rem)] lg:text-3xl text-ink mb-3">
                   Built to publish once
                 </h3>
-                <p className="text-sm sm:text-base text-text-muted-light font-normal leading-relaxed">
+                <p className="text-[15px] lg:text-base text-text-muted-light font-normal leading-relaxed">
                   A post is not published twice. Strict state checks ensure every draft is executed exactly once to protect your timeline.
                 </p>
               </div>
 
-              <div className="mt-8 pt-6 border-t border-border-light/80">
-                <div className="p-4 rounded-xl bg-neutral-50/70 border border-border-light/80 flex items-center justify-between text-sm">
+              <div className="mt-6 lg:mt-8 pt-5 lg:pt-6 border-t border-border-light/80">
+                <div className="p-4 rounded-xl bg-neutral-50/70 border border-border-light/80 flex flex-wrap items-center justify-between gap-2 text-sm">
                   <span className="text-text-muted-light">Duplicate safeguard</span>
                   <span className="text-ink font-normal flex items-center gap-1.5">
                     <CheckCircle2 className="w-4 h-4 text-navy" />
@@ -115,21 +116,21 @@ export function BentoGrid() {
 
           {/* Card 3: LinkedIn first with roadmap badges (spans 6 columns on desktop) */}
           <ScrollRevealItem className="md:col-span-6 flex">
-            <CardSpotlight className="h-full w-full p-6 sm:p-8 flex flex-col justify-between">
+            <CardSpotlight className="h-full w-full p-5 sm:p-6 lg:p-8 flex flex-col justify-between">
               <div>
                 <div className="flex items-center gap-2 mb-4 text-text-muted-light">
                   <LinkedInIcon className="w-4 h-4" />
                   <span className="text-xs font-normal">Supported networks</span>
                 </div>
-                <h3 className="landing-heading text-3xl text-ink mb-3">
+                <h3 className="landing-heading text-[clamp(1.5rem,6vw,1.875rem)] lg:text-3xl text-ink mb-3">
                   LinkedIn first
                 </h3>
-                <p className="text-sm sm:text-base text-text-muted-light font-normal leading-relaxed">
+                <p className="text-[15px] lg:text-base text-text-muted-light font-normal leading-relaxed">
                   Deeply focused on professional LinkedIn publishing at launch, with additional channels in active development.
                 </p>
               </div>
 
-              <div className="mt-8 pt-6 border-t border-border-light/80 flex flex-wrap gap-2.5">
+              <div className="mt-6 lg:mt-8 pt-5 lg:pt-6 border-t border-border-light/80 flex flex-wrap gap-2.5">
                 <Badge className="bg-ink text-white hover:bg-neutral-800 font-normal px-3 py-1.5 text-xs rounded-full flex items-center gap-1.5">
                   <LinkedInIcon className="w-3.5 h-3.5 shrink-0" />
                   <span>LinkedIn (Live)</span>
@@ -154,9 +155,9 @@ export function BentoGrid() {
 
           {/* Card 4: Analytics with Coming soon badge (spans 6 columns on desktop) */}
           <ScrollRevealItem className="md:col-span-6 flex">
-            <CardSpotlight className="h-full w-full p-6 sm:p-8 flex flex-col justify-between">
+            <CardSpotlight className="h-full w-full p-5 sm:p-6 lg:p-8 flex flex-col justify-between">
               <div>
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                   <div className="flex items-center gap-2 text-text-muted-light">
                     <BarChart3 className="w-4 h-4 text-navy" />
                     <span className="text-xs font-normal">Performance insights</span>
@@ -168,16 +169,16 @@ export function BentoGrid() {
                     Coming soon
                   </Badge>
                 </div>
-                <h3 className="landing-heading text-3xl text-ink mb-3">
+                <h3 className="landing-heading text-[clamp(1.5rem,6vw,1.875rem)] lg:text-3xl text-ink mb-3">
                   Analytics
                 </h3>
-                <p className="text-sm sm:text-base text-text-muted-light font-normal leading-relaxed">
+                <p className="text-[15px] lg:text-base text-text-muted-light font-normal leading-relaxed">
                   Aggregated impressions, profile visits, and engagement metrics to show which topics generate the highest response.
                 </p>
               </div>
 
-              <div className="mt-8 pt-6 border-t border-border-light/80">
-                <div className="p-4 rounded-xl bg-neutral-50/70 border border-border-light/80 flex items-center justify-between text-sm text-text-muted-light">
+              <div className="mt-6 lg:mt-8 pt-5 lg:pt-6 border-t border-border-light/80">
+                <div className="p-4 rounded-xl bg-neutral-50/70 border border-border-light/80 flex flex-wrap items-center justify-between gap-2 text-sm text-text-muted-light">
                   <span>Audience metrics and reach telemetry</span>
                   <span className="font-normal text-ink">In development</span>
                 </div>

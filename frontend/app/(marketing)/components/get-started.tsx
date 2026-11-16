@@ -20,20 +20,23 @@ const NOISE_DATA_URI =
 export function GetStarted() {
   return (
 
+    /* Mark the steps section as light and use 64px mobile vertical spacing */
     <section
       id="how-it-works"
-      className="bg-paper py-20 sm:py-28 border-t border-border-light text-foreground font-normal"
+      data-nav-theme="light"
+      className="bg-paper py-16 lg:py-28 border-t border-border-light text-foreground font-normal"
     >
-      <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        {/* Section header: text-4xl md:text-5xl, font-normal, tracking-tight */}
-        <div className="max-w-2xl mb-12 sm:mb-16 text-left font-normal">
+      {/* Consistent 20px mobile container padding */}
+      <div className="max-w-6xl mx-auto px-5 lg:px-6">
+        {/* Section header scaled cleanly with clamp on mobile */}
+        <div className="max-w-2xl mb-10 lg:mb-16 text-left font-normal">
           <BlurFade delay={0.05} inView>
-            <p className="text-3xl md:text-4xl font-normal tracking-tight text-ink">
+            <p className="text-[clamp(1.75rem,7vw,2.25rem)] lg:text-4xl font-normal tracking-tight text-ink">
               Get started in three steps
             </p>
           </BlurFade>
           <BlurFade delay={0.1} inView>
-            <p className="mt-3 text-base sm:text-lg text-text-muted-light font-normal leading-relaxed">
+            <p className="mt-3 text-[15px] lg:text-lg text-text-muted-light font-normal leading-relaxed">
               Setup takes minutes. AutoPulse finds topics, drafts posts, and never publishes without your explicit approval.
             </p>
           </BlurFade>
@@ -45,7 +48,7 @@ export function GetStarted() {
           <BlurFade delay={0.1} inView className="h-full">
             <div className="relative h-full rounded-3xl overflow-hidden group">
               <MagicCard
-                className="h-full min-h-[520px] rounded-3xl border border-white/10 overflow-hidden flex flex-col justify-between"
+                className="h-full min-h-0 lg:min-h-[520px] rounded-3xl border border-white/10 overflow-hidden flex flex-col justify-between"
                 gradientColor="rgba(139, 124, 246, 0.16)"
                 gradientSize={280}
                 backgroundClassName="bg-[#05050A]"
@@ -83,8 +86,8 @@ export function GetStarted() {
                   }}
                 />
 
-                {/* Border Beam on hover only */}
-                <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none absolute inset-0 z-30">
+                {/* Border Beam on hover only (hidden on touch devices) */}
+                <div className="touch-hide-hover opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none absolute inset-0 z-30">
                   <BorderBeam
                     size={220}
                     duration={7}
@@ -94,21 +97,21 @@ export function GetStarted() {
                 </div>
 
                 {/* Card content: top */}
-                <div className="relative z-10 p-7 pb-0 text-left space-y-3 font-normal">
+                <div className="relative z-10 p-6 pb-0 lg:p-7 lg:pb-0 text-left space-y-3 font-normal">
                   <p className="text-xs uppercase tracking-[0.2em] text-white/50 font-mono font-normal">
                     STEP 01
                   </p>
-                  <p className="text-xl md:text-2xl font-normal tracking-tight text-white">
+                  <p className="text-[clamp(1.25rem,5vw,1.5rem)] lg:text-2xl font-normal tracking-tight text-white">
                     Connect your LinkedIn
                   </p>
-                  <p className="text-sm text-white/60 font-normal leading-relaxed max-w-sm">
+                  <p className="text-[15px] lg:text-sm text-white/60 font-normal leading-relaxed max-w-sm">
                     Authorize your profile securely with standard OAuth permissions. We never post without your explicit approval.
                   </p>
                 </div>
 
-                {/* Mockup 1: Profile setup snippet peeking out bottom */}
-                <div className="relative z-10 px-6 pt-6 overflow-hidden mt-auto">
-                  <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-2xl p-4.5 text-left transform translate-y-6 group-hover:translate-y-3 transition-transform duration-300 ease-out shadow-2xl">
+                {/* Mockup 1: flush inside card on mobile, peeking out bottom on desktop */}
+                <div className="relative z-10 px-5 pt-5 pb-5 lg:px-6 lg:pt-6 lg:pb-0 overflow-hidden mt-auto">
+                  <div className="touch-disable-hover bg-white/5 border border-white/10 backdrop-blur-xl rounded-2xl p-4 lg:p-4.5 text-left transform translate-y-0 lg:translate-y-6 lg:group-hover:translate-y-3 transition-transform duration-300 ease-out shadow-2xl">
                     {/* Mockup header */}
                     <div className="flex items-center justify-between pb-3 border-b border-white/10">
                       <div className="flex items-center gap-2.5">
@@ -177,7 +180,7 @@ export function GetStarted() {
           <BlurFade delay={0.2} inView className="h-full">
             <div className="relative h-full rounded-3xl overflow-hidden group">
               <MagicCard
-                className="h-full min-h-[520px] rounded-3xl border border-white/10 overflow-hidden flex flex-col justify-between"
+                className="h-full min-h-0 lg:min-h-[520px] rounded-3xl border border-white/10 overflow-hidden flex flex-col justify-between"
                 gradientColor="rgba(14, 116, 144, 0.18)"
                 gradientSize={280}
                 backgroundClassName="bg-[#05050A]"
@@ -215,8 +218,8 @@ export function GetStarted() {
                   }}
                 />
 
-                {/* Border Beam on hover only */}
-                <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none absolute inset-0 z-30">
+                {/* Border Beam on hover only (hidden on touch devices) */}
+                <div className="touch-hide-hover opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none absolute inset-0 z-30">
                   <BorderBeam
                     size={220}
                     duration={7}
@@ -226,21 +229,21 @@ export function GetStarted() {
                 </div>
 
                 {/* Card content: top */}
-                <div className="relative z-10 p-7 pb-0 text-left space-y-3 font-normal">
+                <div className="relative z-10 p-6 pb-0 lg:p-7 lg:pb-0 text-left space-y-3 font-normal">
                   <p className="text-xs uppercase tracking-[0.2em] text-white/50 font-mono font-normal">
                     STEP 02
                   </p>
-                  <p className="text-xl md:text-2xl font-normal tracking-tight text-white">
+                  <p className="text-[clamp(1.25rem,5vw,1.5rem)] lg:text-2xl font-normal tracking-tight text-white">
                     Receive your morning draft
                   </p>
-                  <p className="text-sm text-white/60 font-normal leading-relaxed max-w-sm">
+                  <p className="text-[15px] lg:text-sm text-white/60 font-normal leading-relaxed max-w-sm">
                     AutoPulse researches trending discussions in your niche and delivers a polished draft to your inbox or Slack.
                   </p>
                 </div>
 
-                {/* Mockup 2: Notification card with preview and buttons peeking out bottom */}
-                <div className="relative z-10 px-6 pt-6 overflow-hidden mt-auto">
-                  <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-2xl p-4.5 text-left transform translate-y-6 group-hover:translate-y-3 transition-transform duration-300 ease-out shadow-2xl">
+                {/* Mockup 2: flush inside card on mobile, peeking out bottom on desktop */}
+                <div className="relative z-10 px-5 pt-5 pb-5 lg:px-6 lg:pt-6 lg:pb-0 overflow-hidden mt-auto">
+                  <div className="touch-disable-hover bg-white/5 border border-white/10 backdrop-blur-xl rounded-2xl p-4 lg:p-4.5 text-left transform translate-y-0 lg:translate-y-6 lg:group-hover:translate-y-3 transition-transform duration-300 ease-out shadow-2xl">
                     {/* Notification header */}
                     <div className="flex items-center justify-between pb-3 border-b border-white/10">
                       <div className="flex items-center gap-2">
@@ -287,7 +290,7 @@ export function GetStarted() {
           <BlurFade delay={0.3} inView className="h-full">
             <div className="relative h-full rounded-3xl overflow-hidden group">
               <MagicCard
-                className="h-full min-h-[520px] rounded-3xl border border-white/10 overflow-hidden flex flex-col justify-between"
+                className="h-full min-h-0 lg:min-h-[520px] rounded-3xl border border-white/10 overflow-hidden flex flex-col justify-between"
                 gradientColor="rgba(234, 88, 12, 0.16)"
                 gradientSize={280}
                 backgroundClassName="bg-[#05050A]"
@@ -325,8 +328,8 @@ export function GetStarted() {
                   }}
                 />
 
-                {/* Border Beam on hover only */}
-                <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none absolute inset-0 z-30">
+                {/* Border Beam on hover only (hidden on touch devices) */}
+                <div className="touch-hide-hover opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none absolute inset-0 z-30">
                   <BorderBeam
                     size={220}
                     duration={7}
@@ -336,21 +339,21 @@ export function GetStarted() {
                 </div>
 
                 {/* Card content: top */}
-                <div className="relative z-10 p-7 pb-0 text-left space-y-3 font-normal">
+                <div className="relative z-10 p-6 pb-0 lg:p-7 lg:pb-0 text-left space-y-3 font-normal">
                   <p className="text-xs uppercase tracking-[0.2em] text-white/50 font-mono font-normal">
                     STEP 03
                   </p>
-                  <p className="text-xl md:text-2xl font-normal tracking-tight text-white">
+                  <p className="text-[clamp(1.25rem,5vw,1.5rem)] lg:text-2xl font-normal tracking-tight text-white">
                     Approve and publish
                   </p>
-                  <p className="text-sm text-white/60 font-normal leading-relaxed max-w-sm">
+                  <p className="text-[15px] lg:text-sm text-white/60 font-normal leading-relaxed max-w-sm">
                     One tap verifies quality and schedules publication. AutoPulse posts directly to LinkedIn at peak engagement hours.
                   </p>
                 </div>
 
-                {/* Mockup 3: Ready to publish LinkedIn post with AI-likeness pill peeking out bottom */}
-                <div className="relative z-10 px-6 pt-6 overflow-hidden mt-auto">
-                  <div className="bg-white/5 border border-white/10 backdrop-blur-xl rounded-2xl p-4.5 text-left transform translate-y-6 group-hover:translate-y-3 transition-transform duration-300 ease-out shadow-2xl">
+                {/* Mockup 3: flush inside card on mobile, peeking out bottom on desktop */}
+                <div className="relative z-10 px-5 pt-5 pb-5 lg:px-6 lg:pt-6 lg:pb-0 overflow-hidden mt-auto">
+                  <div className="touch-disable-hover bg-white/5 border border-white/10 backdrop-blur-xl rounded-2xl p-4 lg:p-4.5 text-left transform translate-y-0 lg:translate-y-6 lg:group-hover:translate-y-3 transition-transform duration-300 ease-out shadow-2xl">
                     {/* Header: Ready to publish badge & AI-likeness score pill */}
                     <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-white/10">
                       <Badge
