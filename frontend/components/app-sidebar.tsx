@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import {
@@ -10,7 +11,6 @@ import {
   Settings,
   ChevronDown,
   Search,
-  Activity,
   User,
   Sliders,
   Palette,
@@ -108,8 +108,23 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
         <div className="shrink-0">
           <div className="flex h-14 items-center px-4">
             <Link href="/app" className="flex items-center gap-2">
-              <div className="flex size-5 items-center justify-center rounded-sm bg-foreground text-background">
-                <Activity className="size-3.5 stroke-[2.5]" />
+              <div className="relative flex size-5 shrink-0 items-center justify-center rounded-sm overflow-hidden">
+                <Image
+                  src="/logo-mark-blue-bg.png"
+                  alt="AutoPulse logo"
+                  width={20}
+                  height={20}
+                  priority
+                  className="hidden h-full w-full object-contain dark:block"
+                />
+                <Image
+                  src="/logo-mark-white-bg.png"
+                  alt="AutoPulse logo"
+                  width={20}
+                  height={20}
+                  priority
+                  className="block h-full w-full object-contain dark:hidden"
+                />
               </div>
               <span className="text-sm font-semibold text-foreground tracking-tight">
                 AutoPulse
