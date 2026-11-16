@@ -431,7 +431,8 @@ function FeatureRowBlock({
 // Main FeatureRows section container
 export function FeatureRows() {
   return (
-    <section id="features" className="bg-paper py-16 md:py-24">
+    /* Mark the features section as light so the floating navbar uses dark text */
+    <section id="features" data-nav-theme="light" className="bg-paper py-16 md:py-24">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 divide-y divide-border-light">
         {features.map((feature, index) => (
           <FeatureRowBlock

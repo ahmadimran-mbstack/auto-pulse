@@ -36,7 +36,11 @@ export function ThreeFacts() {
   ];
 
   return (
-    <section className="relative bg-paper pt-32 sm:pt-40 md:pt-48 pb-16 overflow-hidden">
+    /* Mark the facts section as light so the floating navbar switches to dark text */
+    <section
+      data-nav-theme="light"
+      className="relative bg-paper pt-32 sm:pt-40 md:pt-48 pb-16 overflow-hidden"
+    >
       {/* Smooth transition fade from dark hero background into paper canvas */}
       <div
         className="pointer-events-none absolute inset-x-0 top-0 h-30 sm:h-38 md:h-44 bg-gradient-to-b from-navy-deep via-navy-deep/40 to-transparent"

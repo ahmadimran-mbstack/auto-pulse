@@ -26,7 +26,11 @@ const headlineWords = [
 // This component renders the hero section with ribbon backdrop and animated elements
 export function Hero() {
   return (
-    <section className="relative overflow-hidden bg-navy-deep text-white min-h-screen flex flex-col justify-end pt-20 pb-8 sm:pb-10 md:pb-12">
+    /* Mark the hero as a dark section so the floating navbar uses light text */
+    <section
+      data-nav-theme="dark"
+      className="relative overflow-hidden bg-navy-deep text-white min-h-screen flex flex-col justify-end pt-20 pb-8 sm:pb-10 md:pb-12"
+    >
       {/* WebGL gradient blinds background with smooth bottom fade */}
       <div
         className="absolute inset-0 pointer-events-none"

@@ -21,7 +21,11 @@ import {
 // This component presents four distinct capability cards with subtle border highlights
 export function BentoGrid() {
   return (
-    <section className="bg-paper py-16 md:py-24 border-t border-border-light">
+    /* Mark the bento grid section as light so the floating navbar uses dark text */
+    <section
+      data-nav-theme="light"
+      className="bg-paper py-16 md:py-24 border-t border-border-light"
+    >
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         {/* Section title and description with scroll reveal */}
         <ScrollReveal className="max-w-3xl mb-12 sm:mb-16">

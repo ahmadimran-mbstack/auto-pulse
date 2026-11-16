@@ -12,7 +12,11 @@ import { LinkedInIcon } from "./platform-icons";
 // This component renders the final conversion section with a white pill button on navy-deep background.
 export function FinalCta() {
   return (
-    <section className="relative overflow-hidden bg-navy-deep text-white py-24 sm:py-32 border-t border-border-dark">
+    /* Mark the final CTA as dark so the floating navbar switches back to light text */
+    <section
+      data-nav-theme="dark"
+      className="relative overflow-hidden bg-navy-deep text-white py-24 sm:py-32 border-t border-border-dark"
+    >
       {/* Huge cropped faceted logo mark at 5 to 6 percent opacity (allowed in hero and final CTA only) */}
       <div
         className="pointer-events-none absolute -right-24 -bottom-32 sm:-right-36 sm:-bottom-44 w-[420px] sm:w-[600px] h-[420px] sm:h-[600px] select-none opacity-[0.055]"
