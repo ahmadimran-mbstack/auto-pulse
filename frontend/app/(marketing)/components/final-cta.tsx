@@ -12,10 +12,10 @@ import { LinkedInIcon } from "./platform-icons";
 // This component renders the final conversion section with a white pill button on navy-deep background.
 export function FinalCta() {
   return (
-    /* Mark the final CTA as dark so the floating navbar switches back to light text */
+    /* Mark the final CTA as dark and use 64px mobile vertical spacing */
     <section
       data-nav-theme="dark"
-      className="relative overflow-hidden bg-navy-deep text-white py-24 sm:py-32 border-t border-border-dark"
+      className="relative overflow-hidden bg-navy-deep text-white py-16 lg:py-32 border-t border-border-dark"
     >
       {/* Huge cropped faceted logo mark at 5 to 6 percent opacity (allowed in hero and final CTA only) */}
       <div
@@ -44,27 +44,28 @@ export function FinalCta() {
         />
       </div>
 
-      <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 text-center">
+      {/* Consistent 20px mobile container padding */}
+      <div className="relative z-10 max-w-5xl mx-auto px-5 lg:px-6 text-center">
         <ScrollReveal>
-          {/* Main closing headline */}
-          <p className="landing-heading text-5xl sm:text-6xl md:text-7xl lg:text-[76px] text-white max-w-6xl mx-auto flex items-center justify-center flex-wrap gap-x-3 gap-y-2">
+          {/* Main closing headline scaled smoothly with clamp on mobile */}
+          <p className="landing-heading text-[clamp(2rem,8.5vw,3.5rem)] md:text-7xl lg:text-[76px] text-white max-w-6xl mx-auto flex items-center justify-center flex-wrap gap-x-2.5 sm:gap-x-3 gap-y-2">
             <span>Let your</span>
-            <span className="inline-flex items-center gap-2.5">
-              <LinkedInIcon className="w-9 h-9 sm:w-11 sm:h-11 md:w-14 md:h-14 lg:w-16 lg:h-16 shrink-0" />
+            <span className="inline-flex items-center gap-2 sm:gap-2.5">
+              <LinkedInIcon className="w-7 h-7 sm:w-11 sm:h-11 md:w-14 md:h-14 lg:w-16 lg:h-16 shrink-0" />
               <span>LinkedIn</span>
             </span>
             <span>run itself</span>
           </p>
 
-          {/* Quiet supporting text */}
-          <p className="mt-6 text-lg sm:text-xl text-text-muted-dark max-w-2xl mx-auto font-normal leading-relaxed">
+          {/* Quiet supporting text at least 15px on mobile */}
+          <p className="mt-5 lg:mt-6 text-[15px] sm:text-lg lg:text-xl text-text-muted-dark max-w-2xl mx-auto font-normal leading-relaxed">
             Daily drafts prepared from your profile and current industry topics. You approve each one before it goes live.
           </p>
 
-          {/* Single white pill button */}
+          {/* Full-width button on mobile, centered pill button on tablet and desktop */}
           <div className="mt-8 flex justify-center">
-            <Link href="/auth/sign-up">
-              <Button className="rounded-full bg-white text-ink hover:bg-neutral-100 px-8 h-12 text-sm sm:text-base font-normal">
+            <Link href="/auth/sign-up" className="w-full sm:w-auto">
+              <Button className="w-full sm:w-auto rounded-full bg-white text-ink hover:bg-neutral-100 px-8 h-12 min-h-[44px] text-[15px] lg:text-base font-normal">
                 Get started
               </Button>
             </Link>

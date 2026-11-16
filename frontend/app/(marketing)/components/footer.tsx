@@ -12,10 +12,12 @@ export function Footer() {
       data-nav-theme="dark"
       className="bg-navy-deep text-text-muted-dark py-16 border-t border-border-dark text-sm"
     >
-      <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-10 pb-12 border-b border-border-dark">
+      {/* Consistent 20px mobile container padding */}
+      <div className="max-w-6xl mx-auto px-5 lg:px-6">
+        {/* Two-column link layout under the brand summary on mobile, 12-column grid on md+ */}
+        <div className="grid grid-cols-2 md:grid-cols-12 gap-8 md:gap-10 pb-10 lg:pb-12 border-b border-border-dark">
           {/* Brand mark and brief summary */}
-          <div className="md:col-span-6 space-y-4">
+          <div className="col-span-2 md:col-span-6 space-y-4">
             <Link href="/" className="flex items-center gap-2">
               <Image
                 src="/logo-mark-blue-bg.png"
@@ -28,13 +30,13 @@ export function Footer() {
                 AutoPulse
               </span>
             </Link>
-            <p className="text-xs text-text-muted-dark max-w-sm leading-relaxed font-normal">
+            <p className="text-[15px] lg:text-xs text-text-muted-dark max-w-sm leading-relaxed font-normal">
               Automated topic research, draft generation, and quality checking for LinkedIn. Every post requires your explicit approval.
             </p>
           </div>
 
           {/* First column: Product navigation */}
-          <div className="md:col-span-3 space-y-3">
+          <div className="col-span-1 md:col-span-3 space-y-3">
             <div className="text-xs font-normal text-white uppercase tracking-wider">
               Product
             </div>
@@ -68,7 +70,7 @@ export function Footer() {
           </div>
 
           {/* Second column: Legal pages */}
-          <div className="md:col-span-3 space-y-3">
+          <div className="col-span-1 md:col-span-3 space-y-3">
             <div className="text-xs font-normal text-white uppercase tracking-wider">
               Legal
             </div>
@@ -87,8 +89,8 @@ export function Footer() {
           </div>
         </div>
 
-        {/* Bottom copyright notice */}
-        <div className="pt-8 flex flex-col sm:flex-row items-center justify-between text-xs text-text-muted-dark gap-4">
+        {/* Bottom copyright notice stacked and left-aligned on mobile */}
+        <div className="pt-8 flex flex-col sm:flex-row items-start sm:items-center justify-between text-xs text-text-muted-dark gap-3 sm:gap-4">
           <p>(c) 2026 MB Stack. All rights reserved.</p>
           <p className="flex items-center gap-1.5">
             <LinkedInIcon className="w-3.5 h-3.5 shrink-0" />

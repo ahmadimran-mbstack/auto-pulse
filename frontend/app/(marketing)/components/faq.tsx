@@ -117,37 +117,38 @@ const faqItems: {
 // This component renders the FAQ section with quiet typography and hairline borders.
 export function Faq() {
   return (
-    /* Mark the FAQ section as light so the floating navbar uses dark text */
+    /* Mark the FAQ section as light and use 64px mobile vertical spacing */
     <section
       id="faq"
       data-nav-theme="light"
-      className="bg-paper py-16 md:py-24 border-t border-border-light"
+      className="bg-paper py-16 lg:py-24 border-t border-border-light"
     >
-      <div className="max-w-3xl mx-auto px-4 sm:px-6">
+      {/* Consistent 20px mobile container padding matching all other sections */}
+      <div className="max-w-6xl lg:max-w-3xl mx-auto px-5 lg:px-6">
         <ScrollReveal>
           {/* Section title */}
-          <div className="mb-10 text-left">
-            <h2 className="landing-heading text-4xl sm:text-5xl text-ink">
+          <div className="mb-8 lg:mb-10 text-left">
+            <h2 className="landing-heading text-[clamp(1.75rem,7vw,2.5rem)] lg:text-5xl text-ink">
               Frequently Asked Questions
             </h2>
-            <p className="mt-3 text-base sm:text-lg text-text-muted-light font-normal">
+            <p className="mt-3 text-[15px] lg:text-lg text-text-muted-light font-normal">
               Clear facts on how drafts are checked, delivered, and approved.
             </p>
           </div>
 
-          {/* Accordion container with hairline item dividers */}
+          {/* Accordion container with hairline item dividers and 44px minimum tap targets */}
           <div className="border-t border-border-light">
             <Accordion type="single" collapsible className="w-full">
               {faqItems.map((item) => (
                 <AccordionItem
                   key={item.id}
                   value={item.id}
-                  className="border-b border-border-light py-2"
+                  className="border-b border-border-light py-1 lg:py-2"
                 >
-                  <AccordionTrigger className="text-left text-lg sm:text-xl font-normal text-ink hover:no-underline hover:text-navy transition-colors py-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue/50 rounded-md">
+                  <AccordionTrigger className="min-h-[44px] text-left text-base lg:text-xl font-normal text-ink hover:no-underline lg:hover:text-navy transition-colors py-3.5 lg:py-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue/50 rounded-md">
                     {item.question}
                   </AccordionTrigger>
-                  <AccordionContent className="text-sm sm:text-base text-text-muted-light font-normal leading-relaxed pb-4">
+                  <AccordionContent className="text-[15px] lg:text-base text-text-muted-light font-normal leading-relaxed pb-4">
                     {item.answer}
                   </AccordionContent>
                 </AccordionItem>
