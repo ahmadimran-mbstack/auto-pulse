@@ -7,7 +7,11 @@ import { LinkedInIcon } from "./platform-icons";
 // This component provides the quiet dark footer on navy-deep background.
 export function Footer() {
   return (
-    <footer className="bg-navy-deep text-text-muted-dark py-16 border-t border-border-dark text-sm">
+    /* Mark the footer as dark so the floating navbar stays in light text */
+    <footer
+      data-nav-theme="dark"
+      className="bg-navy-deep text-text-muted-dark py-16 border-t border-border-dark text-sm"
+    >
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-10 pb-12 border-b border-border-dark">
           {/* Brand mark and brief summary */}
@@ -85,7 +89,7 @@ export function Footer() {
 
         {/* Bottom copyright notice */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between text-xs text-text-muted-dark gap-4">
-          <p>(c) 2026 AutoPulse Inc. All rights reserved.</p>
+          <p>(c) 2026 MB Stack. All rights reserved.</p>
           <p className="flex items-center gap-1.5">
             <LinkedInIcon className="w-3.5 h-3.5 shrink-0" />
             <span>LinkedIn is a trademark of LinkedIn Corporation.</span>

@@ -19,6 +19,7 @@ const NOISE_DATA_URI =
 
 export function GetStarted() {
   return (
+
     <section
       id="how-it-works"
       className="bg-paper py-20 sm:py-28 border-t border-border-light text-foreground font-normal"
@@ -27,9 +28,9 @@ export function GetStarted() {
         {/* Section header: text-4xl md:text-5xl, font-normal, tracking-tight */}
         <div className="max-w-2xl mb-12 sm:mb-16 text-left font-normal">
           <BlurFade delay={0.05} inView>
-            <h2 className="text-4xl md:text-5xl font-normal tracking-tight text-ink">
+            <p className="text-3xl md:text-4xl font-normal tracking-tight text-ink">
               Get started in three steps
-            </h2>
+            </p>
           </BlurFade>
           <BlurFade delay={0.1} inView>
             <p className="mt-3 text-base sm:text-lg text-text-muted-light font-normal leading-relaxed">
@@ -97,9 +98,9 @@ export function GetStarted() {
                   <p className="text-xs uppercase tracking-[0.2em] text-white/50 font-mono font-normal">
                     STEP 01
                   </p>
-                  <h3 className="text-2xl md:text-3xl font-normal tracking-tight text-white">
+                  <p className="text-xl md:text-2xl font-normal tracking-tight text-white">
                     Connect your LinkedIn
-                  </h3>
+                  </p>
                   <p className="text-sm text-white/60 font-normal leading-relaxed max-w-sm">
                     Authorize your profile securely with standard OAuth permissions. We never post without your explicit approval.
                   </p>
@@ -229,9 +230,9 @@ export function GetStarted() {
                   <p className="text-xs uppercase tracking-[0.2em] text-white/50 font-mono font-normal">
                     STEP 02
                   </p>
-                  <h3 className="text-2xl md:text-3xl font-normal tracking-tight text-white">
+                  <p className="text-xl md:text-2xl font-normal tracking-tight text-white">
                     Receive your morning draft
-                  </h3>
+                  </p>
                   <p className="text-sm text-white/60 font-normal leading-relaxed max-w-sm">
                     AutoPulse researches trending discussions in your niche and delivers a polished draft to your inbox or Slack.
                   </p>
@@ -339,9 +340,9 @@ export function GetStarted() {
                   <p className="text-xs uppercase tracking-[0.2em] text-white/50 font-mono font-normal">
                     STEP 03
                   </p>
-                  <h3 className="text-2xl md:text-3xl font-normal tracking-tight text-white">
+                  <p className="text-xl md:text-2xl font-normal tracking-tight text-white">
                     Approve and publish
-                  </h3>
+                  </p>
                   <p className="text-sm text-white/60 font-normal leading-relaxed max-w-sm">
                     One tap verifies quality and schedules publication. AutoPulse posts directly to LinkedIn at peak engagement hours.
                   </p>
