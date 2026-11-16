@@ -238,9 +238,12 @@ def check_length_and_hook(caption: str) -> Optional[str]:
     return None
 
 
+# Check if the opening hook uses known generic filler templates
 def check_generic_hook(hook_text: str) -> Optional[str]:
-    """Rejects generic hooks that lack concrete elements or use canned transitions."""
-    clean_hook = hook_text.strip().lower()
+    """Rejects generic hooks that use canned filler openers without requiring a number."""
+    clean_hook = (hook_text or "").strip().lower()
+    if len(clean_hook) < 12:
+        return "Hook is too short or empty"
     if "something significant is shifting" in clean_hook:
         return "Hook uses generic filler opener: 'Something significant is shifting'"
     if clean_hook.startswith("when evaluating") and "primary operational trade-off" in clean_hook:
@@ -248,14 +251,15 @@ def check_generic_hook(hook_text: str) -> Optional[str]:
     if clean_hook.startswith("most teams treat") and "friction usually appears" in clean_hook:
         return "Hook uses generic formulaic template without concrete facts"
 
-    # Must contain a number or named entity/concrete metric
-    has_concrete = bool(
-        re.search(r"\b\d+|\$[0-9]|[A-Z][a-z0-9]+", hook_text)
-    )
-    if not has_concrete:
-        return "Hook lacks concrete elements (must contain a verified number or named entity)"
-
     return None
+
+
+# Return structured issue codes for hook checks instead of raising errors
+def check_generic_hook_codes(hook_text: str) -> List[str]:
+    """Return issue codes for a hook without raising an exception."""
+    if check_generic_hook(hook_text):
+        return ["generic_hook"]
+    return []
 
 
 def check_topic_label_repetition(caption: str, topic_label: Optional[str]) -> Optional[str]:

@@ -70,6 +70,10 @@ class GTMBriefOutput(BaseModel):
         default_factory=list,
         description="Editorial notes explaining tactical choices, citing playbook rule IDs like [HOOK-02], [BODY-03], [END-01]",
     )
+    issue_codes: List[str] = Field(
+        default_factory=list,
+        description="Non-fatal quality issue codes found on the generated hook",
+    )
 
     def __init__(self, **data: Any):
         if "hook_text" in data and not data.get("chosen_hook"):
@@ -301,9 +305,11 @@ def run_gtm_brief(
     allowed_hook_styles: Optional[List[str]] = None,
     topic_label: Optional[str] = None,
     key_facts: Optional[List[Any]] = None,
+    recent_hooks: Optional[List[str]] = None,
+    feedback_block: str = "",
 ) -> GTMBriefOutput:
     """Generates the GTM Content Brief before drafting begins.
-    Retries once on parsing/schema error.
+    Retries once on parsing/schema error. Never raises on hook quality checks.
     """
     if model is None:
         model = get_gtm_model()
@@ -317,18 +323,38 @@ def run_gtm_brief(
     if not effective_label:
         effective_label = "modern engineering practices"
 
-    allowed_styles = allowed_hook_styles or [
-        "story",
-        "contrarian_opinion",
-        "number_result",
-        "question",
-        "mistake",
-        "how_to",
-        "observation",
-    ]
+    allowed_styles = list(
+        allowed_hook_styles
+        or [
+            "story",
+            "contrarian_opinion",
+            "number_result",
+            "question",
+            "mistake",
+            "how_to",
+            "observation",
+        ]
+    )
+
+    # If no facts are available, remove number_result so the model does not invent a statistic
+    if not key_facts and "number_result" in allowed_styles and len(allowed_styles) > 1:
+        allowed_styles = [s for s in allowed_styles if s != "number_result"]
 
     key_facts_text = _format_key_facts_block(key_facts)
     hook_patterns_text = _format_hook_patterns_block(allowed_styles)
+
+    # Include user's last 10 hooks so GTM avoids repeating opening words or style
+    recent_hooks_note = ""
+    if recent_hooks:
+        clean_hooks = [h.strip() for h in recent_hooks[:10] if h and h.strip()]
+        if clean_hooks:
+            hook_lines = "\n".join(f"- {h[:140]}" for h in clean_hooks)
+            recent_hooks_note = (
+                "\n# Recent Opening Hooks (DO NOT repeat these opening words or styles):\n"
+                f"{hook_lines}\n"
+            )
+
+    combined_feedback = f"{recent_hooks_note}{feedback_block}".strip()
 
     prompt_input = {
         "topic": effective_label,
@@ -349,7 +375,7 @@ def run_gtm_brief(
         "topics_avoid": ", ".join(profile_dict.get("topics_avoid") or []),
         "sources_text": sources_text,
         "playbook_rules": playbook_text,
-        "feedback_block": "",
+        "feedback_block": combined_feedback,
     }
 
     structured_model = model.with_structured_output(GTMBriefOutput, include_raw=True)
@@ -380,10 +406,11 @@ def run_gtm_brief(
     if parsed_output is None:
         raise RuntimeError(f"GTM Brief generation failed after {attempts} attempts: {last_error}")
 
-    from app.services.checks import check_generic_hook
-    hook_err = check_generic_hook(parsed_output.hook_text or parsed_output.chosen_hook)
-    if hook_err:
-        raise ValueError(f"GTM produced generic hook: {hook_err}")
+    # Check hook quality without throwing an error so the pipeline can keep going
+    from app.services.checks import check_generic_hook_codes
+    hook_issues = check_generic_hook_codes(parsed_output.hook_text or parsed_output.chosen_hook)
+    if hook_issues:
+        parsed_output.issue_codes = list(dict.fromkeys(list(parsed_output.issue_codes) + hook_issues))
 
     # Ensure hook_style is valid
     if not parsed_output.hook_style or parsed_output.hook_style not in allowed_styles:
