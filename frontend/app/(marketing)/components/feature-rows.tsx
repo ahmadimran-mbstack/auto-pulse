@@ -313,21 +313,22 @@ function FeatureRowBlock({
 
   return (
     <ScrollReveal>
+      {/* Feature row grid: panel first on mobile, alternating order on desktop */}
       <div
-        className={`grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-14 items-center py-12 md:py-20 ${
+        className={`grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-14 items-center py-8 first:pt-0 last:pb-0 lg:py-20 lg:first:pt-20 lg:last:pb-20 ${
           isReversed ? "lg:flex-row-reverse" : ""
         }`}
       >
         {/* Panel column: rounded-3xl container holding the 4-degree tilt mock UI card */}
         <div
-          className={`lg:col-span-6 w-full ${
+          className={`lg:col-span-6 w-full min-w-0 ${
             isReversed ? "lg:order-2" : "lg:order-1"
           }`}
         >
           <GrainyPanel
             variant={feature.panelVariant}
             angle={feature.panelAngle}
-            className="min-h-[380px] sm:min-h-[420px]"
+            className="min-h-0 lg:min-h-[420px]"
           >
             <AnimatePresence mode="wait">
               <motion.div
@@ -336,7 +337,7 @@ function FeatureRowBlock({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -6 }}
                 transition={{ duration: 0.28, ease: "easeOut" }}
-                className="w-full max-w-sm mx-auto"
+                className="w-full max-w-sm mx-auto min-w-0"
               >
                 <TiltCard maxTilt={4}>
                   <FeatureMockContent
@@ -351,7 +352,7 @@ function FeatureRowBlock({
 
         {/* Copy column: eyebrow, headline, and list of 3 rows */}
         <div
-          className={`lg:col-span-6 w-full ${
+          className={`lg:col-span-6 w-full min-w-0 ${
             isReversed ? "lg:order-1" : "lg:order-2"
           }`}
         >
@@ -363,8 +364,8 @@ function FeatureRowBlock({
             {feature.badge}
           </Badge>
 
-          {/* Quiet headline */}
-          <h2 className="landing-heading text-4xl sm:text-5xl text-ink mb-6">
+          {/* Quiet headline scaled smoothly with clamp on mobile */}
+          <h2 className="landing-heading text-[clamp(1.75rem,7vw,2.5rem)] lg:text-5xl text-ink mb-5 lg:mb-6">
             {feature.headline}
           </h2>
 
@@ -377,27 +378,27 @@ function FeatureRowBlock({
                   key={idx}
                   type="button"
                   onClick={() => handleSelectRow(idx)}
-                  className="w-full text-left py-4 sm:py-5 group cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue/50 rounded-lg"
+                  className="w-full min-h-[44px] text-left py-4 lg:py-5 group cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue/50 rounded-lg"
                 >
                   <div className="flex items-center justify-between">
                     <span
-                      className={`text-lg sm:text-xl font-normal transition-colors ${
+                      className={`text-lg lg:text-xl font-normal transition-colors ${
                         isActive
                           ? "text-ink"
-                          : "text-text-muted-light group-hover:text-ink"
+                          : "text-text-muted-light lg:group-hover:text-ink"
                       }`}
                     >
                       {row.title}
                     </span>
                   </div>
 
-                  {/* Description shown for active row */}
+                  {/* Description shown for active row with at least 15px body text */}
                   {isActive && (
                     <motion.p
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: "auto" }}
                       transition={{ duration: 0.24, ease: "easeOut" }}
-                      className="mt-2 text-sm sm:text-base text-text-muted-light font-normal leading-relaxed overflow-hidden"
+                      className="mt-2 text-[15px] lg:text-base text-text-muted-light font-normal leading-relaxed overflow-hidden"
                     >
                       {row.description}
                     </motion.p>
@@ -432,8 +433,9 @@ function FeatureRowBlock({
 export function FeatureRows() {
   return (
     /* Mark the features section as light so the floating navbar uses dark text */
-    <section id="features" data-nav-theme="light" className="bg-paper py-16 md:py-24">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 divide-y divide-border-light">
+    <section id="features" data-nav-theme="light" className="bg-paper py-16 lg:py-24 overflow-x-hidden">
+      {/* Consistent 20px mobile container padding */}
+      <div className="max-w-6xl mx-auto px-5 lg:px-6 divide-y divide-border-light">
         {features.map((feature, index) => (
           <FeatureRowBlock
             key={feature.id}

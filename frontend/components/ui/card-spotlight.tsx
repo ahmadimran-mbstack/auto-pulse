@@ -18,11 +18,22 @@ export const CardSpotlight = ({
 } & React.HTMLAttributes<HTMLDivElement>) => {
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
+  const [isTouch, setIsTouch] = useState(false);
+
+  /* Detect touch devices so hover spotlight effects stay off on mobile */
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const touchQuery = window.matchMedia("(pointer: coarse)");
+    setIsTouch(touchQuery.matches || "ontouchstart" in window);
+  }, []);
+
+  /* Track pointer coordinates inside the card on non-touch devices */
   function handleMouseMove({
     currentTarget,
     clientX,
     clientY,
   }: ReactMouseEvent<HTMLDivElement>) {
+    if (isTouch) return;
     let { left, top } = currentTarget.getBoundingClientRect();
 
     mouseX.set(clientX - left);
@@ -30,7 +41,10 @@ export const CardSpotlight = ({
   }
 
   const [isHovering, setIsHovering] = useState(false);
-  const handleMouseEnter = () => setIsHovering(true);
+  /* Enable spotlight only on non-touch pointer hover */
+  const handleMouseEnter = () => {
+    if (!isTouch) setIsHovering(true);
+  };
   const handleMouseLeave = () => setIsHovering(false);
   return (
     <div

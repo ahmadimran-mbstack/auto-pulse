@@ -80,9 +80,10 @@ export function GrainyPanel({
   const gradientStyle = getGradientStyle(variant, angle);
 
   return (
+    /* Rounded gradient panel with compact padding on mobile and taller desktop framing */
     <div
       className={cn(
-        "relative rounded-3xl overflow-hidden border p-6 sm:p-10 md:p-12 flex items-center justify-center min-h-[380px] w-full",
+        "relative rounded-3xl overflow-hidden border p-4 sm:p-8 lg:p-12 flex items-center justify-center min-h-0 lg:min-h-[380px] w-full",
         variant === "ink-glow"
           ? "border-white/10 text-white"
           : "border-border-light text-ink",

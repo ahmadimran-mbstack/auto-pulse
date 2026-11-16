@@ -39,19 +39,20 @@ export function ThreeFacts() {
     /* Mark the facts section as light so the floating navbar switches to dark text */
     <section
       data-nav-theme="light"
-      className="relative bg-paper pt-32 sm:pt-40 md:pt-48 pb-16 overflow-hidden"
+      className="relative bg-paper py-16 md:pt-40 lg:pt-48 lg:pb-16 overflow-hidden"
     >
       {/* Smooth transition fade from dark hero background into paper canvas */}
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-30 sm:h-38 md:h-44 bg-gradient-to-b from-navy-deep via-navy-deep/40 to-transparent"
+        className="pointer-events-none absolute inset-x-0 top-0 h-16 md:h-38 lg:h-44 bg-gradient-to-b from-navy-deep via-navy-deep/40 to-transparent"
         aria-hidden="true"
       />
 
-      <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6">
+      {/* Consistent 20px mobile container padding */}
+      <div className="relative z-10 max-w-5xl mx-auto px-5 lg:px-6">
         {/* Hairline bordered container with 60ms stagger entrance */}
         <ScrollReveal
           stagger
-          className="border-y border-border-light py-8 sm:py-10 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-border-light"
+          className="border-y border-border-light py-8 lg:py-10 grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-border-light"
         >
           {facts.map((fact, index) => (
             <ScrollRevealItem
@@ -59,12 +60,12 @@ export function ThreeFacts() {
               className={`text-center px-4 ${index > 0 ? "pt-6 md:pt-0" : ""} ${index < facts.length - 1 ? "pb-6 md:pb-0" : ""
                 }`}
             >
-              {/* Big metric title with regular font weight */}
-              <div className="landing-heading text-3xl sm:text-4xl lg:text-[40px] text-ink">
+              {/* Big metric title scaled smoothly on mobile with regular font weight */}
+              <div className="landing-heading text-[clamp(1.625rem,6.5vw,2.25rem)] lg:text-[40px] text-ink">
                 {fact.metric}
               </div>
-              {/* Quiet descriptive caption */}
-              <p className="mt-2.5 text-sm sm:text-base text-text-muted-light font-normal flex items-center justify-center">
+              {/* Quiet descriptive caption at least 15px on mobile */}
+              <p className="mt-2.5 text-[15px] lg:text-base text-text-muted-light font-normal flex items-center justify-center">
                 {fact.caption}
               </p>
             </ScrollRevealItem>
