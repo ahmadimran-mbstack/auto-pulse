@@ -10,12 +10,21 @@ from app.core.auth import User, current_user
 from app.core.config import settings
 from app.core.limiter import enforce_rate_limit
 from app.db.session import SessionLocal, get_db
-from app.models.post import GenerationRun, PlaygroundRun
+from app.models.post import GenerationRun, PlaygroundRun, RunEvent
 from app.models.profile import Profile
 from app.repositories import post as post_repo
-from app.schemas.post import PlaygroundRunCreateRequest, PlaygroundRunCreateResponse, PlaygroundRunDetail
+from app.schemas.post import (
+    PlaygroundCancelResponse,
+    PlaygroundRunCreateRequest,
+    PlaygroundRunCreateResponse,
+    PlaygroundRunDetail,
+    RunEventPublic,
+    RunEventsResponse,
+)
 from app.services.content_profile import get_content_profile
 from app.services.pipeline import execute_pipeline
+from app.services.pipeline_config import MAX_ROUNDS, PLAIN_TECH_ERROR_MESSAGE, STUCK_RUN_SILENCE_SECONDS
+from app.services.run_events import RunEventEmitter
 from app.services.run_lock import acquire_manual_run_lock, force_release_manual_run_lock, release_manual_run_lock
 from app.services.search import get_search_adapter
 
@@ -125,6 +134,13 @@ def run_playground_pipeline_task(run_id: uuid.UUID, user_id: str, topic_hint: Op
 
                 db.commit()
 
+            emitter = RunEventEmitter(
+                run_id=str(run_id),
+                user_id=user_id,
+                session_factory=SessionLocal,
+                batch_size=4,
+            )
+
             final_state = execute_pipeline(
                 user_id=user_id,
                 profile_dict=profile_dict,
@@ -134,89 +150,75 @@ def run_playground_pipeline_task(run_id: uuid.UUID, user_id: str, topic_hint: Op
                 topic_hint=topic_hint,
                 is_manual=True,
                 run_id=str(run_id),
+                event_emitter=emitter,
             )
 
             counters = final_state.get("counters", {})
             err_code = final_state.get("error_code")
             state_status = final_state.get("status")
+            internal_trace_val = final_state.get("internal_trace")
             finished_now = datetime.datetime.now(datetime.timezone.utc)
 
             gen_run = db.query(GenerationRun).filter(GenerationRun.id == run_id).first()
             p_run = db.query(PlaygroundRun).filter(PlaygroundRun.id == run_id).first()
 
-            if state_status == "timed_out" or err_code == "timed_out":
-                timeout_detail = final_state.get("error_detail") or "Run exceeded execution time limits"
+            # Cancelled by user
+            if state_status == "cancelled" or final_state.get("cancelled") or (p_run and p_run.cancel_requested):
+                clean_draft = final_state.get("best_clean_draft") or final_state.get("draft")
                 if gen_run:
-                    gen_run.status = "timed_out"
-                    gen_run.current_step = "timed_out"
-                    gen_run.current_node = final_state.get("current_step") or "timeout"
-                    gen_run.error_code = "timed_out"
-                    gen_run.error_detail = timeout_detail
-                    gen_run.error_reason = timeout_detail
+                    gen_run.status = "cancelled"
+                    gen_run.current_step = "cancelled"
+                    gen_run.current_node = "cancelled"
                     gen_run.finished_at = finished_now
-                    if gen_run.started_at:
-                        gen_run.duration = round((finished_now - gen_run.started_at).total_seconds(), 2)
-                    gen_run.agent_trace = final_state.get("agent_trace")
-                    gen_run.result = final_state.get("draft")
+                    gen_run.best_draft = clean_draft
+                    gen_run.result = clean_draft
+                    gen_run.internal_trace = internal_trace_val
                 if p_run:
-                    p_run.status = "timed_out"
-                    p_run.current_step = "timed_out"
-                    p_run.current_node = final_state.get("current_step") or "timeout"
-                    p_run.error_reason = timeout_detail
+                    p_run.status = "cancelled"
+                    p_run.current_step = "cancelled"
+                    p_run.current_node = "cancelled"
                     p_run.finished_at = finished_now
-                    p_run.result = {
-                        "status": "timed_out",
-                        "error_code": "timed_out",
-                        "error_detail": timeout_detail,
-                        "draft": final_state.get("draft"),
-                    }
-                    p_run.trace = final_state.get("agent_trace")
+                    p_run.best_draft = clean_draft
+                    p_run.result = clean_draft
+                    p_run.internal_trace = internal_trace_val
                 db.commit()
-                logger.warning(f"Manual playground run {run_id} timed out: {timeout_detail}")
                 return
 
-            if state_status == "needs_review" or err_code == "needs_review":
-                review_detail = final_state.get("error_detail") or "Post needs manual review"
-                best_draft_val = final_state.get("best_draft") or final_state.get("draft")
-                if gen_run:
-                    gen_run.status = "needs_review"
-                    gen_run.current_step = "needs_review"
-                    gen_run.current_node = "needs_review"
-                    gen_run.error_code = "needs_review"
-                    gen_run.error_detail = review_detail
-                    gen_run.error_reason = review_detail
-                    gen_run.finished_at = finished_now
-                    if gen_run.started_at:
-                        gen_run.duration = round((finished_now - gen_run.started_at).total_seconds(), 2)
-                    gen_run.best_draft = best_draft_val
-                    gen_run.result = best_draft_val
-                    gen_run.agent_trace = final_state.get("agent_trace")
-                if p_run:
-                    p_run.status = "needs_review"
-                    p_run.current_step = "needs_review"
-                    p_run.current_node = "needs_review"
-                    p_run.error_reason = review_detail
-                    p_run.finished_at = finished_now
-                    p_run.best_draft = best_draft_val
-                    p_run.result = best_draft_val
-                    p_run.trace = final_state.get("agent_trace")
-                db.commit()
-                logger.info(f"Manual playground run {run_id} finished as needs_review: {review_detail}")
-                return
+            if state_status == "timed_out" or err_code == "timed_out":
+                best_clean = final_state.get("best_clean_draft")
+                if best_clean:
+                    state_status = "succeeded"
+                    err_code = None
+                    final_state["draft"] = best_clean
+                else:
+                    if gen_run:
+                        gen_run.status = "failed_error"
+                        gen_run.current_step = "failed_error"
+                        gen_run.current_node = "timeout"
+                        gen_run.error_code = "timed_out"
+                        gen_run.error_detail = PLAIN_TECH_ERROR_MESSAGE
+                        gen_run.error_reason = PLAIN_TECH_ERROR_MESSAGE
+                        gen_run.finished_at = finished_now
+                        gen_run.internal_trace = internal_trace_val
+                    if p_run:
+                        p_run.status = "failed_error"
+                        p_run.current_step = "failed_error"
+                        p_run.current_node = "timeout"
+                        p_run.error_reason = PLAIN_TECH_ERROR_MESSAGE
+                        p_run.finished_at = finished_now
+                        p_run.result = {"status": "failed_error", "error_detail": PLAIN_TECH_ERROR_MESSAGE}
+                        p_run.internal_trace = internal_trace_val
+                    db.commit()
+                    return
 
             if err_code or state_status in ("failed_quality", "failed_error", "failed"):
-                is_quality_failure = (state_status == "failed_quality" or err_code == "failed_quality")
-                failed_status = "failed_quality" if is_quality_failure else "failed_error"
-                err_code_val = err_code or ("failed_quality" if is_quality_failure else "pipeline_error")
-                err_detail_val = final_state.get("error_detail") or "Run failed validation"
-
                 if gen_run:
-                    gen_run.status = failed_status
-                    gen_run.current_step = failed_status
-                    gen_run.current_node = failed_status
-                    gen_run.error_code = err_code_val
-                    gen_run.error_detail = err_detail_val
-                    gen_run.error_reason = err_detail_val
+                    gen_run.status = "failed_error"
+                    gen_run.current_step = "failed_error"
+                    gen_run.current_node = "failed_error"
+                    gen_run.error_code = err_code or "pipeline_error"
+                    gen_run.error_detail = PLAIN_TECH_ERROR_MESSAGE
+                    gen_run.error_reason = PLAIN_TECH_ERROR_MESSAGE
                     gen_run.finished_at = finished_now
                     if gen_run.started_at:
                         gen_run.duration = round((finished_now - gen_run.started_at).total_seconds(), 2)
@@ -225,24 +227,21 @@ def run_playground_pipeline_task(run_id: uuid.UUID, user_id: str, topic_hint: Op
                     gen_run.tokens_in = counters.get("tokens_in", 0)
                     gen_run.tokens_out = counters.get("tokens_out", 0)
                     gen_run.agent_trace = final_state.get("agent_trace")
-                    gen_run.result = final_state.get("draft")
+                    gen_run.internal_trace = internal_trace_val
+                    gen_run.result = None
                 if p_run:
-                    p_run.status = failed_status
-                    p_run.current_step = failed_status
-                    p_run.current_node = failed_status
-                    p_run.error_reason = err_detail_val
+                    p_run.status = "failed_error"
+                    p_run.current_step = "failed_error"
+                    p_run.current_node = "failed_error"
+                    p_run.error_reason = PLAIN_TECH_ERROR_MESSAGE
                     p_run.finished_at = finished_now
-                    p_run.result = {
-                        "status": failed_status,
-                        "error_code": err_code_val,
-                        "error_detail": err_detail_val,
-                        "draft": final_state.get("draft"),
-                    }
+                    p_run.result = {"status": "failed_error", "error_detail": PLAIN_TECH_ERROR_MESSAGE}
                     p_run.trace = final_state.get("agent_trace")
+                    p_run.internal_trace = internal_trace_val
                 db.commit()
                 return
 
-            # Success
+            # Success: store clean draft and separate internal_trace
             if gen_run:
                 gen_run.status = "succeeded"
                 gen_run.current_step = "succeeded"
@@ -256,7 +255,9 @@ def run_playground_pipeline_task(run_id: uuid.UUID, user_id: str, topic_hint: Op
                 gen_run.tokens_in = counters.get("tokens_in", 0)
                 gen_run.tokens_out = counters.get("tokens_out", 0)
                 gen_run.result = final_state.get("draft")
+                gen_run.best_draft = final_state.get("draft")
                 gen_run.agent_trace = final_state.get("agent_trace")
+                gen_run.internal_trace = internal_trace_val
 
             if p_run:
                 p_run.status = "succeeded"
@@ -265,7 +266,9 @@ def run_playground_pipeline_task(run_id: uuid.UUID, user_id: str, topic_hint: Op
                 p_run.finished_at = finished_now
                 p_run.round = final_state.get("round", 0)
                 p_run.result = final_state.get("draft")
+                p_run.best_draft = final_state.get("draft")
                 p_run.trace = final_state.get("agent_trace")
+                p_run.internal_trace = internal_trace_val
 
             db.commit()
             duration_val = gen_run.duration if gen_run else '?'
@@ -276,18 +279,19 @@ def run_playground_pipeline_task(run_id: uuid.UUID, user_id: str, topic_hint: Op
         tb_summary = traceback.format_exc(limit=4)
         logger.exception(f"Manual playground run {run_id} encountered unexpected error: {exc}")
         finished_now = datetime.datetime.now(datetime.timezone.utc)
-        reason = f"{type(exc).__name__}: {str(exc)[:150]}"
         try:
             with SessionLocal() as db:
                 gen_run = db.query(GenerationRun).filter(GenerationRun.id == run_id).first()
                 p_run = db.query(PlaygroundRun).filter(PlaygroundRun.id == run_id).first()
+                err_trace = {"exception": f"{type(exc).__name__}: {str(exc)[:200]}", "traceback": tb_summary}
                 if gen_run:
                     gen_run.status = "failed_error"
                     gen_run.current_step = "failed_error"
                     gen_run.current_node = "error"
                     gen_run.error_code = "execution_exception"
-                    gen_run.error_detail = reason
-                    gen_run.error_reason = f"{reason}\n{tb_summary}"
+                    gen_run.error_detail = PLAIN_TECH_ERROR_MESSAGE
+                    gen_run.error_reason = PLAIN_TECH_ERROR_MESSAGE
+                    gen_run.internal_trace = err_trace
                     gen_run.finished_at = finished_now
                     if gen_run.started_at:
                         gen_run.duration = round((finished_now - gen_run.started_at).total_seconds(), 2)
@@ -295,15 +299,17 @@ def run_playground_pipeline_task(run_id: uuid.UUID, user_id: str, topic_hint: Op
                     p_run.status = "failed_error"
                     p_run.current_step = "failed_error"
                     p_run.current_node = "error"
-                    p_run.error_reason = f"{reason}\n{tb_summary}"
+                    p_run.error_reason = PLAIN_TECH_ERROR_MESSAGE
+                    p_run.internal_trace = err_trace
                     p_run.finished_at = finished_now
                     p_run.result = {
                         "status": "failed_error",
-                        "error_code": "execution_exception",
-                        "error_detail": reason,
-                        "traceback": tb_summary,
+                        "error_detail": PLAIN_TECH_ERROR_MESSAGE,
                     }
                 db.commit()
+            # Emit run_failed event if not already emitted
+            fail_emitter = RunEventEmitter(run_id=str(run_id), user_id=user_id, session_factory=SessionLocal)
+            fail_emitter.emit_run_failed(PLAIN_TECH_ERROR_MESSAGE)
         except Exception as db_exc:
             logger.error(f"Failed to record run {run_id} exception to DB: {db_exc}")
     finally:
@@ -401,6 +407,80 @@ def create_playground_run(
     return PlaygroundRunCreateResponse(run_id=new_run_id, status="queued")
 
 
+def _check_stuck_run_silence(run: PlaygroundRun, user_id: str, db: Session) -> tuple[str, bool]:
+    """Marks a queued/running run as failed if no progress or events arrive for 2 minutes."""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    status_val = run.status
+    stalled = False
+
+    if status_val in ("running", "queued"):
+        last_act = run.last_progress_at or run.started_at or run.created_at
+        if last_act:
+            if last_act.tzinfo is None:
+                last_act = last_act.replace(tzinfo=datetime.timezone.utc)
+            inactivity_sec = (now - last_act).total_seconds()
+            if inactivity_sec > STUCK_RUN_SILENCE_SECONDS:
+                status_val = "failed_error"
+                run.status = "failed_error"
+                run.error_reason = PLAIN_TECH_ERROR_MESSAGE
+                run.finished_at = now
+                run.result = {
+                    "status": "failed_error",
+                    "error_detail": PLAIN_TECH_ERROR_MESSAGE,
+                }
+                # Append a terminal run_failed event so event pollers stop cleanly
+                max_seq = (
+                    db.query(RunEvent.seq)
+                    .filter(RunEvent.run_id == run.id)
+                    .order_by(RunEvent.seq.desc())
+                    .limit(1)
+                    .scalar()
+                    or 0
+                )
+                db.add(
+                    RunEvent(
+                        run_id=run.id,
+                        user_id=user_id,
+                        seq=max_seq + 1,
+                        created_at=now,
+                        type="run_failed",
+                        status="failed",
+                        message=PLAIN_TECH_ERROR_MESSAGE,
+                        payload={"message": PLAIN_TECH_ERROR_MESSAGE},
+                    )
+                )
+                db.commit()
+                release_manual_run_lock(user_id, run.id)
+            elif inactivity_sec > settings.STALLED_WARNING_TIMEOUT_SECONDS:
+                stalled = True
+
+    return status_val, stalled
+
+
+@router.get("/runs/active", response_model=Optional[PlaygroundRunDetail])
+def get_active_playground_run(
+    response: Response,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    """Returns the user's currently active (queued/running) playground run if any,
+    allowing the UI to resume polling immediately on reload.
+    """
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    run = (
+        db.query(PlaygroundRun)
+        .filter(
+            PlaygroundRun.user_id == user.id,
+            PlaygroundRun.status.in_(["queued", "running"]),
+        )
+        .order_by(PlaygroundRun.created_at.desc())
+        .first()
+    )
+    if not run:
+        return None
+    return get_playground_run(run.id, response, user, db)
+
+
 @router.get("/runs/{run_id}", response_model=PlaygroundRunDetail)
 def get_playground_run(
     run_id: uuid.UUID,
@@ -408,8 +488,8 @@ def get_playground_run(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
-    """Retrieves status, intermediate step, results, and full agent trace for a playground run.
-    Strictly isolated to current_user. Sends Cache-Control: no-store.
+    """Retrieves public status, elapsed time, and final result for a playground run.
+    Strictly isolated to current_user (404 otherwise). Never returns internal_trace.
     """
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
 
@@ -437,42 +517,12 @@ def get_playground_run(
         round((now - started).total_seconds(), 1) if started else None
     )
 
-    status_val = run.status
-    stalled = False
+    status_val, stalled = _check_stuck_run_silence(run, user.id, db)
 
-    if status_val in ("running", "queued"):
-        last_act = run.last_progress_at or run.started_at
-        if last_act:
-            if last_act.tzinfo is None:
-                last_act = last_act.replace(tzinfo=datetime.timezone.utc)
-            inactivity_sec = (now - last_act).total_seconds()
-            if inactivity_sec > settings.STALLED_PROGRESS_TIMEOUT_SECONDS:
-                node = run.current_node or run.current_step or "unknown"
-                status_val = "timed_out"
-                run.status = "timed_out"
-                run.error_reason = f"Run timed out: stalled at {node}"
-                run.finished_at = now
-                run.result = {
-                    "status": "timed_out",
-                    "error_code": "stalled_execution",
-                    "error_detail": f"Run timed out: stalled at {node}",
-                }
-                db.commit()
-                release_manual_run_lock(user.id, run.id)
-            elif inactivity_sec > settings.STALLED_WARNING_TIMEOUT_SECONDS:
-                stalled = True
-
-    err_code = (run.result or {}).get("error_code") if isinstance(run.result, dict) else None
-    err_detail = (run.result or {}).get("error_detail") if isinstance(run.result, dict) else None
-
-    failing_gates = []
-    if isinstance(run.trace, dict):
-        failing_gates = run.trace.get("final_check_failures") or []
-    if not failing_gates and isinstance(run.result, dict):
-        failing_gates = run.result.get("failing_gates") or []
-
+    # Whitelisted public error text only (no raw errors or stack traces)
+    public_error = PLAIN_TECH_ERROR_MESSAGE if status_val in ("failed_error", "failed", "timed_out") else None
     best_draft_val = getattr(run, "best_draft", None) or (
-        (run.result or {}).get("draft") if isinstance(run.result, dict) else None
+        run.result if isinstance(run.result, dict) and "post_text" in run.result else None
     )
 
     return PlaygroundRunDetail(
@@ -481,20 +531,20 @@ def get_playground_run(
         current_step=run.current_step,
         current_node=run.current_node or run.current_step,
         round=run.round,
-        max_rounds=getattr(settings, "MAX_REWRITES_PER_TOPIC", 4),
+        max_rounds=MAX_ROUNDS,
         current_topic_index=getattr(run, "current_topic_index", 0) or 0,
         max_topics=getattr(settings, "MAX_TOPICS_PER_RUN", 4),
         current_round=getattr(run, "current_round", run.round or 0) or 0,
-        max_rewrites=getattr(settings, "MAX_REWRITES_PER_TOPIC", 4),
+        max_rewrites=MAX_ROUNDS,
         best_draft=best_draft_val,
-        failing_gates=failing_gates,
+        failing_gates=[],
         elapsed_seconds=elapsed,
         last_progress_at=run.last_progress_at.isoformat() if run.last_progress_at else None,
         stalled=stalled,
-        error_code=err_code,
-        error_detail=err_detail,
-        error_reason=run.error_reason or err_detail,
-        result=run.result,
+        error_code="run_failed" if public_error else None,
+        error_detail=public_error,
+        error_reason=public_error,
+        result=run.result if status_val in ("succeeded", "completed", "cancelled") else None,
         trace=run.trace,
         started_at=run.started_at.isoformat() if run.started_at else None,
         finished_at=run.finished_at.isoformat() if run.finished_at else None,
@@ -502,25 +552,97 @@ def get_playground_run(
     )
 
 
-@router.get("/runs/active", response_model=Optional[PlaygroundRunDetail])
-def get_active_playground_run(
+@router.get("/runs/{run_id}/events", response_model=RunEventsResponse)
+def get_playground_run_events(
+    run_id: uuid.UUID,
     response: Response,
+    after_seq: int = 0,
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
-    """Returns the user's currently active (queued/running) playground run if any,
-    allowing the UI to resume polling immediately on reload.
+    """Returns public timeline events for a run after after_seq.
+    Strictly checks that the signed-in user owns the run (404 otherwise).
     """
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+
     run = (
         db.query(PlaygroundRun)
-        .filter(
-            PlaygroundRun.user_id == user.id,
-            PlaygroundRun.status.in_(["queued", "running"]),
-        )
-        .order_by(PlaygroundRun.created_at.desc())
+        .filter(PlaygroundRun.id == run_id, PlaygroundRun.user_id == user.id)
         .first()
     )
     if not run:
-        return None
-    return get_playground_run(run.id, response, user, db)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Playground run not found",
+        )
+
+    status_val, _ = _check_stuck_run_silence(run, user.id, db)
+
+    rows = (
+        db.query(RunEvent)
+        .filter(RunEvent.run_id == run_id, RunEvent.seq > after_seq)
+        .order_by(RunEvent.seq.asc())
+        .all()
+    )
+
+    events = [
+        RunEventPublic(
+            seq=r.seq,
+            time=r.created_at.isoformat() if r.created_at else "",
+            type=r.type,
+            agent=r.agent,
+            status=r.status,
+            message=r.message,
+            payload=r.payload or {},
+        )
+        for r in rows
+    ]
+    last_seq = events[-1].seq if events else after_seq
+
+    return RunEventsResponse(
+        run_id=run.id,
+        status=status_val,
+        events=events,
+        last_seq=last_seq,
+    )
+
+
+@router.post("/runs/{run_id}/cancel", response_model=PlaygroundCancelResponse)
+def cancel_playground_run(
+    run_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    """Requests cancellation of an active playground run.
+    If a clean best draft already exists, keeps it available for the user.
+    """
+    run = (
+        db.query(PlaygroundRun)
+        .filter(PlaygroundRun.id == run_id, PlaygroundRun.user_id == user.id)
+        .first()
+    )
+    if not run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Playground run not found",
+        )
+
+    run.cancel_requested = True
+    gen_run = db.query(GenerationRun).filter(GenerationRun.id == run_id).first()
+    if gen_run:
+        gen_run.cancel_requested = True
+
+    if run.status in ("queued", "running"):
+        run.status = "cancelled"
+        run.finished_at = datetime.datetime.now(datetime.timezone.utc)
+        if gen_run:
+            gen_run.status = "cancelled"
+            gen_run.finished_at = run.finished_at
+        release_manual_run_lock(user.id, run.id)
+
+    db.commit()
+    return PlaygroundCancelResponse(
+        run_id=run.id,
+        status=run.status,
+        best_draft=run.best_draft,
+    )

@@ -20,6 +20,20 @@ from app.services.checks import (
     validate_fact_set,
     run_all_checks,
 )
+from app.services.candidate_evaluator import (
+    can_attempt_repair,
+    evaluate_candidate,
+    repair_candidate_text,
+)
+from app.services.pipeline_config import (
+    AI_SLOP_TARGET,
+    MAX_ROUNDS,
+    MIN_ACCEPTABLE,
+    PER_MODEL_CALL_TIMEOUT_SECONDS,
+    PLAIN_TECH_ERROR_MESSAGE,
+    TARGET_SCORE,
+    TIME_BUDGET_SECONDS,
+)
 from app.services.content_profile import get_content_profile
 from app.services.prompts import PLAN_PROMPT, PlanOutput
 from app.services.search import (
@@ -151,6 +165,23 @@ class PipelineState(TypedDict, total=False):
     ai_score: int
     needs_review: bool
     agent_trace: Optional[Dict[str, Any]]
+    internal_trace: Optional[Dict[str, Any]]
+
+    # Phase 1-4 selection, scoring, repair, and budget state
+    time_budget_deadline: Optional[float]
+    best_clean_draft: Optional[Dict[str, Any]]
+    best_clean_score: int
+    best_clean_slop: int
+    best_clean_round: int
+    best_raw_draft: Optional[Dict[str, Any]]
+    best_raw_eval: Optional[Dict[str, Any]]
+    eval_result: Optional[Dict[str, Any]]
+    last_issue_codes: List[str]
+    last_critique: str
+    repaired_once: bool
+    topic_retry_count: int
+    candidates_log: List[Dict[str, Any]]
+    cancelled: bool
 
     # Execution telemetry
     status: Optional[str]
@@ -171,9 +202,10 @@ def create_chat_model(model_name: str, temperature: Optional[float] = None) -> A
     if temperature is not None:
         kwargs["temperature"] = temperature
 
-    # Explicit call timeout for underlying chat models (default 45s)
-    kwargs.setdefault("timeout", settings.LLM_TIMEOUT_SECONDS)
-    kwargs.setdefault("request_timeout", settings.LLM_TIMEOUT_SECONDS)
+    # Per model call timeout from pipeline_config (30s)
+    call_timeout = float(PER_MODEL_CALL_TIMEOUT_SECONDS)
+    kwargs.setdefault("timeout", call_timeout)
+    kwargs.setdefault("request_timeout", call_timeout)
 
     model_provider = settings.LLM_PROVIDER
     clean_model = model_name
@@ -200,7 +232,7 @@ def create_chat_model(model_name: str, temperature: Optional[float] = None) -> A
     return ResilientChatModelWrapper(
         real_model=real_model,
         model_name=clean_model,
-        timeout_seconds=settings.LLM_TIMEOUT_SECONDS,
+        timeout_seconds=call_timeout,
     )
 
 
@@ -531,11 +563,48 @@ def build_graph(
 
         seconds["finder"] = round(time.perf_counter() - start_t, 3)
 
+        from app.agents.finder import clean_topic_label
+
+        # If finder LLM returned nothing, build a safe fallback from the top search candidate
         if not finder_output:
-            seconds["finder"] = round(time.perf_counter() - start_t, 3)
+            chosen_candidate = candidates[0]
+            topic_title = chosen_candidate.get("title", "") or "Industry Update"
+            topic_label = clean_topic_label(topic_title)
+            fallback_facts = []
+            import re
+            for s in re.split(r"(?<=[.!?])\s+", chosen_candidate.get("text", "")):
+                s_c = s.strip()
+                if 8 <= len(s_c.split()) <= 50:
+                    fallback_facts.append({
+                        "claim": s_c,
+                        "fact": s_c,
+                        "evidence_quote": s_c,
+                        "source_url": chosen_candidate.get("url", ""),
+                    })
+                    if len(fallback_facts) >= 4:
+                        break
             return {
-                "error_code": "no_quality_topic",
-                "error_detail": f"Post finder failed to find a qualified topic with verified facts: {'; '.join(warnings)}",
+                "finder_output": {
+                    "topic_title": topic_title,
+                    "topic_label": topic_label,
+                    "angle": f"Practical takeaways on {topic_label}",
+                    "key_facts": fallback_facts,
+                    "hook_type": "specific observation",
+                    "post_format": "observer take",
+                    "why_now": "Recent industry discussion",
+                    "sources": [{"title": topic_title, "url": chosen_candidate.get("url", "")}],
+                },
+                "chosen": chosen_candidate,
+                "topic_title": topic_title,
+                "topic_label": topic_label,
+                "key_facts": fallback_facts,
+                "angle": f"Practical takeaways on {topic_label}",
+                "hook_type": "specific observation",
+                "post_format": "observer take",
+                "why_now": "Recent industry discussion",
+                "topic_candidates": [],
+                "current_topic_index": 0,
+                "max_topics": 1,
                 "counters": counters,
                 "seconds_per_node": seconds,
             }
@@ -549,33 +618,23 @@ def build_graph(
                     chosen_candidate = c
                     break
 
-        # Validate that candidate text contains at least 3 verified facts with exact evidence quotes
-        verified_facts, fact_err = validate_fact_set(finder_output.key_facts, chosen_candidate.get("text", ""))
-        if fact_err or len(verified_facts) < 3:
-            candidate_found = False
+        # Verify facts against candidate text without aborting the run if fewer than 3 match
+        verified_facts, _fact_err = validate_fact_set(finder_output.key_facts, chosen_candidate.get("text", ""))
+        if len(verified_facts) < 3:
             for alt_cand in candidates[1:3]:
                 alt_verified, alt_err = validate_fact_set(finder_output.key_facts, alt_cand.get("text", ""))
-                if not alt_err and len(alt_verified) >= 3:
+                if len(alt_verified) > len(verified_facts):
                     chosen_candidate = alt_cand
                     verified_facts = alt_verified
-                    candidate_found = True
-                    break
+                    if not alt_err and len(verified_facts) >= 3:
+                        break
 
-            if not candidate_found:
-                seconds["finder"] = round(time.perf_counter() - start_t, 3)
-                return {
-                    "error_code": "no_quality_topic",
-                    "error_detail": f"Facts from candidate failed verification: {fact_err}",
-                    "counters": counters,
-                    "seconds_per_node": seconds,
-                }
-
-        from app.agents.finder import clean_topic_label
         topic_title = getattr(finder_output, "topic_title", "") or chosen_candidate.get("title", "")
         topic_label = getattr(finder_output, "topic_label", "") or clean_topic_label(topic_title)
+        # Hand over up to 6 grounded facts (empty list is valid: GTM will pick a non-number hook)
         key_facts_data = [
             vf.model_dump() if hasattr(vf, "model_dump") else vf
-            for vf in verified_facts
+            for vf in verified_facts[:6]
         ]
 
         # Build list of up to MAX_TOPICS_PER_RUN candidate topics
@@ -686,6 +745,30 @@ def build_graph(
         ]
         allowed_styles = get_available_hook_styles(last_5_styles)
 
+        # Collect user's last 10 opening hooks so GTM avoids repeating style or opening words
+        recent_hooks: List[str] = []
+        for p in history[:10]:
+            h_line = (p.get("hook_text") or "").strip()
+            if not h_line and p.get("caption_preview"):
+                h_line = str(p.get("caption_preview", "")).strip().splitlines()[0].strip()
+            if h_line:
+                recent_hooks.append(h_line)
+
+        # Build feedback block from previous round issues and judge critique if retrying
+        prev_issues = state.get("last_issue_codes") or []
+        prev_critique = state.get("last_critique") or ""
+        gtm_feedback = ""
+        if prev_issues or prev_critique:
+            facts_hint = "; ".join(
+                (kf.get("fact", "") if isinstance(kf, dict) else str(kf))
+                for kf in key_facts[:4]
+            )
+            gtm_feedback = (
+                f"\nLast draft problems: {', '.join(prev_issues) or 'needs sharper hook'}. "
+                f"{prev_critique}\n"
+                f"Use one of these grounded facts if relevant: {facts_hint or 'none (pick a non-number hook)'}\n"
+            )
+
         counters["llm_calls"] = counters.get("llm_calls", 0) + 1
         counters["tokens_in"] = counters.get("tokens_in", 0) + 650
         counters["tokens_out"] = counters.get("tokens_out", 0) + 280
@@ -702,12 +785,14 @@ def build_graph(
                 profile=profile,
                 model=_gtm_brief_model,
                 allowed_hook_styles=allowed_styles,
+                recent_hooks=recent_hooks,
+                feedback_block=gtm_feedback,
             )
         except Exception as exc:
             seconds["gtm_brief"] = round(time.perf_counter() - start_t, 3)
             return {
                 "error_code": "gtm_brief_failed",
-                "error_detail": str(exc),
+                "error_detail": PLAIN_TECH_ERROR_MESSAGE,
                 "counters": counters,
                 "seconds_per_node": seconds,
             }
@@ -724,6 +809,7 @@ def build_graph(
             "hook_type": chosen_hook_style,
             "hook_id": hook_id,
             "hook_text": hook_text,
+            "last_issue_codes": list(getattr(brief, "issue_codes", []) or []),
             "counters": counters,
             "seconds_per_node": seconds,
         }
@@ -763,10 +849,16 @@ def build_graph(
                     hook_text=hook_text,
                 )
             else:
-                # Mode 2: Targeted Span Rewrite
+                # Mode 2: Targeted Span Rewrite with previous issues and judge critique
                 prev_draft = state.get("draft", {})
                 findings = state.get("findings", [])
-                check_failures = state.get("check_failures", [])
+                check_failures = list(state.get("check_failures", []))
+                last_issues = state.get("last_issue_codes") or []
+                last_critique = state.get("last_critique") or ""
+                if last_issues:
+                    check_failures.append(f"Issues from previous round: {', '.join(last_issues)}")
+                if last_critique:
+                    check_failures.append(f"Judge critique: {last_critique}")
                 draft_output = rewrite_post_spans(
                     previous_draft=prev_draft,
                     findings=findings,
@@ -782,20 +874,33 @@ def build_graph(
                 )
         except Exception as exc:
             seconds[f"drafter_r{current_round}"] = round(time.perf_counter() - start_t, 3)
+            # If we already have a clean draft, return it instead of failing
+            if state.get("best_clean_draft"):
+                return {
+                    "is_loop_terminal": True,
+                    "exit_reason": "drafter_error_recovered",
+                    "counters": counters,
+                    "seconds_per_node": seconds,
+                }
             return {
                 "error_code": "drafter_failed",
-                "error_detail": str(exc),
+                "error_detail": PLAIN_TECH_ERROR_MESSAGE,
                 "counters": counters,
                 "seconds_per_node": seconds,
             }
 
         seconds[f"drafter_r{current_round}"] = round(time.perf_counter() - start_t, 3)
+        draft_dict = draft_output.model_dump()
 
-        return {
-            "draft": draft_output.model_dump(),
+        # Keep best_so_far updated after every draft (Phase 1)
+        out: Dict[str, Any] = {
+            "draft": draft_dict,
             "counters": counters,
             "seconds_per_node": seconds,
         }
+        if not state.get("best_draft"):
+            out["best_draft"] = draft_dict
+        return out
 
     # Node 6: AI-SLOP DETECTOR AGENT (Deterministic scanner + structured LLM judge)
     def detector_node(state: PipelineState) -> Dict[str, Any]:
@@ -837,328 +942,382 @@ def build_graph(
             "seconds_per_node": seconds,
         }
 
-    # Node 7: DETERMINISTIC QUALITY CHECKS (700-1800 length, banned words, grounding)
+    # Node 7: HARD CHECKS + SINGLE-CALL JUDGE SCORING (evaluate_candidate)
     def check_node(state: PipelineState) -> Dict[str, Any]:
         current_round = state.get("round", 0)
         _notify_step("check", current_round, state)
         start_t = time.perf_counter()
+        counters = dict(state.get("counters", {}))
         seconds = dict(state.get("seconds_per_node", {}))
 
         draft = state.get("draft", {})
         chosen = state.get("chosen", {})
-        recent_captions = state.get("recent_captions", [])
         profile = state.get("profile", {})
-
-        post_text = draft.get("post_text", "")
-        hashtags = draft.get("hashtags", [])
-        image_headline = draft.get("image_headline", "")
-        source_text = chosen.get("text", "")
+        detection_dict = state.get("detection_result", {}) or {}
+        slop_score = int(detection_dict.get("final_score", 0) or 0)
 
         topic_title = state.get("topic_title") or (state.get("finder_output") or {}).get("topic_title") or chosen.get("title", "")
         topic_label = state.get("topic_label") or (state.get("finder_output") or {}).get("topic_label") or ""
         key_facts = state.get("key_facts") or (state.get("finder_output") or {}).get("key_facts") or []
-        angle = state.get("angle") or (state.get("finder_output") or {}).get("angle") or ""
 
-        failures = run_all_checks(
-            caption=post_text,
-            hashtags=hashtags,
-            image_headline=image_headline,
-            source_text=source_text,
-            recent_captions=recent_captions,
-            topic_title=topic_title,
-            topic_label=topic_label,
-            key_facts=key_facts,
-            profile=profile,
-            relevance_model=_fast_model,
-            angle=angle,
-        )
+        eval_context = {
+            "profile": profile,
+            "key_facts": key_facts,
+            "sources": state.get("candidates", [])[:3],
+            "topic_title": topic_title,
+            "topic_label": topic_label,
+            "hook_style": state.get("hook_style") or "",
+            "history": state.get("history", []),
+            "recent_captions": state.get("recent_captions", []),
+            "ai_slop_score": slop_score,
+        }
+
+        counters["llm_calls"] = counters.get("llm_calls", 0) + 1
+        eval_res = evaluate_candidate(draft, eval_context, judge_model=_fast_model)
+        eval_dict = eval_res.model_dump()
 
         seconds[f"check_r{current_round}"] = round(time.perf_counter() - start_t, 3)
 
         return {
-            "check_failures": failures,
+            "eval_result": eval_dict,
+            "check_failures": list(eval_res.hard_failures),
+            "last_issue_codes": list(eval_res.issue_codes),
+            "last_critique": eval_res.critique,
+            "counters": counters,
             "seconds_per_node": seconds,
         }
 
-    # Node 8: ROUTER (Evaluates scores, strike rules, round limits, and loop branching)
+    # Node 8: ROUTER (Keeps highest-scoring clean draft, enforces budgets, runs 1-time repair or topic retry)
     def router_node(state: PipelineState) -> Dict[str, Any]:
         current_round = state.get("current_round", state.get("round", 0))
         topic_index = state.get("current_topic_index", 0)
         topic_candidates = state.get("topic_candidates", [])
-        
-        draft = state.get("draft", {})
-        detection_dict = state.get("detection_result", {})
+        topic_retry_count = state.get("topic_retry_count", 0)
+        repaired_once = state.get("repaired_once", False)
+
+        draft = dict(state.get("draft") or {})
+        detection_dict = state.get("detection_result", {}) or {}
         findings = state.get("findings", [])
-        check_failures = list(state.get("check_failures", []))
+        eval_dict = state.get("eval_result") or {}
         rounds_history = list(state.get("rounds_history", []))
+        candidates_log = list(state.get("candidates_log", []))
+        counters = dict(state.get("counters", {}))
 
-        final_score = detection_dict.get("final_score", 0)
-        best_draft = state.get("best_draft")
-        best_score = state.get("best_score", 999)
-        best_round = state.get("best_round", 0)
-        strike_count = state.get("strike_count", 0)
-        best_failing_gates = list(state.get("best_failing_gates", []))
-        consecutive_same_gate_failures = state.get("consecutive_same_gate_failures", 0)
-        last_failing_gate = state.get("last_failing_gate")
+        ai_slop_score = int(detection_dict.get("final_score", 0) or 0)
+        passed_hard = bool(eval_dict.get("passed_hard_checks", False))
+        eval_score = int(eval_dict.get("score", 0) or 0)
+        issue_codes = list(eval_dict.get("issue_codes") or [])
+        hard_failures = list(eval_dict.get("hard_failures") or [])
+        critique = eval_dict.get("critique") or ""
 
-        primary_failing_gate = check_failures[0] if check_failures else (f"AI score {final_score}" if final_score >= settings.AI_SCORE_THRESHOLD else None)
-        if primary_failing_gate and primary_failing_gate == last_failing_gate:
-            consecutive_same_gate_failures += 1
-        else:
-            consecutive_same_gate_failures = 1 if primary_failing_gate else 0
-        last_failing_gate = primary_failing_gate
+        best_clean_draft = state.get("best_clean_draft")
+        best_clean_score = state.get("best_clean_score", -1)
+        best_clean_slop = state.get("best_clean_slop", 999)
+        best_clean_round = state.get("best_clean_round", 0)
+        best_raw_draft = state.get("best_raw_draft")
+        best_raw_eval = state.get("best_raw_eval") or {}
 
-        # 1. Record round snapshot
+        # Record private candidate entry for internal_trace
+        candidates_log.append({
+            "round": current_round,
+            "topic_index": topic_index,
+            "post_text": draft.get("post_text", ""),
+            "passed_hard_checks": passed_hard,
+            "hard_failures": hard_failures,
+            "issue_codes": issue_codes,
+            "combined_score": eval_score,
+            "sub_scores": eval_dict.get("sub_scores", {}),
+            "ai_slop_score": ai_slop_score,
+            "critique": critique,
+        })
+
+        # Record public round snapshot (no combined_score or internal failures)
         serialized_findings = [
             f.model_dump() if hasattr(f, "model_dump") else f
             for f in findings
         ]
-        round_entry = {
+        rounds_history.append({
             "round": current_round,
             "topic_index": topic_index,
             "post_text": draft.get("post_text", ""),
             "hashtags": draft.get("hashtags", []),
             "image_headline": draft.get("image_headline", ""),
-            "final_score": final_score,
-            "deterministic_score": detection_dict.get("deterministic_score", 0),
-            "llm_score": detection_dict.get("llm_score", 0),
+            "final_score": ai_slop_score,
             "findings_count": len(findings),
             "findings": serialized_findings,
-            "check_failures": check_failures,
-        }
-        rounds_history.append(round_entry)
+        })
 
-        # 2. Track best draft across all topics and rounds
-        is_pass = (final_score < settings.AI_SCORE_THRESHOLD and not check_failures)
-        current_failure_count = len(check_failures) + (1 if final_score >= settings.AI_SCORE_THRESHOLD else 0)
-        best_failure_count = len(best_failing_gates) if best_draft is not None else 999
+        # Update best clean candidate (passing hard checks)
+        best_updated_flag = False
+        if passed_hard and (best_clean_draft is None or eval_score > best_clean_score):
+            best_clean_draft = draft
+            best_clean_score = eval_score
+            best_clean_slop = ai_slop_score
+            best_clean_round = current_round
+            best_updated_flag = True
 
-        if best_draft is None or is_pass or current_failure_count < best_failure_count or (current_failure_count == best_failure_count and final_score < best_score):
-            best_draft = draft
-            best_score = final_score
-            best_round = current_round
-            best_failing_gates = list(check_failures)
-            if final_score >= settings.AI_SCORE_THRESHOLD:
-                best_failing_gates.append(f"AI slop score {final_score}/100 exceeds threshold {settings.AI_SCORE_THRESHOLD}")
+        # Track best raw candidate purely for potential 1-time repair if no clean draft exists
+        if best_raw_draft is None or eval_score > int(best_raw_eval.get("score", -1)):
+            best_raw_draft = draft
+            best_raw_eval = eval_dict
 
-        # 3. Check termination conditions
-        if is_pass:
+        # 1. Early stop: target score reached and AI slop under target
+        if passed_hard and eval_score >= TARGET_SCORE and ai_slop_score < AI_SLOP_TARGET:
             return {
                 "round": current_round,
                 "current_round": current_round,
                 "current_topic_index": topic_index,
-                "best_draft": best_draft,
-                "best_score": best_score,
-                "best_round": best_round,
-                "best_failing_gates": [],
+                "best_draft": best_clean_draft,
+                "best_clean_draft": best_clean_draft,
+                "best_clean_score": best_clean_score,
+                "best_clean_slop": best_clean_slop,
+                "best_clean_round": best_clean_round,
+                "best_score": best_clean_slop,
+                "best_round": best_clean_round,
                 "is_loop_terminal": True,
                 "status": "succeeded",
-                "exit_reason": "passed",
+                "exit_reason": "target_reached",
                 "rounds_history": rounds_history,
+                "candidates_log": candidates_log,
                 "switch_to_gtm": False,
+                "counters": counters,
             }
 
-        # Multi-topic failover check:
-        # If a topic fails 2 rewrites with the same failure or hits MAX_REWRITES_PER_TOPIC (4)
-        max_rewrites_topic = getattr(settings, "MAX_REWRITES_PER_TOPIC", 4)
-        should_switch = (
-            (current_round >= 1 and consecutive_same_gate_failures >= 2)
-            or (current_round >= (max_rewrites_topic - 1))
-        )
+        # 2. Time budget check (90s)
+        tb_deadline = state.get("time_budget_deadline")
+        budget_hit = bool(tb_deadline and time.time() >= tb_deadline)
+        round_cap_hit = (current_round + 1) >= MAX_ROUNDS
 
-        if should_switch and (topic_index + 1 < len(topic_candidates)):
-            next_topic_idx = topic_index + 1
-            next_topic = topic_candidates[next_topic_idx]
-            logger.info(f"Topic {topic_index} failed to converge. Switching to topic {next_topic_idx}: '{next_topic.get('topic_label')}'")
+        if budget_hit or round_cap_hit:
+            # One-time REPAIR if no candidate passed hard checks and failures are repairable
+            if best_clean_draft is None and best_raw_draft and not repaired_once:
+                raw_codes = list(best_raw_eval.get("issue_codes") or issue_codes)
+                if can_attempt_repair(raw_codes):
+                    counters["llm_calls"] = counters.get("llm_calls", 0) + 1
+                    repaired_text = repair_candidate_text(
+                        post_text=best_raw_draft.get("post_text", ""),
+                        issue_codes=raw_codes,
+                        key_facts=state.get("key_facts") or [],
+                        model=_fast_model,
+                    )
+                    if repaired_text:
+                        repaired_once = True
+                        repaired_draft = dict(best_raw_draft)
+                        repaired_draft["post_text"] = repaired_text
+                        eval_context = {
+                            "profile": state.get("profile", {}),
+                            "key_facts": state.get("key_facts") or [],
+                            "sources": state.get("candidates", [])[:3],
+                            "topic_title": state.get("topic_title") or "",
+                            "topic_label": state.get("topic_label") or "",
+                            "hook_style": state.get("hook_style") or "",
+                            "history": state.get("history", []),
+                            "recent_captions": state.get("recent_captions", []),
+                            "ai_slop_score": ai_slop_score,
+                        }
+                        counters["llm_calls"] = counters.get("llm_calls", 0) + 1
+                        rep_eval = evaluate_candidate(repaired_draft, eval_context, judge_model=_fast_model)
+                        candidates_log.append({
+                            "round": current_round,
+                            "topic_index": topic_index,
+                            "repaired": True,
+                            "post_text": repaired_text,
+                            "passed_hard_checks": rep_eval.passed_hard_checks,
+                            "hard_failures": rep_eval.hard_failures,
+                            "issue_codes": rep_eval.issue_codes,
+                            "combined_score": rep_eval.score,
+                            "sub_scores": rep_eval.sub_scores,
+                            "ai_slop_score": ai_slop_score,
+                            "critique": rep_eval.critique,
+                        })
+                        if rep_eval.passed_hard_checks:
+                            best_clean_draft = repaired_draft
+                            best_clean_score = rep_eval.score
+                            best_clean_slop = ai_slop_score
+                            best_clean_round = current_round
 
-            return {
-                "current_topic_index": next_topic_idx,
-                "current_round": 0,
-                "round": 0,
-                "strike_count": 0,
-                "consecutive_same_gate_failures": 0,
-                "last_failing_gate": None,
-                "topic_title": next_topic.get("topic_title"),
-                "topic_label": next_topic.get("topic_label"),
-                "angle": next_topic.get("angle"),
-                "key_facts": next_topic.get("key_facts"),
-                "hook_type": next_topic.get("hook_type"),
-                "post_format": next_topic.get("post_format"),
-                "why_now": next_topic.get("why_now"),
-                "chosen": next_topic.get("chosen"),
-                "draft": None,
-                "best_draft": best_draft,
-                "best_score": best_score,
-                "best_failing_gates": best_failing_gates,
-                "switch_to_gtm": True,
-                "is_loop_terminal": False,
-                "rounds_history": rounds_history,
-            }
+            # If we have a clean candidate, finish and return it
+            if best_clean_draft is not None:
+                return {
+                    "round": current_round,
+                    "current_round": current_round,
+                    "current_topic_index": topic_index,
+                    "best_draft": best_clean_draft,
+                    "best_clean_draft": best_clean_draft,
+                    "best_clean_score": best_clean_score,
+                    "best_clean_slop": best_clean_slop,
+                    "best_clean_round": best_clean_round,
+                    "best_score": best_clean_slop,
+                    "best_round": best_clean_round,
+                    "repaired_once": repaired_once,
+                    "is_loop_terminal": True,
+                    "status": "succeeded",
+                    "exit_reason": "time_budget" if budget_hit else "round_cap",
+                    "rounds_history": rounds_history,
+                    "candidates_log": candidates_log,
+                    "switch_to_gtm": False,
+                    "counters": counters,
+                }
 
-        if should_switch and (topic_index + 1 >= len(topic_candidates)):
-            # All topics exhausted without a full pass: terminate honestly as needs_review
+            # If NO candidate passed hard checks and we have not retried another topic yet (Phase 3)
+            if not budget_hit and topic_retry_count < 1 and (topic_index + 1 < len(topic_candidates)):
+                next_topic_idx = topic_index + 1
+                next_topic = topic_candidates[next_topic_idx]
+                return {
+                    "current_topic_index": next_topic_idx,
+                    "topic_retry_count": topic_retry_count + 1,
+                    "current_round": 0,
+                    "round": 0,
+                    "repaired_once": False,
+                    "topic_title": next_topic.get("topic_title"),
+                    "topic_label": next_topic.get("topic_label"),
+                    "angle": next_topic.get("angle"),
+                    "key_facts": next_topic.get("key_facts"),
+                    "hook_type": next_topic.get("hook_type"),
+                    "post_format": next_topic.get("post_format"),
+                    "why_now": next_topic.get("why_now"),
+                    "chosen": next_topic.get("chosen"),
+                    "draft": None,
+                    "best_raw_draft": None,
+                    "best_raw_eval": None,
+                    "last_issue_codes": issue_codes,
+                    "last_critique": critique,
+                    "switch_to_gtm": True,
+                    "is_loop_terminal": False,
+                    "rounds_history": rounds_history,
+                    "candidates_log": candidates_log,
+                    "counters": counters,
+                }
+
+            # Exhausted repair and topic retry with zero clean drafts
             return {
                 "round": current_round,
                 "current_round": current_round,
                 "current_topic_index": topic_index,
-                "best_draft": best_draft,
-                "best_score": best_score,
-                "best_failing_gates": best_failing_gates,
+                "best_clean_draft": None,
+                "repaired_once": repaired_once,
                 "is_loop_terminal": True,
-                "status": "needs_review",
-                "exit_reason": "needs_review",
+                "status": "failed_error",
+                "exit_reason": "no_clean_candidate",
                 "rounds_history": rounds_history,
+                "candidates_log": candidates_log,
                 "switch_to_gtm": False,
+                "counters": counters,
             }
 
-        # Continue rewrites on current topic
+        # Continue to next rewrite round on current topic
         return {
             "round": current_round + 1,
             "current_round": current_round + 1,
             "current_topic_index": topic_index,
-            "best_draft": best_draft,
-            "best_score": best_score,
-            "best_failing_gates": best_failing_gates,
-            "consecutive_same_gate_failures": consecutive_same_gate_failures,
-            "last_failing_gate": last_failing_gate,
+            "best_draft": best_clean_draft or best_raw_draft,
+            "best_clean_draft": best_clean_draft,
+            "best_clean_score": best_clean_score,
+            "best_clean_slop": best_clean_slop,
+            "best_clean_round": best_clean_round,
+            "best_raw_draft": best_raw_draft,
+            "best_raw_eval": best_raw_eval,
+            "best_score": best_clean_slop if best_clean_draft is not None else ai_slop_score,
+            "best_round": best_clean_round if best_clean_draft is not None else current_round,
             "is_loop_terminal": False,
             "switch_to_gtm": False,
             "rounds_history": rounds_history,
+            "candidates_log": candidates_log,
+            "counters": counters,
         }
 
-    # Node 9: POST-LOOP (Picks lowest-score draft, generates image headline, GTM review, final checks, compiles trace)
+    # Node 9: POST-LOOP (Finalizes clean best draft, separates public trace from private internal_trace)
     def post_loop_node(state: PipelineState) -> Dict[str, Any]:
         _notify_step("post_loop", state.get("round", 0), state)
         start_t = time.perf_counter()
         counters = dict(state.get("counters", {}))
         seconds = dict(state.get("seconds_per_node", {}))
 
-        best_draft = dict(state.get("best_draft") or state.get("draft") or {})
-        best_score = state.get("best_score", 0)
+        best_clean_draft = state.get("best_clean_draft")
+        best_clean_score = state.get("best_clean_score", -1)
+        best_clean_slop = state.get("best_clean_slop", state.get("best_score", 0))
+        best_clean_round = state.get("best_clean_round", state.get("best_round", 0))
         exit_reason = state.get("exit_reason", "unknown")
         gtm_brief = state.get("gtm_brief", {})
-        candidates = state.get("candidates", [])
         chosen = state.get("chosen", {})
-        recent_captions = state.get("recent_captions", [])
-        profile = state.get("profile", {})
+        candidates_log = state.get("candidates_log", [])
 
         topic_title = state.get("topic_title") or (state.get("finder_output") or {}).get("topic_title") or chosen.get("title", "")
         topic_label = state.get("topic_label") or (state.get("finder_output") or {}).get("topic_label") or ""
         key_facts = state.get("key_facts") or (state.get("finder_output") or {}).get("key_facts") or []
-        angle = state.get("angle") or (state.get("finder_output") or {}).get("angle") or ""
 
-        # STEP 6: Generate companion image headline AFTER final post exists from the post's main point
-        from app.services.checks import generate_companion_image_headline
-        final_headline = generate_companion_image_headline(
-            post_text=best_draft.get("post_text", ""),
-            model=_fast_model,
-        )
-        best_draft["image_headline"] = final_headline
+        # Build private internal trace (never exposed via any public API)
+        internal_trace = {
+            "candidates": candidates_log,
+            "chosen_round": best_clean_round,
+            "combined_score": best_clean_score,
+            "stop_reason": exit_reason,
+            "below_target": bool(best_clean_draft is not None and best_clean_score < MIN_ACCEPTABLE),
+            "llm_calls": counters.get("llm_calls", 0),
+        }
 
-        # Final deterministic & relevance check on chosen draft
-        final_check_failures = run_all_checks(
-            caption=best_draft.get("post_text", ""),
-            hashtags=best_draft.get("hashtags", []),
-            image_headline=best_draft.get("image_headline", ""),
-            source_text=chosen.get("text", ""),
-            recent_captions=recent_captions,
-            topic_title=topic_title,
-            topic_label=topic_label,
-            key_facts=key_facts,
-            profile=profile,
-            relevance_model=_fast_model,
-            angle=angle,
-        )
-
-        passed_all = bool(
-            (state.get("status") == "succeeded" or exit_reason == "passed")
-            and not bool(final_check_failures)
-            and best_score < settings.AI_SCORE_THRESHOLD
-        )
-        run_status = "succeeded" if passed_all else "needs_review"
-        current_step = run_status
-        needs_review = not passed_all
-        failed_quality = not passed_all
-
-        # Run GTM Review on final chosen draft
-        gtm_review_data = {}
-        if passed_all:
-            counters["llm_calls"] = counters.get("llm_calls", 0) + 1
-            counters["tokens_in"] = counters.get("tokens_in", 0) + 650
-            counters["tokens_out"] = counters.get("tokens_out", 0) + 280
-            try:
-                gtm_review = run_gtm_review(
-                    post_text=best_draft.get("post_text", ""),
-                    brief=gtm_brief,
-                    sources=candidates[:3],
-                    model=_gtm_review_model,
-                )
-                gtm_review_data = gtm_review.model_dump()
-            except Exception as exc:
-                logger.warning(f"GTM review error: {exc}")
-                gtm_review_data = {"hook_strength": 5, "review_notes": [f"Review error: {exc}"]}
-        else:
-            gtm_review_data = {
-                "hook_strength": 0,
-                "review_notes": [f"Run finished as needs_review: {'; '.join(final_check_failures) if final_check_failures else exit_reason}"],
+        if not best_clean_draft:
+            seconds["post_loop"] = round(time.perf_counter() - start_t, 3)
+            return {
+                "status": "failed_error",
+                "error_code": "no_clean_candidate",
+                "error_detail": PLAIN_TECH_ERROR_MESSAGE,
+                "draft": None,
+                "best_draft": None,
+                "internal_trace": internal_trace,
+                "counters": counters,
+                "seconds_per_node": seconds,
             }
+
+        final_draft = dict(best_clean_draft)
+        if not final_draft.get("image_headline"):
+            from app.services.checks import generate_companion_image_headline
+            final_draft["image_headline"] = generate_companion_image_headline(
+                post_text=final_draft.get("post_text", ""),
+                model=_fast_model,
+            )
 
         seconds["post_loop"] = round(time.perf_counter() - start_t, 3)
 
-        # Compile complete agent audit trace
+        # Public audit trace (strictly excludes combined_score, below_target, raw errors, and prompts)
         agent_trace = {
-            "status": run_status,
-            "exit_reason": exit_reason,
-            "final_score": best_score,
-            "needs_review": needs_review,
-            "failed_quality": failed_quality,
-            "best_round": state.get("best_round", 0),
+            "status": "succeeded",
+            "final_score": best_clean_slop,
+            "best_round": best_clean_round,
             "rounds_count": len(state.get("rounds_history", [])),
-            "search_queries": state.get("queries", []),
-            "candidate_evaluations": state.get("candidate_evaluations", []),
             "finder": state.get("finder_output"),
             "topic_title": topic_title,
             "topic_label": topic_label,
             "key_facts": key_facts,
             "gtm_brief": gtm_brief,
-            "gtm_review": gtm_review_data,
             "rounds": state.get("rounds_history", []),
-            "final_check_failures": final_check_failures,
             "timings": seconds,
             "counters": counters,
         }
 
-        _notify_step(current_step, state.get("round", 0), state)
+        _notify_step("succeeded", state.get("round", 0), state)
 
-        res_dict = {
-            "status": run_status,
-            "draft": best_draft,
-            "best_draft": best_draft,
-            "ai_score": best_score,
-            "final_score": best_score,
-            "needs_review": needs_review,
-            "gtm_review": gtm_review_data,
+        return {
+            "status": "succeeded",
+            "draft": final_draft,
+            "best_draft": final_draft,
+            "ai_score": best_clean_slop,
+            "final_score": best_clean_slop,
+            "needs_review": False,
             "agent_trace": agent_trace,
-            "current_step": current_step,
+            "internal_trace": internal_trace,
+            "current_step": "succeeded",
             "current_topic_index": state.get("current_topic_index", 0),
             "max_topics": state.get("max_topics", 4),
             "current_round": state.get("current_round", 0),
-            "max_rewrites": getattr(settings, "MAX_REWRITES_PER_TOPIC", 4),
+            "max_rewrites": MAX_ROUNDS,
             "topic_title": topic_title,
             "topic_label": topic_label,
             "key_facts": key_facts,
-            "failing_gates": final_check_failures,
+            "failing_gates": [],
             "counters": counters,
             "seconds_per_node": seconds,
         }
-        if needs_review:
-            res_dict["error_code"] = "needs_review"
-            res_dict["error_detail"] = (
-                f"Quality gate failure: {'; '.join(final_check_failures)}"
-                if final_check_failures
-                else f"Post loop finished without full pass: {exit_reason}"
-            )
-        return res_dict
 
     # Node execution wrapper enforcing per-node timeout, whole-run safety ceiling, and live progress persistence
     def _wrap_node(node_name: str, node_func: Callable[[PipelineState], Dict[str, Any]]) -> Callable[[PipelineState], Dict[str, Any]]:
@@ -1310,19 +1469,81 @@ def build_graph(
             return "gtm_brief"
         return "drafter"
 
-    # Assemble graph edges
+    # Assemble graph edges (drafter -> detector -> check -> router)
     workflow.add_edge(START, "plan")
     workflow.add_conditional_edges("plan", route_after_node("search"), ["search", END])
     workflow.add_conditional_edges("search", route_after_node("finder"), ["finder", END])
     workflow.add_conditional_edges("finder", route_after_node("gtm_brief"), ["gtm_brief", END])
     workflow.add_conditional_edges("gtm_brief", route_after_node("drafter"), ["drafter", END])
-    workflow.add_conditional_edges("drafter", route_after_node("check"), ["check", END])
-    workflow.add_conditional_edges("check", route_after_check, ["detector", "router", END])
-    workflow.add_conditional_edges("detector", route_after_node("router"), ["router", END])
+    workflow.add_conditional_edges("drafter", route_after_node("detector"), ["detector", END])
+    workflow.add_conditional_edges("detector", route_after_node("check"), ["check", END])
+    workflow.add_conditional_edges("check", route_after_node("router"), ["router", END])
     workflow.add_conditional_edges("router", route_after_router, ["drafter", "gtm_brief", "post_loop", END])
     workflow.add_edge("post_loop", END)
 
     return workflow.compile()
+
+
+def _emit_events_for_node(
+    node_name: str,
+    update: Dict[str, Any],
+    state: Dict[str, Any],
+    emitter: Any,
+    prev_best_score: int,
+) -> int:
+    """Translate a LangGraph node update into public timeline events via RunEventEmitter."""
+    if emitter is None or not isinstance(update, dict):
+        return prev_best_score
+
+    round_num = int(state.get("current_round", state.get("round", 0)) or 0) + 1
+
+    if node_name == "plan":
+        emitter.emit_agent_completed("finder", "Prepared search queries.")
+    elif node_name == "search":
+        cands = update.get("candidates") or []
+        emitter.emit_agent_completed("finder", f"Found {len(cands)} candidate articles.")
+    elif node_name == "finder":
+        topic_label = update.get("topic_label") or state.get("topic_label") or "Selected topic"
+        key_facts = update.get("key_facts") or []
+        emitter.emit_topic_chosen(topic_label, key_facts)
+        emitter.emit_agent_started("gtm", "Choosing the opening style and structure.", round_num)
+    elif node_name == "gtm_brief":
+        hook_style = update.get("hook_style") or "observation"
+        emitter.emit_hook_chosen(hook_style)
+        emitter.emit_agent_started("drafter", f"Writing round {round_num} draft.", round_num)
+    elif node_name == "drafter":
+        draft_dict = update.get("draft") or {}
+        if draft_dict.get("post_text"):
+            emitter.emit_draft_ready(round_num, draft_dict["post_text"])
+            emitter.emit_agent_started("detector", "Checking writing quality.", round_num)
+    elif node_name == "detector":
+        det = update.get("detection_result") or {}
+        ai_score = int(det.get("final_score", 0) or 0)
+        emitter.emit_check_result(round_num, ai_score)
+    elif node_name == "router":
+        new_best = int(update.get("best_clean_score", prev_best_score) or -1)
+        if new_best > prev_best_score and update.get("best_clean_draft") is not None:
+            prev_best_score = new_best
+            emitter.emit_best_updated(round_num)
+
+        if not update.get("is_loop_terminal"):
+            issue_codes = state.get("last_issue_codes") or []
+            if issue_codes:
+                emitter.emit_revision_notes(round_num, issue_codes)
+            next_round = int(update.get("current_round", round_num) or 0) + 1
+            if update.get("switch_to_gtm"):
+                emitter.emit_agent_started("gtm", "Trying a different topic angle.", next_round)
+            else:
+                emitter.emit_agent_started("drafter", f"Refining draft in round {next_round}.", next_round)
+    elif node_name == "post_loop":
+        if update.get("status") == "succeeded" and update.get("draft"):
+            rounds_used = max(1, len(state.get("rounds_history", [])))
+            ai_score = int(update.get("ai_score", 0) or 0)
+            emitter.emit_run_completed(update["draft"], ai_score, rounds_used)
+        elif update.get("error_code"):
+            emitter.emit_run_failed(PLAIN_TECH_ERROR_MESSAGE)
+
+    return prev_best_score
 
 
 def execute_pipeline(
@@ -1335,6 +1556,7 @@ def execute_pipeline(
     topic_hint: Optional[str] = None,
     is_manual: bool = False,
     run_id: Optional[str] = None,
+    event_emitter: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Single unified entrypoint for both daily content generation runs and playground runs."""
     import uuid
@@ -1345,9 +1567,8 @@ def execute_pipeline(
     if not profile_dict or not profile_dict.get("goals"):
         try:
             cached_profile = get_content_profile(user_id=user_id)
-            # Merge with passed profile_dict taking precedence
             merged_profile = dict(cached_profile)
-            merged_profile.update({k: v for k, v in profile_dict.items() if v is not None})
+            merged_profile.update({k: v for k, v in (profile_dict or {}).items() if v is not None})
             profile_dict = merged_profile
         except Exception as exc:
             logger.warning(f"Could not load content profile for user {user_id}: {exc}")
@@ -1357,6 +1578,7 @@ def execute_pipeline(
 
     ceiling_seconds = getattr(settings, "RUN_SAFETY_CEILING_SECONDS", 1200)
     run_deadline = time.time() + float(ceiling_seconds)
+    time_budget_deadline = time.time() + float(TIME_BUDGET_SECONDS)
 
     initial_state: PipelineState = {
         "user_id": user_id,
@@ -1364,6 +1586,7 @@ def execute_pipeline(
         "run_id": run_id,
         "thread_id": thread_id,
         "run_deadline": run_deadline,
+        "time_budget_deadline": time_budget_deadline,
         "profile": profile_dict,
         "history": history,
         "recent_titles": recent_titles,
@@ -1375,14 +1598,26 @@ def execute_pipeline(
         "current_round": 0,
         "current_topic_index": 0,
         "max_topics": getattr(settings, "MAX_TOPICS_PER_RUN", 4),
-        "max_rewrites": getattr(settings, "MAX_REWRITES_PER_TOPIC", 4),
+        "max_rewrites": MAX_ROUNDS,
         "best_draft": None,
+        "best_clean_draft": None,
+        "best_clean_score": -1,
+        "best_clean_slop": 999,
+        "best_clean_round": 0,
+        "best_raw_draft": None,
+        "best_raw_eval": None,
         "best_failing_gates": [],
         "consecutive_same_gate_failures": 0,
         "last_failing_gate": None,
         "topic_candidates": [],
         "strike_count": 0,
         "rounds_history": [],
+        "candidates_log": [],
+        "last_issue_codes": [],
+        "last_critique": "",
+        "repaired_once": False,
+        "topic_retry_count": 0,
+        "cancelled": False,
         "best_score": 999,
     }
 
@@ -1392,14 +1627,60 @@ def execute_pipeline(
         step_callback=step_callback,
     )
 
-    final_state = app.invoke(
-        initial_state,
-        config={
-            "recursion_limit": 150,
-            "configurable": {"thread_id": thread_id},
-        },
-    )
+    if event_emitter is not None:
+        event_emitter.emit_run_started()
+        event_emitter.emit_agent_started("finder", "Searching for fresh topics in your space.", 1)
 
+    # Stream updates through LangGraph so events emit live and cancellation is checked between steps
+    merged_state: Dict[str, Any] = dict(initial_state)
+    prev_best_score = -1
+
+    try:
+        for chunk in app.stream(
+            initial_state,
+            config={
+                "recursion_limit": 150,
+                "configurable": {"thread_id": thread_id},
+            },
+            stream_mode="updates",
+        ):
+            if not isinstance(chunk, dict):
+                continue
+            for node_name, update in chunk.items():
+                if isinstance(update, dict):
+                    merged_state.update(update)
+                    prev_best_score = _emit_events_for_node(
+                        node_name, update, merged_state, event_emitter, prev_best_score
+                    )
+
+            # Check user cancellation between node steps
+            if event_emitter is not None and event_emitter.is_cancelled():
+                merged_state["cancelled"] = True
+                merged_state["status"] = "cancelled"
+                if merged_state.get("best_clean_draft"):
+                    merged_state["draft"] = merged_state["best_clean_draft"]
+                    merged_state["best_draft"] = merged_state["best_clean_draft"]
+                    merged_state["ai_score"] = merged_state.get("best_clean_slop", 0)
+                event_emitter.flush()
+                break
+    except Exception as exc:
+        logger.error(f"Pipeline execution error for run {run_id}: {exc}", exc_info=True)
+        merged_state["status"] = "failed_error"
+        merged_state["error_code"] = "pipeline_error"
+        merged_state["error_detail"] = PLAIN_TECH_ERROR_MESSAGE
+        if event_emitter is not None:
+            event_emitter.emit_run_failed(PLAIN_TECH_ERROR_MESSAGE)
+
+    # Record event write overhead into internal_trace if present
+    if event_emitter is not None:
+        event_emitter.flush()
+        it = dict(merged_state.get("internal_trace") or {})
+        it["event_write_ms"] = round(event_emitter.total_write_ms, 2)
+        it["events_emitted"] = event_emitter.events_emitted
+        it["event_flushes"] = event_emitter.flush_count
+        merged_state["internal_trace"] = it
+
+    final_state = merged_state
     chosen = final_state.get("chosen") or {}
     finder_out = final_state.get("finder_output") or {}
     chosen_topic = finder_out.get("topic_label") or finder_out.get("topic") or chosen.get("title") or "Unknown"
@@ -1412,9 +1693,9 @@ def execute_pipeline(
     cache_layers_str = f"endpoint: MISS, search: {cache_search_label}, finder: MISS, gtm: MISS, drafter: MISS, detector: MISS"
 
     final_status = final_state.get("status") or ("failed_error" if final_state.get("error_code") else "completed")
+    final_state["status"] = final_status
     final_reason = final_state.get("error_detail") or final_state.get("exit_reason") or "completed"
 
-    # Verifiable structured log lines per run for observability
     logger.info(
         f"[PIPELINE RUN] run_id={run_id or 'none'} | user_id={user_id} | run_type={run_type_label} | "
         f"cache_layers={{{cache_layers_str}}} | "

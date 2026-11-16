@@ -77,6 +77,29 @@ class PlaygroundRunCreateResponse(BaseModel):
     status: str
 
 
+class RunEventPublic(BaseModel):
+    seq: int
+    time: str
+    type: str
+    agent: Optional[str] = None
+    status: Optional[str] = None
+    message: str
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+
+class RunEventsResponse(BaseModel):
+    run_id: uuid.UUID
+    status: str
+    events: List[RunEventPublic] = Field(default_factory=list)
+    last_seq: int = 0
+
+
+class PlaygroundCancelResponse(BaseModel):
+    run_id: uuid.UUID
+    status: str
+    best_draft: Optional[Dict[str, Any]] = None
+
+
 class PlaygroundRunDetail(BaseModel):
     id: uuid.UUID
     status: str
