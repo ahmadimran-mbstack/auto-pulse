@@ -843,3 +843,41 @@ input:-webkit-autofill:active {
     animation: none !important;
   }
 }
+
+/* Set navbar text, icon, divider, and button colors when over a dark section */
+nav[data-nav-theme="dark"] {
+  --nav-text: #d4d4d4;
+  --nav-text-strong: #ffffff;
+  --nav-divider: rgba(255, 255, 255, 0.15);
+  --nav-hover-bg: rgba(255, 255, 255, 0.1);
+  --nav-cta-bg: #ffffff;
+  --nav-cta-hover-bg: #f5f5f5;
+  --nav-cta-text: #08090c;
+}
+
+/* Set navbar text, icon, divider, and button colors when over a light section */
+nav[data-nav-theme="light"] {
+  --nav-text: #4b5563;
+  --nav-text-strong: #08090c;
+  --nav-divider: rgba(8, 9, 12, 0.12);
+  --nav-hover-bg: rgba(8, 9, 12, 0.06);
+  --nav-cta-bg: #08090c;
+  --nav-cta-hover-bg: #1f2937;
+  --nav-cta-text: #ffffff;
+}
+
+/* Show the blue-background logo over dark sections and hide the white-background one */
+nav[data-nav-theme="dark"] .nav-logo-dark {
+  display: block;
+}
+nav[data-nav-theme="dark"] .nav-logo-light {
+  display: none;
+}
+
+/* Show the white-background logo over light sections and hide the blue-background one */
+nav[data-nav-theme="light"] .nav-logo-dark {
+  display: none;
+}
+nav[data-nav-theme="light"] .nav-logo-light {
+  display: block;
+}
