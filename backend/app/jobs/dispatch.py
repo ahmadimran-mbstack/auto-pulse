@@ -249,27 +249,9 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
                 run.duration = round((run.finished_at - run.started_at).total_seconds(), 2)
             db.commit()
 
-            # Alert user via email that daily post needs quick manual review (NOT published automatically)
-            try:
-                from email.message import EmailMessage
-                from app.services.email import send_smtp_message
-                recipient = profile.user_id if "@" in profile.user_id else None
-                if recipient:
-                    msg = EmailMessage()
-                    msg["From"] = settings.SMTP_FROM or "noreply@autopulse.ai"
-                    msg["To"] = recipient
-                    msg["Subject"] = "AutoPulse: Your Daily Post Needs a Quick Review"
-                    msg.set_content(
-                        f"Hello,\n\n"
-                        f"Today's automated post is ready for your review. It produced a strong draft, but automated gates requested a human check:\n\n"
-                        f"Reason: {run.error_detail}\n\n"
-                        f"To protect your professional reputation, we did not schedule or publish it automatically.\n"
-                        f"You can review, edit, or approve the post in your AutoPulse dashboard.\n\n"
-                        f"- AutoPulse"
-                    )
-                    send_smtp_message(msg)
-            except Exception as mail_err:
-                logger.warning(f"Could not dispatch needs_review email to {profile.user_id}: {mail_err}")
+            # Dispatch Slack and email approval notifications for needs_review posts too
+            request_approval(db, post)
+            db.refresh(post)
 
             return post
 

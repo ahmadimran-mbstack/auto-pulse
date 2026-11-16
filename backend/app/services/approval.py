@@ -89,6 +89,15 @@ def request_approval(
     # Check existing approval status and attempts
     approval = db.query(Approval).filter(Approval.post_id == post.id).first()
     if approval and approval.sent_at is not None:
+        # Even if email already sent, ensure Slack notification was dispatched if enabled
+        try:
+            from app.models.slack import SlackApprovalMessage
+            existing_slack = db.query(SlackApprovalMessage).filter(SlackApprovalMessage.post_id == post.id).first()
+            if not existing_slack or existing_slack.status == "failed":
+                from app.services.slack import notify_slack_approval
+                notify_slack_approval(db, post)
+        except Exception as slack_exc:
+            logger.warning(f"Slack catch-up approval failed for post {post.id}: {slack_exc}")
         return True
     if approval and approval.send_attempts >= 3:
         logger.warning(f"Max approval send attempts reached for post {post.id}")

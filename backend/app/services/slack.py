@@ -1,3 +1,4 @@
+import datetime
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 import uuid
@@ -274,9 +275,10 @@ def build_approval_blocks(
 
     dashboard_url = f"{settings.APP_BASE_URL.rstrip('/')}/posts/{post_id}"
 
-    # Handle text length (max 2900 chars in section plain_text)
-    is_truncated = len(caption) > 2900
-    display_caption = caption[:2900] + "..." if is_truncated else caption
+    # Handle text length (max 2900 chars in section plain_text) and guarantee non-empty text
+    safe_caption = (caption or "").strip() or "(No caption provided)"
+    is_truncated = len(safe_caption) > 2900
+    display_caption = safe_caption[:2900] + "..." if is_truncated else safe_caption
 
     blocks.append({
         "type": "section",
@@ -503,7 +505,7 @@ def notify_slack_approval(db: Any, post: Any) -> Optional[str]:
             SlackIntegration.user_id == post.user_id,
             SlackIntegration.status == "connected",
         ).first()
-        if not integration or not integration.dm_channel_id or not integration.bot_token_encrypted:
+        if not integration or not integration.bot_token_encrypted:
             return None
 
         # 2. Verify profile has Slack approval enabled
@@ -511,7 +513,25 @@ def notify_slack_approval(db: Any, post: Any) -> Optional[str]:
         if not profile or not profile.slack_approval_enabled:
             return None
 
-        # 3. Atomically claim the dispatch
+        # 3. Decrypt bot token and ensure dm_channel_id exists
+        try:
+            bot_token = decrypt_text(integration.bot_token_encrypted)
+        except Exception as exc:
+            logger.warning(f"Failed to decrypt bot token for user {post.user_id}: {exc}")
+            return None
+
+        if not integration.dm_channel_id and integration.slack_user_id:
+            try:
+                integration.dm_channel_id = open_dm_channel(bot_token, integration.slack_user_id)
+                db.commit()
+            except Exception as dm_exc:
+                logger.warning(f"Failed to open Slack DM channel for user {post.user_id}: {dm_exc}")
+                return None
+
+        if not integration.dm_channel_id:
+            return None
+
+        # 4. Atomically claim the dispatch (and allow retrying previously failed rows)
         insert_stmt = (
             pg_insert(SlackApprovalMessage)
             .values(
@@ -520,7 +540,15 @@ def notify_slack_approval(db: Any, post: Any) -> Optional[str]:
                 channel_id=integration.dm_channel_id,
                 status="sending",
             )
-            .on_conflict_do_nothing(index_elements=["post_id"])
+            .on_conflict_do_update(
+                index_elements=["post_id"],
+                set_={
+                    "status": "sending",
+                    "channel_id": integration.dm_channel_id,
+                    "updated_at": datetime.datetime.now(datetime.timezone.utc),
+                },
+                where=(SlackApprovalMessage.status == "failed"),
+            )
             .returning(SlackApprovalMessage.id)
         )
         claimed_id = db.execute(insert_stmt).scalar_one_or_none()
@@ -528,18 +556,6 @@ def notify_slack_approval(db: Any, post: Any) -> Optional[str]:
 
         if not claimed_id:
             logger.debug(f"Slack approval message for post {post.id} already claimed or sent")
-            return None
-
-        # 4. Decrypt bot token
-        try:
-            bot_token = decrypt_text(integration.bot_token_encrypted)
-        except Exception as exc:
-            logger.warning(f"Failed to decrypt bot token for user {post.user_id}: {exc}")
-            db.execute(
-                text("UPDATE slack_approval_messages SET status = 'failed', updated_at = now() WHERE id = :id"),
-                {"id": claimed_id},
-            )
-            db.commit()
             return None
 
         # 5. Render image bytes
