@@ -5,6 +5,7 @@ import React, { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
+import { Magnet, PenLine, Search, ShieldCheck, UserCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { pipelineCopy, type PipelineNodeCopy } from "@/content/landing";
 import { realRun } from "@/content/real-run";
@@ -12,6 +13,15 @@ import { SplitHeading } from "./split-heading";
 import { NumberTicker } from "./number-ticker";
 
 gsap.registerPlugin(ScrollTrigger, useGSAP);
+
+// Maps each pipeline step index to its semantic agent token key and badge variant.
+const AGENT_META = [
+  { key: "topic", variant: "landing-topic", Icon: Search },
+  { key: "hook", variant: "landing-hook", Icon: Magnet },
+  { key: "writer", variant: "landing-writer", Icon: PenLine },
+  { key: "checker", variant: "landing-checker", Icon: ShieldCheck },
+  { key: "human", variant: "landing-human", Icon: UserCheck },
+] as const;
 
 // Returns the chip content for each node based on whether verified real data exists.
 function NodeChipContent({
@@ -102,8 +112,11 @@ function PipelineNodeCard({
   const borderColor = tilt.hover
     ? "var(--lp-border-hover)"
     : activated
-      ? "var(--lp-ice)"
+      ? `var(--lp-badge-${AGENT_META[index].key}-border)`
       : "var(--lp-border)";
+
+  const agent = AGENT_META[index];
+  const AgentIcon = agent.Icon;
 
   return (
     <div style={{ perspective: "900px" }} className="relative h-full">
@@ -138,41 +151,21 @@ function PipelineNodeCard({
         )}
 
         <div className="relative z-10">
-          {/* Top row: 56px numeral ring plus optional human tag on step 05 */}
+          {/* Top row: 56px numeral ring with agent tint plus optional human tag on step 05 */}
           <div className="flex items-center justify-between gap-3">
             <div
               className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border font-mono text-sm transition-colors duration-300"
               style={{
-                borderColor:
-                  node.isHuman || activated
-                    ? "var(--lp-ice)"
-                    : "var(--lp-border)",
-                backgroundColor: activated
-                  ? node.isHuman
-                    ? "var(--lp-navy-deep)"
-                    : "var(--lp-surface-raised)"
-                  : "var(--lp-bg)",
-                color:
-                  node.isHuman || activated
-                    ? "var(--lp-ice)"
-                    : "var(--lp-text-muted)",
+                borderColor: `var(--lp-badge-${agent.key}-border)`,
+                backgroundColor: `var(--lp-badge-${agent.key}-tint)`,
+                color: `var(--lp-badge-${agent.key}-fg)`,
               }}
             >
               {node.numeral}
             </div>
 
             {node.humanTag && (
-              <Badge
-                variant="outline"
-                className="rounded-full px-2.5 py-0.5 text-xs font-normal"
-                style={{
-                  borderColor: "var(--lp-ice)",
-                  color: "var(--lp-ice)",
-                  backgroundColor: "var(--lp-navy-deep)",
-                }}
-              >
-                {node.humanTag}
-              </Badge>
+              <Badge variant="landing-human">{node.humanTag}</Badge>
             )}
           </div>
 
@@ -191,7 +184,7 @@ function PipelineNodeCard({
           </p>
         </div>
 
-        {/* Output chip that fades in when the pipeline line reaches this node */}
+        {/* Output chip using the matching agent badge variant and icon */}
         <div
           className="relative z-10 mt-5 pt-3 border-t transition-opacity duration-500"
           style={{
@@ -199,16 +192,10 @@ function PipelineNodeCard({
             opacity: activated ? 1 : 0.45,
           }}
         >
-          <span
-            className="inline-flex max-w-full items-center rounded-md border px-2.5 py-1 text-xs font-normal"
-            style={{
-              borderColor: "var(--lp-border)",
-              backgroundColor: "var(--lp-surface-raised)",
-              color: "var(--lp-text-body)",
-            }}
-          >
+          <Badge variant={agent.variant} className="max-w-full">
+            <AgentIcon className="shrink-0" />
             <NodeChipContent node={node} index={index} activated={activated} />
-          </span>
+          </Badge>
         </div>
       </a>
     </div>
@@ -349,17 +336,9 @@ export function PipelineMap() {
       }}
     >
       <div className="max-w-6xl mx-auto px-5 lg:px-6">
-        {/* Section header with pill, SplitText headline, and subline */}
+        {/* Section header with shared eyebrow pill, SplitText headline, and subline */}
         <div className="max-w-2xl mb-12 lg:mb-16">
-          <Badge
-            variant="outline"
-            className="rounded-full text-xs font-normal mb-4 px-3 py-1"
-            style={{
-              borderColor: "var(--lp-border)",
-              color: "var(--lp-ice)",
-              backgroundColor: "var(--lp-surface)",
-            }}
-          >
+          <Badge variant="landing-eyebrow" className="mb-4">
             {pipelineCopy.pill}
           </Badge>
 
@@ -384,6 +363,15 @@ export function PipelineMap() {
             preserveAspectRatio="none"
             viewBox="0 0 1000 4"
           >
+            <defs>
+              <linearGradient id="pipeline-line-h" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="var(--lp-badge-topic-dot)" />
+                <stop offset="25%" stopColor="var(--lp-badge-hook-dot)" />
+                <stop offset="50%" stopColor="var(--lp-badge-writer-dot)" />
+                <stop offset="75%" stopColor="var(--lp-badge-checker-dot)" />
+                <stop offset="100%" stopColor="var(--lp-badge-human-dot)" />
+              </linearGradient>
+            </defs>
             <line
               x1="100"
               y1="2"
@@ -398,7 +386,8 @@ export function PipelineMap() {
               y1="2"
               x2="900"
               y2="2"
-              stroke="var(--lp-ice)"
+              stroke="url(#pipeline-line-h)"
+              strokeOpacity="0.5"
               strokeWidth="1.5"
             />
           </svg>
@@ -410,6 +399,15 @@ export function PipelineMap() {
             preserveAspectRatio="none"
             viewBox="0 0 4 1000"
           >
+            <defs>
+              <linearGradient id="pipeline-line-v" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor="var(--lp-badge-topic-dot)" />
+                <stop offset="25%" stopColor="var(--lp-badge-hook-dot)" />
+                <stop offset="50%" stopColor="var(--lp-badge-writer-dot)" />
+                <stop offset="75%" stopColor="var(--lp-badge-checker-dot)" />
+                <stop offset="100%" stopColor="var(--lp-badge-human-dot)" />
+              </linearGradient>
+            </defs>
             <line
               x1="2"
               y1="0"
@@ -424,7 +422,8 @@ export function PipelineMap() {
               y1="0"
               x2="2"
               y2="1000"
-              stroke="var(--lp-ice)"
+              stroke="url(#pipeline-line-v)"
+              strokeOpacity="0.5"
               strokeWidth="1.5"
             />
           </svg>

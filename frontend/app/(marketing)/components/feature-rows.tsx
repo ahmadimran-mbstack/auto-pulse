@@ -199,12 +199,7 @@ function FeatureMockContent({
       <Card className="bg-[var(--lp-surface)] text-[var(--lp-text-body)] rounded-2xl border border-[var(--lp-border)] shadow-[var(--lp-highlight-top)] p-5 sm:p-6 max-w-sm w-full mx-auto">
         <div className="flex items-center justify-between pb-3 border-b border-[var(--lp-border-hairline)]">
           <span className="text-xs text-[var(--lp-text-muted)]">Discovered topic</span>
-          <Badge
-            variant="outline"
-            className="text-[11px] font-normal border-[var(--lp-border)] text-[var(--lp-ice)] bg-[var(--lp-surface-raised)]"
-          >
-            Ready for drafting
-          </Badge>
+          <Badge variant="landing-topic">Ready for drafting</Badge>
         </div>
         <div className="py-3.5 space-y-2">
           <div className="text-[11px] font-normal text-[var(--lp-text-muted)] uppercase tracking-wider">
@@ -245,14 +240,17 @@ function FeatureMockContent({
 
     return (
       <Card className="bg-[var(--lp-surface)] text-[var(--lp-text-body)] rounded-2xl border border-[var(--lp-border)] shadow-[var(--lp-highlight-top)] p-5 sm:p-6 max-w-sm w-full mx-auto">
-        <div className="flex items-center justify-between pb-3 border-b border-[var(--lp-border-hairline)]">
-          <span className="text-xs text-[var(--lp-text-muted)]">{currentDraft.hook}</span>
+        <div className="flex items-center justify-between gap-2 pb-3 border-b border-[var(--lp-border-hairline)]">
           <Badge
-            variant="outline"
-            className="text-[11px] font-normal border-[var(--lp-border)] text-[var(--lp-ice)] bg-[var(--lp-surface-raised)]"
+            variant={
+              currentDraft.hook.startsWith("Hook style:")
+                ? "landing-hook"
+                : "landing-neutral"
+            }
           >
-            Draft ready
+            {currentDraft.hook}
           </Badge>
+          <Badge variant="landing-writer">Draft ready</Badge>
         </div>
         <div className="py-3.5 space-y-2">
           <div className="text-[11px] font-normal text-[var(--lp-text-muted)] uppercase tracking-wider">
@@ -367,16 +365,34 @@ function FeatureRowBlock({
             isReversed ? "lg:order-1" : "lg:order-2"
           }`}
         >
-          {/* Eyebrow badge with mono step number matching the pipeline map */}
-          <Badge
-            variant="outline"
-            className="rounded-full text-xs font-normal border-[var(--lp-border)] text-[var(--lp-ice)] bg-[var(--lp-surface)] mb-4 px-3 py-1 inline-flex items-center gap-2"
-          >
-            <span className="font-mono text-[11px] text-[var(--lp-text-muted)]">
-              {feature.stepNumber}
-            </span>
-            <span>{feature.badge}</span>
-          </Badge>
+          {/* Eyebrow badges with semantic agent color and mono step number */}
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            {feature.id === "drafter" ? (
+              <>
+                <Badge variant="landing-hook">
+                  <span className="font-mono">02</span>
+                  <span>Hook strategist</span>
+                </Badge>
+                <Badge variant="landing-writer">
+                  <span className="font-mono">03</span>
+                  <span>Writer</span>
+                </Badge>
+              </>
+            ) : (
+              <Badge
+                variant={
+                  feature.id === "topic-finder"
+                    ? "landing-topic"
+                    : feature.id === "checker"
+                      ? "landing-checker"
+                      : "landing-human"
+                }
+              >
+                <span className="font-mono">{feature.stepNumber}</span>
+                <span>{feature.badge}</span>
+              </Badge>
+            )}
+          </div>
 
           {/* Quiet headline scaled smoothly with clamp on mobile */}
           <h2 className="landing-heading text-[clamp(1.75rem,7vw,2.5rem)] lg:text-5xl text-[var(--lp-text-heading)] mb-5 lg:mb-6">
