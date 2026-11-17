@@ -869,6 +869,53 @@ input:-webkit-autofill:active {
   --lp-nav-border: rgba(255, 255, 255, 0.10);
   --lp-menu-bg: rgba(15, 17, 21, 0.96);
 
+  /* Landing page badge tokens (4.5:1+ contrast on tinted #0F1115) */
+  --lp-badge-topic-fg: #5EEAD4;
+  --lp-badge-topic-bg: rgba(45, 212, 191, 0.10);
+  --lp-badge-topic-border: rgba(45, 212, 191, 0.28);
+  --lp-badge-topic-border-hover: rgba(45, 212, 191, 0.50);
+  --lp-badge-topic-tint: rgba(45, 212, 191, 0.08);
+  --lp-badge-topic-dot: #2DD4BF;
+
+  --lp-badge-hook-fg: #FCD34D;
+  --lp-badge-hook-bg: rgba(245, 158, 11, 0.10);
+  --lp-badge-hook-border: rgba(245, 158, 11, 0.30);
+  --lp-badge-hook-border-hover: rgba(245, 158, 11, 0.52);
+  --lp-badge-hook-tint: rgba(245, 158, 11, 0.08);
+  --lp-badge-hook-dot: #FBBF24;
+
+  --lp-badge-writer-fg: #93C5FD;
+  --lp-badge-writer-bg: rgba(59, 130, 246, 0.12);
+  --lp-badge-writer-border: rgba(96, 165, 250, 0.30);
+  --lp-badge-writer-border-hover: rgba(96, 165, 250, 0.52);
+  --lp-badge-writer-tint: rgba(59, 130, 246, 0.08);
+  --lp-badge-writer-dot: #60A5FA;
+
+  --lp-badge-checker-fg: #86EFAC;
+  --lp-badge-checker-bg: rgba(34, 197, 94, 0.10);
+  --lp-badge-checker-border: rgba(34, 197, 94, 0.28);
+  --lp-badge-checker-border-hover: rgba(34, 197, 94, 0.50);
+  --lp-badge-checker-tint: rgba(34, 197, 94, 0.08);
+  --lp-badge-checker-dot: #4ADE80;
+
+  --lp-badge-human-fg: #E6EEFA;
+  --lp-badge-human-bg: rgba(191, 210, 238, 0.10);
+  --lp-badge-human-border: rgba(191, 210, 238, 0.32);
+  --lp-badge-human-border-hover: rgba(191, 210, 238, 0.55);
+  --lp-badge-human-tint: rgba(191, 210, 238, 0.08);
+  --lp-badge-human-dot: #BFD2EE;
+
+  --lp-badge-eyebrow-fg: #BFD2EE;
+  --lp-badge-eyebrow-bg: rgba(191, 210, 238, 0.08);
+  --lp-badge-eyebrow-border: rgba(191, 210, 238, 0.22);
+  --lp-badge-eyebrow-dot: #BFD2EE;
+
+  --lp-badge-neutral-fg: #C9CFD9;
+  --lp-badge-neutral-bg: rgba(255, 255, 255, 0.05);
+  --lp-badge-neutral-border: rgba(255, 255, 255, 0.12);
+  --lp-badge-neutral-border-hover: rgba(255, 255, 255, 0.24);
+  --lp-badge-neutral-dot: #9AA3B2;
+
   /* Override semantic UI and portal tokens so dialogs, sheets, and tooltips stay dark */
   --background: var(--lp-bg);
   --foreground: var(--lp-text-heading);

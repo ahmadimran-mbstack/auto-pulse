@@ -23,6 +23,21 @@ const badgeVariants = cva(
         draft: "border-transparent bg-status-warning-bg text-status-warning-fg",
         approved: "border-transparent bg-status-success-bg text-status-success-fg",
         published: "border-transparent bg-status-success-bg text-status-success-fg",
+        // Landing page semantic badge variants
+        "landing-topic":
+          "h-6 sm:h-[26px] rounded-full px-2.5 py-1 text-xs font-medium leading-none [&>svg]:size-3.5 border-[var(--lp-badge-topic-border)] bg-[var(--lp-badge-topic-bg)] text-[var(--lp-badge-topic-fg)] [a&]:hover:border-[var(--lp-badge-topic-border-hover)] [a:hover_&]:border-[var(--lp-badge-topic-border-hover)]",
+        "landing-hook":
+          "h-6 sm:h-[26px] rounded-full px-2.5 py-1 text-xs font-medium leading-none [&>svg]:size-3.5 border-[var(--lp-badge-hook-border)] bg-[var(--lp-badge-hook-bg)] text-[var(--lp-badge-hook-fg)] [a&]:hover:border-[var(--lp-badge-hook-border-hover)] [a:hover_&]:border-[var(--lp-badge-hook-border-hover)]",
+        "landing-writer":
+          "h-6 sm:h-[26px] rounded-full px-2.5 py-1 text-xs font-medium leading-none [&>svg]:size-3.5 border-[var(--lp-badge-writer-border)] bg-[var(--lp-badge-writer-bg)] text-[var(--lp-badge-writer-fg)] [a&]:hover:border-[var(--lp-badge-writer-border-hover)] [a:hover_&]:border-[var(--lp-badge-writer-border-hover)]",
+        "landing-checker":
+          "h-6 sm:h-[26px] rounded-full px-2.5 py-1 text-xs font-medium leading-none [&>svg]:size-3.5 border-[var(--lp-badge-checker-border)] bg-[var(--lp-badge-checker-bg)] text-[var(--lp-badge-checker-fg)] [a&]:hover:border-[var(--lp-badge-checker-border-hover)] [a:hover_&]:border-[var(--lp-badge-checker-border-hover)]",
+        "landing-human":
+          "h-6 sm:h-[26px] rounded-full px-2.5 py-1 text-xs font-medium leading-none [&>svg]:size-3.5 border-[var(--lp-badge-human-border)] bg-[var(--lp-badge-human-bg)] text-[var(--lp-badge-human-fg)] [a&]:hover:border-[var(--lp-badge-human-border-hover)] [a:hover_&]:border-[var(--lp-badge-human-border-hover)]",
+        "landing-eyebrow":
+          "h-6 sm:h-[26px] rounded-full px-2.5 py-1 text-xs font-medium leading-none [&>svg]:size-3.5 border-[var(--lp-badge-eyebrow-border)] bg-[var(--lp-badge-eyebrow-bg)] text-[var(--lp-badge-eyebrow-fg)]",
+        "landing-neutral":
+          "h-6 sm:h-[26px] rounded-full px-2.5 py-1 text-xs font-medium leading-none [&>svg]:size-3.5 border-[var(--lp-badge-neutral-border)] bg-[var(--lp-badge-neutral-bg)] text-[var(--lp-badge-neutral-fg)] [a&]:hover:border-[var(--lp-badge-neutral-border-hover)] [a:hover_&]:border-[var(--lp-badge-neutral-border-hover)]",
       },
     },
     defaultVariants: {
@@ -31,14 +46,29 @@ const badgeVariants = cva(
   }
 );
 
+// Maps each landing badge variant to its 400-shade status dot token.
+const LANDING_DOT_COLOR: Record<string, string> = {
+  "landing-topic": "var(--lp-badge-topic-dot)",
+  "landing-hook": "var(--lp-badge-hook-dot)",
+  "landing-writer": "var(--lp-badge-writer-dot)",
+  "landing-checker": "var(--lp-badge-checker-dot)",
+  "landing-human": "var(--lp-badge-human-dot)",
+  "landing-eyebrow": "var(--lp-badge-eyebrow-dot)",
+  "landing-neutral": "var(--lp-badge-neutral-dot)",
+};
+
 function Badge({
   className,
   variant = "default",
   asChild = false,
+  dot,
+  children,
   ...props
 }: React.ComponentProps<"span"> &
-  VariantProps<typeof badgeVariants> & { asChild?: boolean }) {
+  VariantProps<typeof badgeVariants> & { asChild?: boolean; dot?: boolean }) {
   const Comp = asChild ? Slot.Root : "span";
+  const showDot = dot ?? variant === "landing-eyebrow";
+  const dotColor = variant ? LANDING_DOT_COLOR[variant] : undefined;
 
   return (
     <Comp
@@ -46,7 +76,16 @@ function Badge({
       data-variant={variant}
       className={cn(badgeVariants({ variant }), className)}
       {...props}
-    />
+    >
+      {showDot && dotColor && !asChild && (
+        <span
+          aria-hidden="true"
+          className="h-1.5 w-1.5 shrink-0 rounded-full"
+          style={{ backgroundColor: dotColor }}
+        />
+      )}
+      {children}
+    </Comp>
   );
 }
 
