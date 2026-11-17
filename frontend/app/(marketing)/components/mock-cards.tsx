@@ -39,11 +39,7 @@ export function MockDraftCard({ className }: { className?: string }) {
             </div>
           </div>
         </div>
-        <Badge
-          variant="outline"
-          className="rounded-full text-xs font-normal border-[var(--lp-border)] text-[var(--lp-text-body)] bg-[var(--lp-surface-raised)] flex items-center gap-1.5 px-2.5 py-0.5"
-        >
-          <Clock className="w-3 h-3 text-[var(--lp-text-muted)]" />
+        <Badge variant="landing-human" dot>
           Awaiting approval
         </Badge>
       </div>
@@ -121,10 +117,7 @@ export function MockSlackCard({ className }: { className?: string }) {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <span className="text-sm font-normal text-[var(--lp-text-heading)]">AutoPulse</span>
-            <Badge
-              variant="outline"
-              className="text-[10px] py-0 px-1.5 border-[var(--lp-border)] text-[var(--lp-text-muted)] rounded font-normal"
-            >
+            <Badge variant="landing-neutral">
               APP
             </Badge>
           </div>
@@ -171,7 +164,7 @@ export function MockScoreMeterCard({ className }: { className?: string }) {
       {/* Quality check header */}
       <div className="flex items-center justify-between pb-3 border-b border-[var(--lp-border-hairline)]">
         <span className="text-xs text-[var(--lp-text-muted)]">Quality check</span>
-        <Badge className="bg-[var(--lp-text-heading)] text-[var(--lp-bg)] text-xs font-normal hover:bg-[var(--lp-ice)]">
+        <Badge variant="landing-checker" dot>
           Passed check
         </Badge>
       </div>
@@ -233,10 +226,7 @@ export function MockLinkedInStatusCard({ className }: { className?: string }) {
           <LinkedInIcon className="w-3.5 h-3.5 shrink-0" />
           <span>LinkedIn Connection</span>
         </span>
-        <Badge
-          variant="outline"
-          className="text-xs font-normal border-[var(--lp-border)] text-[var(--lp-ice)] bg-[var(--lp-surface-raised)]"
-        >
+        <Badge variant="landing-checker" dot>
           Active
         </Badge>
       </div>
@@ -303,13 +293,13 @@ export function MockOnboardingStepCard({ className }: { className?: string }) {
         <div className="pt-1">
           <span className="text-[var(--lp-text-muted)] block mb-1.5">Selected topics</span>
           <div className="flex flex-wrap gap-1.5">
-            <Badge variant="outline" className="text-[11px] font-normal border-[var(--lp-border)] text-[var(--lp-text-body)]">
+            <Badge variant="landing-neutral">
               Product Strategy
             </Badge>
-            <Badge variant="outline" className="text-[11px] font-normal border-[var(--lp-border)] text-[var(--lp-text-body)]">
+            <Badge variant="landing-neutral">
               Engineering Leadership
             </Badge>
-            <Badge variant="outline" className="text-[11px] font-normal border-[var(--lp-border)] text-[var(--lp-text-body)]">
+            <Badge variant="landing-neutral">
               SaaS Operations
             </Badge>
           </div>

@@ -29,7 +29,7 @@ export function BentoGrid() {
       <div className="max-w-6xl mx-auto px-5 lg:px-6">
         {/* Section title and description with scroll reveal */}
         <ScrollReveal className="max-w-3xl mb-10 lg:mb-16">
-          <p className="landing-heading text-[clamp(1.75rem,7vw,2.25rem)] lg:text-4xl text-[var(--lp-text-heading)]">
+          <p className="landing-heading text-[clamp(1.75rem,7vw,2.25rem)] text-3xl sm:text-4xl lg:text-5xl text-[var(--lp-text-heading)]">
             Built to run on its own, safely
           </p>
           <p className="mt-3 text-[15px] lg:text-lg text-[var(--lp-text-muted)] font-normal">
@@ -46,12 +46,14 @@ export function BentoGrid() {
           <ScrollRevealItem className="md:col-span-7 flex">
             <CardSpotlight className="h-full w-full p-5 sm:p-6 lg:p-8 flex flex-col justify-between">
               <div>
-                <div className="flex items-center gap-2 mb-4 text-[var(--lp-text-muted)]">
-                  <div className="flex items-center gap-1">
-                    <GmailIcon className="w-3.5 h-3.5" />
-                    <SlackIcon className="w-3.5 h-3.5" />
-                  </div>
-                  <span className="text-xs font-normal">Delivery channels</span>
+                <div className="flex items-center gap-2 mb-4">
+                  <Badge variant="landing-eyebrow">
+                    <span className="flex items-center gap-1">
+                      <GmailIcon className="w-3.5 h-3.5" />
+                      <SlackIcon className="w-3.5 h-3.5" />
+                    </span>
+                    <span>Delivery channels</span>
+                  </Badge>
                 </div>
                 <h3 className="landing-heading text-[clamp(1.5rem,6vw,1.875rem)] lg:text-3xl text-[var(--lp-text-heading)] mb-3">
                   Approve anywhere
@@ -89,9 +91,11 @@ export function BentoGrid() {
           <ScrollRevealItem className="md:col-span-5 flex">
             <CardSpotlight className="h-full w-full p-5 sm:p-6 lg:p-8 flex flex-col justify-between">
               <div>
-                <div className="flex items-center gap-2 mb-4 text-[var(--lp-text-muted)]">
-                  <ShieldCheck className="w-4 h-4 text-[var(--lp-ice)]" />
-                  <span className="text-xs font-normal">Idempotent publishing</span>
+                <div className="flex items-center gap-2 mb-4">
+                  <Badge variant="landing-eyebrow">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>Idempotent publishing</span>
+                  </Badge>
                 </div>
                 <h3 className="landing-heading text-[clamp(1.5rem,6vw,1.875rem)] lg:text-3xl text-[var(--lp-text-heading)] mb-3">
                   Built to publish once
@@ -104,10 +108,9 @@ export function BentoGrid() {
               <div className="mt-6 lg:mt-8 pt-5 lg:pt-6 border-t border-[var(--lp-border-hairline)]">
                 <div className="p-4 rounded-xl bg-[var(--lp-surface-raised)] border border-[var(--lp-border)] flex flex-wrap items-center justify-between gap-2 text-sm">
                   <span className="text-[var(--lp-text-muted)]">Duplicate safeguard</span>
-                  <span className="text-[var(--lp-text-heading)] font-normal flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4 text-[var(--lp-ice)]" />
+                  <Badge variant="landing-checker" dot>
                     Enforced
-                  </span>
+                  </Badge>
                 </div>
               </div>
             </CardSpotlight>
@@ -117,9 +120,11 @@ export function BentoGrid() {
           <ScrollRevealItem className="md:col-span-6 flex">
             <CardSpotlight className="h-full w-full p-5 sm:p-6 lg:p-8 flex flex-col justify-between">
               <div>
-                <div className="flex items-center gap-2 mb-4 text-[var(--lp-text-muted)]">
-                  <LinkedInIcon className="w-4 h-4" />
-                  <span className="text-xs font-normal">Supported networks</span>
+                <div className="flex items-center gap-2 mb-4">
+                  <Badge variant="landing-eyebrow">
+                    <LinkedInIcon className="w-3.5 h-3.5" />
+                    <span>Supported networks</span>
+                  </Badge>
                 </div>
                 <h3 className="landing-heading text-[clamp(1.5rem,6vw,1.875rem)] lg:text-3xl text-[var(--lp-text-heading)] mb-3">
                   LinkedIn first
@@ -130,21 +135,15 @@ export function BentoGrid() {
               </div>
 
               <div className="mt-6 lg:mt-8 pt-5 lg:pt-6 border-t border-[var(--lp-border-hairline)] flex flex-wrap gap-2.5">
-                <Badge className="bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] font-normal px-3 py-1.5 text-xs rounded-full flex items-center gap-1.5">
+                <Badge variant="landing-checker" dot>
                   <LinkedInIcon className="w-3.5 h-3.5 shrink-0" />
                   <span>LinkedIn (Live)</span>
                 </Badge>
-                <Badge
-                  variant="outline"
-                  className="border-[var(--lp-border)] bg-[var(--lp-surface-raised)] text-[var(--lp-text-body)] font-normal px-3 py-1.5 text-xs rounded-full flex items-center gap-1.5"
-                >
+                <Badge variant="landing-neutral" className="border-dashed">
                   <InstagramIcon className="w-3.5 h-3.5 shrink-0" />
                   <span>Instagram (Coming soon)</span>
                 </Badge>
-                <Badge
-                  variant="outline"
-                  className="border-[var(--lp-border)] bg-[var(--lp-surface-raised)] text-[var(--lp-text-body)] font-normal px-3 py-1.5 text-xs rounded-full flex items-center gap-1.5"
-                >
+                <Badge variant="landing-neutral" className="border-dashed">
                   <FacebookIcon className="w-3.5 h-3.5 shrink-0" />
                   <span>Facebook (Coming soon)</span>
                 </Badge>
@@ -157,14 +156,11 @@ export function BentoGrid() {
             <CardSpotlight className="h-full w-full p-5 sm:p-6 lg:p-8 flex flex-col justify-between">
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-                  <div className="flex items-center gap-2 text-[var(--lp-text-muted)]">
-                    <BarChart3 className="w-4 h-4 text-[var(--lp-ice)]" />
-                    <span className="text-xs font-normal">Performance insights</span>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className="border-[var(--lp-border)] bg-[var(--lp-surface-raised)] text-[var(--lp-text-body)] font-normal text-xs rounded-full"
-                  >
+                  <Badge variant="landing-eyebrow">
+                    <BarChart3 className="w-3.5 h-3.5" />
+                    <span>Performance insights</span>
+                  </Badge>
+                  <Badge variant="landing-neutral" className="border-dashed">
                     Coming soon
                   </Badge>
                 </div>
@@ -179,7 +175,9 @@ export function BentoGrid() {
               <div className="mt-6 lg:mt-8 pt-5 lg:pt-6 border-t border-[var(--lp-border-hairline)]">
                 <div className="p-4 rounded-xl bg-[var(--lp-surface-raised)] border border-[var(--lp-border)] flex flex-wrap items-center justify-between gap-2 text-sm text-[var(--lp-text-muted)]">
                   <span>Audience metrics and reach telemetry</span>
-                  <span className="font-normal text-[var(--lp-text-heading)]">In development</span>
+                  <Badge variant="landing-hook" dot>
+                    In development
+                  </Badge>
                 </div>
               </div>
             </CardSpotlight>

@@ -65,17 +65,13 @@ function StageTopic({ onHeightChange }: { onHeightChange: () => void }) {
               >
                 {fact.text}
               </p>
-              <span
-                className="inline-flex shrink-0 items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-normal self-start sm:self-center"
-                style={{
-                  borderColor: "var(--lp-border)",
-                  backgroundColor: "var(--lp-surface)",
-                  color: "var(--lp-text-muted)",
-                }}
+              <Badge
+                variant="landing-neutral"
+                className="font-mono self-start sm:self-center"
               >
                 <span
                   aria-hidden="true"
-                  className="flex h-4 w-4 items-center justify-center rounded-full font-mono text-[10px]"
+                  className="flex h-4 w-4 items-center justify-center rounded-full text-[10px]"
                   style={{
                     backgroundColor: "var(--lp-navy-deep)",
                     color: "var(--lp-ice)",
@@ -84,7 +80,7 @@ function StageTopic({ onHeightChange }: { onHeightChange: () => void }) {
                   {letter}
                 </span>
                 <span>{fact.sourceDomain}</span>
-              </span>
+              </Badge>
             </li>
           );
         })}
@@ -117,17 +113,7 @@ function StageHook({ onHeightChange }: { onHeightChange: () => void }) {
   return (
     <div className="space-y-5">
       <div>
-        <Badge
-          variant="outline"
-          className="rounded-full text-xs font-normal px-3 py-1"
-          style={{
-            borderColor: "var(--lp-border)",
-            color: "var(--lp-ice)",
-            backgroundColor: "var(--lp-surface-raised)",
-          }}
-        >
-          {realRun.hook.style}
-        </Badge>
+        <Badge variant="landing-hook">{realRun.hook.style}</Badge>
       </div>
 
       <p
@@ -209,26 +195,17 @@ function StageRounds({
                     Round {r.round}
                   </span>
                   {isChosen && (
-                    <Badge
-                      variant="outline"
-                      className="rounded-full text-[11px] font-normal px-2 py-0"
-                      style={{
-                        borderColor: "var(--lp-ice)",
-                        color: "var(--lp-ice)",
-                      }}
-                    >
-                      Chosen
-                    </Badge>
+                    <Badge variant="landing-neutral">Chosen</Badge>
                   )}
                 </div>
 
-                <div
-                  className="font-mono text-sm"
-                  style={{ color: "var(--lp-text-heading)" }}
+                <Badge
+                  variant={r.checkerScore < 15 ? "landing-checker" : "landing-hook"}
+                  className="font-mono"
                 >
                   <NumberTicker value={r.checkerScore} active={active} />
-                  <span style={{ color: "var(--lp-text-muted)" }}> / 100</span>
-                </div>
+                  <span>/ 100</span>
+                </Badge>
               </div>
 
               {/* Thin score bar with a fixed marker at 15 */}
@@ -359,15 +336,7 @@ function StageFinalPost({ onHeightChange }: { onHeightChange: () => void }) {
           </div>
 
           {passedCheck && (
-            <Badge
-              variant="outline"
-              className="rounded-full text-xs font-normal px-3 py-1"
-              style={{
-                borderColor: "var(--lp-ice)",
-                color: "var(--lp-ice)",
-                backgroundColor: "var(--lp-navy-deep)",
-              }}
-            >
+            <Badge variant="landing-checker" dot>
               Passed the writing check: {finalScore} out of 100
             </Badge>
           )}
@@ -505,15 +474,7 @@ function OneRealRunInner() {
     >
       <div className="max-w-6xl mx-auto px-5 lg:px-6">
         <div className="max-w-2xl mb-10 lg:mb-14">
-          <Badge
-            variant="outline"
-            className="rounded-full text-xs font-normal mb-4 px-3 py-1"
-            style={{
-              borderColor: "var(--lp-border)",
-              color: "var(--lp-ice)",
-              backgroundColor: "var(--lp-surface)",
-            }}
-          >
+          <Badge variant="landing-eyebrow" className="mb-4">
             {realRunCopy.pill}
           </Badge>
 
