@@ -186,25 +186,25 @@ function FeatureMockContent({
     const currentTopic = topicSamples[activeRowIndex] || topicSamples[0];
 
     return (
-      <Card className="bg-white text-ink rounded-2xl border border-border-light p-5 sm:p-6 max-w-sm w-full mx-auto">
-        <div className="flex items-center justify-between pb-3 border-b border-border-light">
-          <span className="text-xs text-text-muted-light">Discovered topic</span>
+      <Card className="bg-[var(--lp-surface)] text-[var(--lp-text-body)] rounded-2xl border border-[var(--lp-border)] shadow-[var(--lp-highlight-top)] p-5 sm:p-6 max-w-sm w-full mx-auto">
+        <div className="flex items-center justify-between pb-3 border-b border-[var(--lp-border-hairline)]">
+          <span className="text-xs text-[var(--lp-text-muted)]">Discovered topic</span>
           <Badge
             variant="outline"
-            className="text-[11px] font-normal border-border-light text-navy bg-ice/20"
+            className="text-[11px] font-normal border-[var(--lp-border)] text-[var(--lp-ice)] bg-[var(--lp-surface-raised)]"
           >
             Ready for drafting
           </Badge>
         </div>
         <div className="py-3.5 space-y-2">
-          <div className="text-[11px] font-normal text-text-muted-light uppercase tracking-wider">
+          <div className="text-[11px] font-normal text-[var(--lp-text-muted)] uppercase tracking-wider">
             Selected concept
           </div>
-          <p className="text-sm font-normal text-ink leading-snug">
+          <p className="text-sm font-normal text-[var(--lp-text-heading)] leading-snug">
             {currentTopic.title}
           </p>
         </div>
-        <div className="pt-3 border-t border-border-light flex items-center justify-between text-xs text-text-muted-light">
+        <div className="pt-3 border-t border-[var(--lp-border-hairline)] flex items-center justify-between text-xs text-[var(--lp-text-muted)]">
           <span>{currentTopic.tag}</span>
           <span className="text-[11px]">{currentTopic.source}</span>
         </div>
@@ -234,25 +234,25 @@ function FeatureMockContent({
     const currentDraft = draftSamples[activeRowIndex] || draftSamples[0];
 
     return (
-      <Card className="bg-white text-ink rounded-2xl border border-border-light p-5 sm:p-6 max-w-sm w-full mx-auto">
-        <div className="flex items-center justify-between pb-3 border-b border-border-light">
-          <span className="text-xs text-text-muted-light">{currentDraft.hook}</span>
+      <Card className="bg-[var(--lp-surface)] text-[var(--lp-text-body)] rounded-2xl border border-[var(--lp-border)] shadow-[var(--lp-highlight-top)] p-5 sm:p-6 max-w-sm w-full mx-auto">
+        <div className="flex items-center justify-between pb-3 border-b border-[var(--lp-border-hairline)]">
+          <span className="text-xs text-[var(--lp-text-muted)]">{currentDraft.hook}</span>
           <Badge
             variant="outline"
-            className="text-[11px] font-normal border-border-light text-navy bg-ice/20"
+            className="text-[11px] font-normal border-[var(--lp-border)] text-[var(--lp-ice)] bg-[var(--lp-surface-raised)]"
           >
             Draft ready
           </Badge>
         </div>
         <div className="py-3.5 space-y-2">
-          <div className="text-[11px] font-normal text-text-muted-light uppercase tracking-wider">
+          <div className="text-[11px] font-normal text-[var(--lp-text-muted)] uppercase tracking-wider">
             Draft preview
           </div>
-          <p className="text-sm font-normal text-ink leading-relaxed">
+          <p className="text-sm font-normal text-[var(--lp-text-heading)] leading-relaxed">
             {currentDraft.text}
           </p>
         </div>
-        <div className="pt-3 border-t border-border-light flex items-center justify-between text-xs text-text-muted-light">
+        <div className="pt-3 border-t border-[var(--lp-border-hairline)] flex items-center justify-between text-xs text-[var(--lp-text-muted)]">
           <span>Format: Short essay</span>
           <span>{currentDraft.words}</span>
         </div>
@@ -333,10 +333,10 @@ function FeatureRowBlock({
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeRow}
-                initial={{ opacity: 0, y: 6 }}
+                initial={{ opacity: 0, y: reducedMotion ? 0 : 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.28, ease: "easeOut" }}
+                exit={{ opacity: 0, y: reducedMotion ? 0 : -6 }}
+                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
                 className="w-full max-w-sm mx-auto min-w-0"
               >
                 <TiltCard maxTilt={4}>
@@ -359,18 +359,18 @@ function FeatureRowBlock({
           {/* Eyebrow badge with subtle border */}
           <Badge
             variant="outline"
-            className="rounded-full text-xs font-normal border-border-light text-navy bg-ice/20 mb-4 px-3 py-1"
+            className="rounded-full text-xs font-normal border-[var(--lp-border)] text-[var(--lp-ice)] bg-[var(--lp-surface)] mb-4 px-3 py-1"
           >
             {feature.badge}
           </Badge>
 
           {/* Quiet headline scaled smoothly with clamp on mobile */}
-          <h2 className="landing-heading text-[clamp(1.75rem,7vw,2.5rem)] lg:text-5xl text-ink mb-5 lg:mb-6">
+          <h2 className="landing-heading text-[clamp(1.75rem,7vw,2.5rem)] lg:text-5xl text-[var(--lp-text-heading)] mb-5 lg:mb-6">
             {feature.headline}
           </h2>
 
           {/* List of 3 rows separated by hairlines */}
-          <div className="border-t border-border-light divide-y divide-border-light">
+          <div className="border-t border-[var(--lp-border-hairline)] divide-y divide-[var(--lp-border-hairline)]">
             {feature.rows.map((row, idx) => {
               const isActive = activeRow === idx;
               return (
@@ -378,14 +378,14 @@ function FeatureRowBlock({
                   key={idx}
                   type="button"
                   onClick={() => handleSelectRow(idx)}
-                  className="w-full min-h-[44px] text-left py-4 lg:py-5 group cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue/50 rounded-lg"
+                  className="w-full min-h-[44px] text-left py-4 lg:py-5 group cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)] rounded-lg"
                 >
                   <div className="flex items-center justify-between">
                     <span
-                      className={`text-lg lg:text-xl font-normal transition-colors ${
+                      className={`text-lg lg:text-xl font-normal transition-colors duration-200 ${
                         isActive
-                          ? "text-ink"
-                          : "text-text-muted-light lg:group-hover:text-ink"
+                          ? "text-[var(--lp-text-heading)]"
+                          : "text-[var(--lp-text-muted)] lg:group-hover:text-[var(--lp-text-heading)]"
                       }`}
                     >
                       {row.title}
@@ -397,15 +397,15 @@ function FeatureRowBlock({
                     <motion.p
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: "auto" }}
-                      transition={{ duration: 0.24, ease: "easeOut" }}
-                      className="mt-2 text-[15px] lg:text-base text-text-muted-light font-normal leading-relaxed overflow-hidden"
+                      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                      className="mt-2 text-[15px] lg:text-base text-[var(--lp-text-body)] font-normal leading-relaxed overflow-hidden"
                     >
                       {row.description}
                     </motion.p>
                   )}
 
                   {/* 1px progress indicator filling over 6 seconds */}
-                  <div className="mt-3 w-full h-[1px] bg-border-light relative overflow-hidden">
+                  <div className="mt-3 w-full h-[1px] bg-[var(--lp-border-hairline)] relative overflow-hidden">
                     {isActive && (
                       <motion.div
                         key={progressKey}
@@ -415,7 +415,7 @@ function FeatureRowBlock({
                           duration: reducedMotion ? 0 : 6,
                           ease: "linear",
                         }}
-                        className="absolute left-0 top-0 bottom-0 bg-ink"
+                        className="absolute left-0 top-0 bottom-0 bg-[var(--lp-ice)]"
                       />
                     )}
                   </div>
@@ -432,10 +432,10 @@ function FeatureRowBlock({
 // Main FeatureRows section container
 export function FeatureRows() {
   return (
-    /* Mark the features section as light so the floating navbar uses dark text */
-    <section id="features" data-nav-theme="light" className="bg-paper py-16 lg:py-24 overflow-x-hidden">
+    /* Features section on forced-dark #08090C canvas */
+    <section id="features" className="bg-[var(--lp-bg)] py-16 lg:py-24 overflow-x-hidden">
       {/* Consistent 20px mobile container padding */}
-      <div className="max-w-6xl mx-auto px-5 lg:px-6 divide-y divide-border-light">
+      <div className="max-w-6xl mx-auto px-5 lg:px-6 divide-y divide-[var(--lp-border-hairline)]">
         {features.map((feature, index) => (
           <FeatureRowBlock
             key={feature.id}

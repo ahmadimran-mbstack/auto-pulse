@@ -26,10 +26,8 @@ const headlineWords = [
 // This component renders the hero section with ribbon backdrop and animated elements
 export function Hero() {
   return (
-    /* Mark the hero as a dark section so the floating navbar uses light text */
     <section
-      data-nav-theme="dark"
-      className="relative overflow-hidden bg-navy-deep text-white min-h-screen flex flex-col justify-end pt-20 pb-8 sm:pb-10 md:pb-12"
+      className="relative overflow-hidden bg-[var(--lp-navy-deep)] text-[var(--lp-text-heading)] min-h-screen flex flex-col justify-end pt-20 pb-8 sm:pb-10 md:pb-12"
     >
       {/* WebGL gradient blinds background with smooth bottom fade */}
       <div
@@ -46,6 +44,12 @@ export function Hero() {
           spotlightRadius={0.75}
         />
       </div>
+
+      {/* Bottom fade blending the hero seamlessly into #08090C */}
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-28 sm:h-36 bg-gradient-to-b from-transparent to-[var(--lp-bg)]"
+        aria-hidden="true"
+      />
 
       <div className="relative z-10 w-full px-6 sm:px-10 md:px-12 lg:px-16">
         <div className="max-w-5xl">
@@ -90,16 +94,18 @@ export function Hero() {
             transition={{ duration: 0.6, delay: 0.45, ease: [0.22, 1, 0.36, 1] }}
             className="mt-6 flex flex-wrap items-center justify-start gap-3.5"
           >
-            <Link href="/auth/sign-up">
-              <Button className="rounded-xl bg-white text-ink hover:bg-neutral-100 px-6 h-10 text-md font-medium gap-1.5 flex items-center">
+            {/* Primary CTA with hover brightness, press scale 0.98, and 2px arrow shift */}
+            <Link href="/auth/sign-up" className="group">
+              <Button className="rounded-xl bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] active:scale-[0.98] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] px-6 h-10 text-md font-medium gap-1.5 flex items-center">
                 <span>Get started</span>
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRight className="w-4 h-4 transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:translate-x-0.5" />
               </Button>
             </Link>
+            {/* Secondary CTA with hover brightness and press scale 0.98 */}
             <a href="#features">
               <Button
                 variant="outline"
-                className="rounded-xl border border-white/15 bg-white/10 text-white hover:bg-white/15 backdrop-blur-sm px-6 h-10 text-md font-medium"
+                className="rounded-xl border border-white/15 bg-white/10 text-white hover:bg-white/15 active:scale-[0.98] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] backdrop-blur-sm px-6 h-10 text-md font-medium"
               >
                 See how it works
               </Button>

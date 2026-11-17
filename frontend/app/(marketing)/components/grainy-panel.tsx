@@ -16,55 +16,59 @@ interface GrainyPanelProps {
   children?: React.ReactNode;
 }
 
-// Helper to construct layered radial gradients restricted strictly to allowed tokens
+// Helper to construct deep navy and ink layered radial gradients restricted strictly to allowed tokens
 function getGradientStyle(variant: GrainyPalette, angle: number) {
   switch (variant) {
     case "ink-glow":
-      // Ink-black panel (c) with focused blue and ice glow accents
+      // Ink-black panel with focused blue and ice glow accents
       return {
         backgroundColor: "#08090C",
         backgroundImage: `
-          radial-gradient(ellipse 65% 55% at 50% 40%, rgba(26, 86, 184, 0.42) 0%, rgba(10, 42, 102, 0.25) 45%, transparent 75%),
-          radial-gradient(circle at 75% 25%, rgba(191, 210, 238, 0.28) 0%, transparent 55%),
-          radial-gradient(circle at 20% 80%, rgba(0, 23, 64, 0.8) 0%, transparent 60%)
+          radial-gradient(ellipse 65% 55% at 50% 40%, rgba(26, 86, 184, 0.36) 0%, rgba(10, 42, 102, 0.24) 45%, transparent 75%),
+          radial-gradient(circle at 75% 25%, rgba(191, 210, 238, 0.16) 0%, transparent 55%),
+          radial-gradient(circle at 20% 80%, rgba(0, 23, 64, 0.78) 0%, transparent 60%)
         `,
+        boxShadow: "var(--lp-highlight-top)",
       };
 
     case "ice-navy":
-      // Inverted angle palette with ice highlights and quiet navy depth
+      // Deep navy and ink gradient with subtle ice highlight
       return {
-        backgroundColor: "#FAFAFA",
+        backgroundColor: "#08090C",
         backgroundImage: `
-          radial-gradient(circle at 25% 30%, rgba(191, 210, 238, 0.75) 0%, rgba(255, 255, 255, 0) 65%),
-          radial-gradient(circle at 80% 70%, rgba(10, 42, 102, 0.16) 0%, rgba(255, 255, 255, 0) 55%),
-          radial-gradient(circle at 50% 90%, rgba(26, 86, 184, 0.12) 0%, transparent 50%),
-          linear-gradient(${angle}deg, #FFFFFF 0%, #FAFAFA 50%, #F0F4FA 100%)
+          radial-gradient(circle at 25% 30%, rgba(26, 86, 184, 0.32) 0%, transparent 60%),
+          radial-gradient(circle at 80% 70%, rgba(0, 23, 64, 0.85) 0%, transparent 60%),
+          radial-gradient(circle at 50% 15%, rgba(191, 210, 238, 0.12) 0%, transparent 50%),
+          linear-gradient(${angle}deg, #08090C 0%, #0A1630 55%, #08090C 100%)
         `,
+        boxShadow: "var(--lp-highlight-top)",
       };
 
     case "deep-blue":
-      // Approval panel: navy, blue, and ice mix
+      // Approval panel: deep navy, blue, and ice accents on ink canvas
       return {
-        backgroundColor: "#FAFAFA",
+        backgroundColor: "#08090C",
         backgroundImage: `
-          radial-gradient(circle at 75% 30%, rgba(26, 86, 184, 0.22) 0%, transparent 60%),
-          radial-gradient(circle at 25% 75%, rgba(191, 210, 238, 0.7) 0%, transparent 60%),
-          radial-gradient(circle at 50% 20%, rgba(10, 42, 102, 0.14) 0%, transparent 50%),
-          linear-gradient(${angle}deg, #FFFFFF 0%, #F5F7FB 100%)
+          radial-gradient(circle at 75% 30%, rgba(26, 86, 184, 0.34) 0%, transparent 60%),
+          radial-gradient(circle at 25% 75%, rgba(191, 210, 238, 0.14) 0%, transparent 55%),
+          radial-gradient(circle at 50% 20%, rgba(0, 23, 64, 0.82) 0%, transparent 55%),
+          linear-gradient(${angle}deg, #08090C 0%, #091326 100%)
         `,
+        boxShadow: "var(--lp-highlight-top)",
       };
 
     case "navy-ice":
     default:
-      // Topic finder panel: airy navy and ice blend with soft white core
+      // Topic finder panel: deep navy and ink blend with subtle ice glow
       return {
-        backgroundColor: "#FAFAFA",
+        backgroundColor: "#08090C",
         backgroundImage: `
-          radial-gradient(circle at 70% 30%, rgba(191, 210, 238, 0.85) 0%, transparent 55%),
-          radial-gradient(circle at 20% 65%, rgba(10, 42, 102, 0.18) 0%, transparent 60%),
-          radial-gradient(circle at 55% 85%, rgba(26, 86, 184, 0.12) 0%, transparent 50%),
-          linear-gradient(${angle}deg, #FFFFFF 0%, #F8FAFC 100%)
+          radial-gradient(circle at 70% 30%, rgba(191, 210, 238, 0.14) 0%, transparent 55%),
+          radial-gradient(circle at 20% 65%, rgba(0, 23, 64, 0.85) 0%, transparent 60%),
+          radial-gradient(circle at 55% 85%, rgba(26, 86, 184, 0.28) 0%, transparent 55%),
+          linear-gradient(${angle}deg, #08090C 0%, #0B162D 100%)
         `,
+        boxShadow: "var(--lp-highlight-top)",
       };
   }
 }
@@ -80,13 +84,10 @@ export function GrainyPanel({
   const gradientStyle = getGradientStyle(variant, angle);
 
   return (
-    /* Rounded gradient panel with compact padding on mobile and taller desktop framing */
+    /* Rounded dark gradient panel with compact padding on mobile and taller desktop framing */
     <div
       className={cn(
-        "relative rounded-3xl overflow-hidden border p-4 sm:p-8 lg:p-12 flex items-center justify-center min-h-0 lg:min-h-[380px] w-full",
-        variant === "ink-glow"
-          ? "border-white/10 text-white"
-          : "border-border-light text-ink",
+        "relative rounded-3xl overflow-hidden border border-[var(--lp-border)] text-[var(--lp-text-heading)] p-4 sm:p-8 lg:p-12 flex items-center justify-center min-h-0 lg:min-h-[380px] w-full",
         className
       )}
       style={gradientStyle}

@@ -87,8 +87,8 @@ export function TiltCard({
           />
         )}
 
-        {/* Card content container with white surface */}
-        <div className="relative z-10 w-full h-full bg-white rounded-2xl">
+        {/* Card content container with dark surface */}
+        <div className="relative z-10 w-full h-full bg-[var(--lp-surface)] rounded-2xl">
           {children}
         </div>
       </div>

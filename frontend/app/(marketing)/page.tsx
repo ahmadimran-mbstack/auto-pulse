@@ -13,9 +13,10 @@ import { Footer } from "./components/footer";
 // This component renders the complete landing page in the exact ordered sequence.
 export default function MarketingPage() {
   return (
-    <div className="flex flex-col min-h-screen bg-paper">
+    /* Main landing page container on forced-dark #08090C background */
+    <div className="flex flex-col min-h-screen bg-[var(--lp-bg)]">
       {/* 1. Nav and 2. Hero on dark navy-deep canvas */}
-      <div className="bg-navy-deep">
+      <div className="bg-[var(--lp-navy-deep)]">
         <Nav />
         <Hero />
       </div>
