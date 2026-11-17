@@ -89,7 +89,7 @@ class Settings(BaseSettings):
     # Day 5: Email delivery settings
     EMAIL_API_KEY: Optional[str] = None
     EMAIL_FROM: str = "AutoPulse <noreply@autopulse.app>"
-    APP_BASE_URL: str = "http://localhost:3000"
+    APP_BASE_URL: str = "https://autopulse-three.vercel.app"
 
     # SMTP configuration for sending approval emails
     SMTP_HOST: Optional[str] = None
