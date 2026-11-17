@@ -844,46 +844,63 @@ input:-webkit-autofill:active {
   }
 }
 
-/* Set navbar text, icon, divider, surface, and button colors when over a dark section */
-[data-nav-theme="dark"] {
-  --nav-text: #d4d4d4;
-  --nav-text-strong: #ffffff;
-  --nav-divider: rgba(255, 255, 255, 0.15);
-  --nav-hover-bg: rgba(255, 255, 255, 0.1);
-  --nav-cta-bg: #ffffff;
-  --nav-cta-hover-bg: #f5f5f5;
-  --nav-cta-text: #08090c;
-  --nav-menu-bg: rgba(8, 9, 12, 0.94);
-  --nav-menu-border: rgba(255, 255, 255, 0.15);
+/* Force dark tokens and dark native controls on landing, auth, and legal routes without touching user theme */
+:root:has(.force-dark),
+.force-dark {
+  color-scheme: dark !important;
+
+  /* Landing, auth, and legal dark surface and text tokens */
+  --lp-bg: #08090C;
+  --lp-surface: #0F1115;
+  --lp-surface-raised: #14171D;
+  --lp-navy-deep: #001740;
+  --lp-blue: #1A56B8;
+  --lp-ice: #BFD2EE;
+  --lp-text-heading: #FFFFFF;
+  --lp-text-body: #C9CFD9;
+  --lp-text-muted: #9AA3B2;
+  --lp-border: rgba(255, 255, 255, 0.10);
+  --lp-border-hover: rgba(255, 255, 255, 0.18);
+  --lp-border-hairline: rgba(255, 255, 255, 0.08);
+  --lp-border-input: rgba(255, 255, 255, 0.16);
+  --lp-highlight-top: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --lp-nav-bg: rgba(255, 255, 255, 0.06);
+  --lp-nav-border: rgba(255, 255, 255, 0.10);
+  --lp-menu-bg: rgba(15, 17, 21, 0.96);
+
+  /* Override semantic UI and portal tokens so dialogs, sheets, and tooltips stay dark */
+  --background: var(--lp-bg);
+  --foreground: var(--lp-text-heading);
+  --card: var(--lp-surface);
+  --card-foreground: var(--lp-text-heading);
+  --popover: var(--lp-surface-raised);
+  --popover-foreground: var(--lp-text-heading);
+  --primary: var(--lp-text-heading);
+  --primary-foreground: var(--lp-bg);
+  --secondary: var(--lp-surface-raised);
+  --secondary-foreground: var(--lp-text-heading);
+  --muted: var(--lp-surface-raised);
+  --muted-foreground: var(--lp-text-muted);
+  --accent: rgba(255, 255, 255, 0.06);
+  --accent-foreground: var(--lp-text-heading);
+  --border: var(--lp-border);
+  --card-border: var(--lp-border);
+  --input: var(--lp-border-input);
+  --input-focus: var(--lp-ice);
+  --ring: var(--lp-ice);
+  --destructive: #ff6369;
+  --destructive-foreground: #ffffff;
 }
 
-/* Set navbar text, icon, divider, surface, and button colors when over a light section */
-[data-nav-theme="light"] {
-  --nav-text: #4b5563;
-  --nav-text-strong: #08090c;
-  --nav-divider: rgba(8, 9, 12, 0.12);
-  --nav-hover-bg: rgba(8, 9, 12, 0.06);
-  --nav-cta-bg: #08090c;
-  --nav-cta-hover-bg: #1f2937;
-  --nav-cta-text: #ffffff;
-  --nav-menu-bg: rgba(255, 255, 255, 0.96);
-  --nav-menu-border: rgba(8, 9, 12, 0.12);
-}
-
-/* Show the blue-background logo over dark sections and hide the white-background one */
-[data-nav-theme="dark"] .nav-logo-dark {
-  display: block;
-}
-[data-nav-theme="dark"] .nav-logo-light {
-  display: none;
-}
-
-/* Show the white-background logo over light sections and hide the blue-background one */
-[data-nav-theme="light"] .nav-logo-dark {
-  display: none;
-}
-[data-nav-theme="light"] .nav-logo-light {
-  display: block;
+/* Keep browser autofill dark inside forced-dark auth and marketing forms */
+.force-dark input:-webkit-autofill,
+.force-dark input:-webkit-autofill:hover,
+.force-dark input:-webkit-autofill:focus,
+.force-dark input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px var(--lp-surface) inset !important;
+  -webkit-text-fill-color: var(--lp-text-heading) !important;
+  caret-color: var(--lp-text-heading) !important;
+  transition: background-color 5000s ease-in-out 0s;
 }
 
 /* Turn off hover-only transforms and reveal overlays on touch devices */

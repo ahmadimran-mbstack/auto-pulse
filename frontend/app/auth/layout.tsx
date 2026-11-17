@@ -1,7 +1,13 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { auth } from "@/lib/auth/server";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+
+// Set mobile browser theme color and dark color scheme on the server
+export const viewport: Viewport = {
+  themeColor: "#08090C",
+  colorScheme: "dark",
+};
 
 // Metadata for authentication routes
 export const metadata: Metadata = {
@@ -29,9 +35,13 @@ export default async function AuthLayout({ children }: AuthLayoutProps) {
   const isSignedOut = cookieStore.get("autopulse_signed_out")?.value === "true";
   const isOtpPending = cookieStore.get("autopulse_otp_pending")?.value === "true";
 
-  // If the user has explicitly signed out, allow auth screens to render unconditionally
+  // If the user has explicitly signed out, allow auth screens to render unconditionally in dark mode
   if (isSignedOut) {
-    return <>{children}</>;
+    return (
+      <div className="dark force-dark min-h-svh bg-[var(--lp-bg)] text-[var(--lp-text-body)] antialiased">
+        {children}
+      </div>
+    );
   }
 
   let session = null;
@@ -48,5 +58,10 @@ export default async function AuthLayout({ children }: AuthLayoutProps) {
     redirect("/app");
   }
 
-  return <>{children}</>;
+  // Wrap all auth routes in forced-dark container on the server so there is no light flash
+  return (
+    <div className="dark force-dark min-h-svh bg-[var(--lp-bg)] text-[var(--lp-text-body)] antialiased">
+      {children}
+    </div>
+  );
 }
