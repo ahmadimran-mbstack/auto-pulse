@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import { Manrope } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
@@ -35,7 +36,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${GeistSans.variable} ${manrope.variable}`}
+      className={`${GeistSans.variable} ${GeistMono.variable} ${manrope.variable}`}
       suppressHydrationWarning
       data-scroll-behavior="smooth"
     >
