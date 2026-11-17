@@ -41,12 +41,13 @@ export function GoogleSignInButton({
 
   return (
     <div className="w-full">
+      {/* Dark surface Google OAuth button with visible border and focus ring */}
       <Button
         type="button"
         variant="outline"
         onClick={handleGoogleSignIn}
         disabled={isPending}
-        className="w-full h-11 rounded-lg border border-neutral-200 dark:border-border bg-white text-neutral-900 hover:bg-neutral-50 dark:bg-card dark:text-foreground dark:hover:bg-secondary/40 justify-center gap-2.5 font-normal transition-colors text-sm"
+        className="w-full h-11 rounded-lg border border-[var(--lp-border-input)] bg-[var(--lp-surface)] text-[var(--lp-text-heading)] hover:bg-[var(--lp-surface-raised)] hover:border-[var(--lp-border-hover)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] justify-center gap-2.5 font-normal transition-colors text-sm"
       >
         {/* Official Google Monochrome / Full-color SVG mark */}
         <svg

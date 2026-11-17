@@ -148,9 +148,9 @@ function SignInForm() {
       {/* Visual divider using shadcn Separator */}
       <div className="relative py-2 flex items-center justify-center">
         <div className="absolute inset-0 flex items-center">
-          <Separator className="w-full bg-neutral-200 dark:bg-border" />
+          <Separator className="w-full bg-[var(--lp-border-hairline)]" />
         </div>
-        <div className="relative bg-white dark:bg-background px-3 text-xs text-muted-foreground uppercase tracking-wider font-normal">
+        <div className="relative bg-[var(--lp-bg)] px-3 text-xs text-[var(--lp-text-muted)] uppercase tracking-wider font-normal">
           or
         </div>
       </div>
@@ -159,7 +159,7 @@ function SignInForm() {
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Email field */}
         <div className="space-y-1.5 text-left">
-          <Label htmlFor="email" className="text-sm font-normal text-foreground">
+          <Label htmlFor="email" className="text-sm font-normal text-[var(--lp-text-heading)]">
             Email
           </Label>
           <Input
@@ -171,19 +171,19 @@ function SignInForm() {
             placeholder="name@company.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="h-11 rounded-lg border border-neutral-200 dark:border-border bg-white dark:bg-card px-3.5 text-sm text-foreground font-normal placeholder:text-muted-foreground focus-visible:border-neutral-900 focus-visible:ring-1 focus-visible:ring-neutral-900/20 outline-none"
+            className="h-11 rounded-lg border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
           />
         </div>
 
         {/* Password field with eye toggle and forgot password link */}
         <div className="space-y-1.5 text-left">
           <div className="flex items-center justify-between">
-            <Label htmlFor="password" className="text-sm font-normal text-foreground">
+            <Label htmlFor="password" className="text-sm font-normal text-[var(--lp-text-heading)]">
               Password
             </Label>
             <Link
               href="/auth/forgot-password"
-              className="text-sm text-neutral-600 dark:text-muted-foreground hover:text-foreground hover:underline font-normal"
+              className="text-sm text-[var(--lp-ice)] hover:text-[var(--lp-text-heading)] hover:underline font-normal"
             >
               Forgot password?
             </Link>
@@ -198,12 +198,12 @@ function SignInForm() {
               placeholder="Enter your password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="h-11 rounded-lg border border-neutral-200 dark:border-border bg-white dark:bg-card px-3.5 pr-10 text-sm text-foreground font-normal placeholder:text-muted-foreground focus-visible:border-neutral-900 focus-visible:ring-1 focus-visible:ring-neutral-900/20 outline-none"
+              className="h-11 rounded-lg border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 pr-10 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
             />
             <button
               type="button"
               onClick={() => setShowPassword((prev) => !prev)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--lp-text-muted)] hover:text-[var(--lp-text-heading)] cursor-pointer focus:outline-none transition-colors"
               aria-label={showPassword ? "Hide password" : "Show password"}
             >
               {showPassword ? (
@@ -221,7 +221,7 @@ function SignInForm() {
             ref={errorRef}
             tabIndex={-1}
             role="alert"
-            className="p-3 rounded-lg bg-status-danger-bg text-status-danger-fg text-sm border border-destructive/20 outline-none text-left font-normal"
+            className="p-3 rounded-lg bg-[#ff6369]/10 text-[#ff8589] text-sm border border-[#ff6369]/30 outline-none text-left font-normal"
           >
             {error}
           </div>
@@ -231,7 +231,7 @@ function SignInForm() {
         <Button
           type="submit"
           disabled={isPending || !email.trim() || !password}
-          className="w-full h-11 rounded-lg bg-neutral-950 text-white hover:bg-neutral-900 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200 transition-colors font-normal text-sm flex items-center justify-center gap-2"
+          className="w-full h-11 rounded-lg bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] transition-colors font-normal text-sm flex items-center justify-center gap-2"
         >
           {isPending ? (
             <>

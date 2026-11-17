@@ -34,7 +34,8 @@ export function AuthShell({
   className,
 }: AuthShellProps) {
   return (
-    <div className="min-h-svh w-full flex flex-col lg:flex-row bg-white dark:bg-background text-foreground font-normal">
+    /* Split-screen auth container using dark-only background and text tokens */
+    <div className="min-h-svh w-full flex flex-col lg:flex-row bg-[var(--lp-bg)] text-[var(--lp-text-body)] font-normal">
       {/* Left Visual Panel (55% width on desktop, hidden on < lg) */}
       <section
         className="hidden lg:flex lg:w-[55%] relative overflow-hidden select-none bg-[#05050A] min-h-svh flex-col justify-end"
@@ -134,7 +135,7 @@ export function AuthShell({
       </section>
 
       {/* Right Form Panel (45% width on desktop, full width centered on mobile, min-h-svh) */}
-      <section className="w-full lg:w-[45%] min-h-svh flex items-center justify-center p-6 sm:p-8 lg:p-10 bg-white dark:bg-background">
+      <section className="w-full lg:w-[45%] min-h-svh flex items-center justify-center p-6 sm:p-8 lg:p-10 bg-[var(--lp-bg)]">
         <div className={cn("w-full max-w-[380px] flex flex-col text-left", className)}>
           {/* AutoPulse brand logo (32px) */}
           <div className="mb-3.5">
@@ -142,12 +143,12 @@ export function AuthShell({
           </div>
 
           {/* Form heading: text-4xl, font-normal, tracking-tight, leading-tight */}
-          <h1 className="text-4xl font-normal tracking-tight leading-tight text-foreground mb-1.5">
+          <h1 className="text-4xl font-normal tracking-tight leading-tight text-[var(--lp-text-heading)] mb-1.5">
             {title}
           </h1>
 
           {/* Subtitle description: text-sm, muted, one line */}
-          <div className="text-sm text-neutral-500 dark:text-muted-foreground mb-5 leading-normal font-normal truncate">
+          <div className="text-sm text-[var(--lp-text-muted)] mb-5 leading-normal font-normal truncate">
             {description}
           </div>
 
@@ -158,20 +159,20 @@ export function AuthShell({
 
           {/* Agreement line for sign in and sign up */}
           {agreementType !== "none" && (
-            <p className="text-xs text-neutral-500 dark:text-muted-foreground mt-4 leading-relaxed text-center font-normal">
+            <p className="text-xs text-[var(--lp-text-muted)] mt-4 leading-relaxed text-center font-normal">
               {agreementType === "sign-in" ? (
                 <>
                   By signing in, you agree to our{" "}
                   <Link
                     href="/terms"
-                    className="underline underline-offset-4 text-foreground/80 hover:text-foreground font-normal"
+                    className="underline underline-offset-4 text-[var(--lp-ice)] hover:text-[var(--lp-text-heading)] font-normal"
                   >
                     Terms of Service
                   </Link>{" "}
                   and{" "}
                   <Link
                     href="/privacy"
-                    className="underline underline-offset-4 text-foreground/80 hover:text-foreground font-normal"
+                    className="underline underline-offset-4 text-[var(--lp-ice)] hover:text-[var(--lp-text-heading)] font-normal"
                   >
                     Privacy Policy
                   </Link>
@@ -182,14 +183,14 @@ export function AuthShell({
                   By creating an account, you agree to our{" "}
                   <Link
                     href="/terms"
-                    className="underline underline-offset-4 text-foreground/80 hover:text-foreground font-normal"
+                    className="underline underline-offset-4 text-[var(--lp-ice)] hover:text-[var(--lp-text-heading)] font-normal"
                   >
                     Terms of Service
                   </Link>{" "}
                   and{" "}
                   <Link
                     href="/privacy"
-                    className="underline underline-offset-4 text-foreground/80 hover:text-foreground font-normal"
+                    className="underline underline-offset-4 text-[var(--lp-ice)] hover:text-[var(--lp-text-heading)] font-normal"
                   >
                     Privacy Policy
                   </Link>
@@ -201,7 +202,7 @@ export function AuthShell({
 
           {/* Supplemental action footer links */}
           {footer && (
-            <div className="mt-4 pt-4 border-t border-neutral-100 dark:border-border text-sm text-neutral-500 dark:text-muted-foreground text-center font-normal">
+            <div className="mt-4 pt-4 border-t border-[var(--lp-border-hairline)] text-sm text-[var(--lp-text-muted)] text-center font-normal">
               {footer}
             </div>
           )}

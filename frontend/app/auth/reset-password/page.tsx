@@ -177,16 +177,16 @@ function ResetPasswordForm() {
   if (isSuccess) {
     return (
       <div className="space-y-4 text-left font-normal">
-        <Alert className="border-signal-line bg-signal-soft text-foreground font-normal">
-          <CheckCircle2 className="size-4 text-primary shrink-0" aria-hidden="true" />
-          <AlertDescription className="text-sm font-normal">
+        <Alert className="border-[#46a758]/30 bg-[#46a758]/10 text-[#62c073] font-normal">
+          <CheckCircle2 className="size-4 text-[#62c073] shrink-0" aria-hidden="true" />
+          <AlertDescription className="text-sm font-normal text-[var(--lp-text-body)]">
             Your password has been successfully updated. You can now sign in with your new password.
           </AlertDescription>
         </Alert>
         <Button
           type="button"
           onClick={() => router.push("/auth/sign-in")}
-          className="w-full h-11 rounded-lg bg-neutral-950 text-white hover:bg-neutral-900 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200 transition-colors font-normal text-sm"
+          className="w-full h-11 rounded-lg bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] transition-colors font-normal text-sm"
         >
           Sign in now
         </Button>
@@ -198,7 +198,7 @@ function ResetPasswordForm() {
     <form onSubmit={handleSubmit} className="space-y-4 text-left font-normal">
       {/* Email input field */}
       <div className="space-y-1.5">
-        <Label htmlFor="email" className="text-sm font-normal text-foreground">
+        <Label htmlFor="email" className="text-sm font-normal text-[var(--lp-text-heading)]">
           Email address
         </Label>
         <Input
@@ -210,7 +210,7 @@ function ResetPasswordForm() {
           placeholder="name@company.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="h-11 rounded-lg border border-neutral-200 dark:border-border bg-white dark:bg-card px-3.5 text-sm text-foreground font-normal placeholder:text-muted-foreground focus-visible:border-neutral-900 focus-visible:ring-1 focus-visible:ring-neutral-900/20 outline-none"
+          className="h-11 rounded-lg border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
         />
       </div>
 
@@ -218,14 +218,14 @@ function ResetPasswordForm() {
       {!token && (
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <Label htmlFor="otp" className="text-sm font-normal text-foreground">
+            <Label htmlFor="otp" className="text-sm font-normal text-[var(--lp-text-heading)]">
               Verification code
             </Label>
             <button
               type="button"
               onClick={handleResendCode}
               disabled={resendCooldown > 0}
-              className="text-xs text-neutral-600 dark:text-muted-foreground hover:text-foreground hover:underline font-normal disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+              className="text-xs text-[var(--lp-ice)] hover:text-[var(--lp-text-heading)] hover:underline font-normal disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
             >
               {resendCooldown > 0
                 ? `Resend code in ${resendCooldown}s`
@@ -242,21 +242,21 @@ function ResetPasswordForm() {
             placeholder="6-digit code"
             value={otp}
             onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-            className="h-11 rounded-lg border border-neutral-200 dark:border-border bg-white dark:bg-card px-3.5 text-foreground font-mono text-center tracking-widest text-lg font-normal placeholder:text-muted-foreground focus-visible:border-neutral-900 focus-visible:ring-1 focus-visible:ring-neutral-900/20 outline-none"
+            className="h-11 rounded-lg border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 text-[var(--lp-text-heading)] font-mono text-center tracking-widest text-lg font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
           />
         </div>
       )}
 
       {/* Resend notice alert */}
       {resendNotice && (
-        <p className="text-xs text-primary font-normal">
+        <p className="text-xs text-[var(--lp-ice)] font-normal">
           {resendNotice}
         </p>
       )}
 
       {/* New password input */}
       <div className="space-y-1.5">
-        <Label htmlFor="newPassword" className="text-sm font-normal text-foreground">
+        <Label htmlFor="newPassword" className="text-sm font-normal text-[var(--lp-text-heading)]">
           New password
         </Label>
         <div className="relative">
@@ -269,12 +269,12 @@ function ResetPasswordForm() {
             placeholder="At least 8 characters"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
-            className="h-11 rounded-lg border border-neutral-200 dark:border-border bg-white dark:bg-card px-3.5 pr-10 text-sm text-foreground font-normal placeholder:text-muted-foreground focus-visible:border-neutral-900 focus-visible:ring-1 focus-visible:ring-neutral-900/20 outline-none"
+            className="h-11 rounded-lg border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 pr-10 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
           />
           <button
             type="button"
             onClick={() => setShowPassword((prev) => !prev)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none transition-colors"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--lp-text-muted)] hover:text-[var(--lp-text-heading)] cursor-pointer focus:outline-none transition-colors"
             aria-label={showPassword ? "Hide password" : "Show password"}
           >
             {showPassword ? (
@@ -288,7 +288,7 @@ function ResetPasswordForm() {
 
       {/* Confirm password input */}
       <div className="space-y-1.5">
-        <Label htmlFor="confirmPassword" className="text-sm font-normal text-foreground">
+        <Label htmlFor="confirmPassword" className="text-sm font-normal text-[var(--lp-text-heading)]">
           Confirm new password
         </Label>
         <div className="relative">
@@ -301,12 +301,12 @@ function ResetPasswordForm() {
             placeholder="Retype your new password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
-            className="h-11 rounded-lg border border-neutral-200 dark:border-border bg-white dark:bg-card px-3.5 pr-10 text-sm text-foreground font-normal placeholder:text-muted-foreground focus-visible:border-neutral-900 focus-visible:ring-1 focus-visible:ring-neutral-900/20 outline-none"
+            className="h-11 rounded-lg border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 pr-10 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
           />
           <button
             type="button"
             onClick={() => setShowPassword((prev) => !prev)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none transition-colors"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--lp-text-muted)] hover:text-[var(--lp-text-heading)] cursor-pointer focus:outline-none transition-colors"
             aria-label={showPassword ? "Hide password" : "Show password"}
           >
             {showPassword ? (
@@ -324,7 +324,7 @@ function ResetPasswordForm() {
           ref={errorRef}
           tabIndex={-1}
           role="alert"
-          className="p-3 rounded-lg bg-status-danger-bg text-status-danger-fg text-sm border border-destructive/20 outline-none font-normal"
+          className="p-3 rounded-lg bg-[#ff6369]/10 text-[#ff8589] text-sm border border-[#ff6369]/30 outline-none font-normal"
         >
           {error}
         </div>
@@ -334,7 +334,7 @@ function ResetPasswordForm() {
       <Button
         type="submit"
         disabled={isPending || newPassword.length < 8 || newPassword !== confirmPassword}
-        className="w-full h-11 rounded-lg bg-neutral-950 text-white hover:bg-neutral-900 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200 transition-colors font-normal text-sm flex items-center justify-center gap-2"
+        className="w-full h-11 rounded-lg bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] transition-colors font-normal text-sm flex items-center justify-center gap-2"
       >
         {isPending ? (
           <>

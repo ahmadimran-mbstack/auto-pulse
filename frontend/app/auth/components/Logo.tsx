@@ -13,27 +13,18 @@ interface LogoProps {
 
 export function Logo({ href = "/", size = 32, className }: LogoProps) {
   const content = (
+    /* Always render the dark-theme logo mark on dark-only routes */
     <div
       className={cn("relative flex items-center shrink-0", className)}
       style={{ width: size, height: size }}
     >
-      {/* Dark theme logo mark for dark backgrounds */}
       <Image
         src="/logo-mark-blue-bg.png"
         alt="AutoPulse logo"
         width={size}
         height={size}
         priority
-        className="w-full h-full object-contain hidden dark:block"
-      />
-      {/* Light theme logo mark for light backgrounds */}
-      <Image
-        src="/logo-mark-white-bg.png"
-        alt="AutoPulse logo"
-        width={size}
-        height={size}
-        priority
-        className="w-full h-full object-contain block dark:hidden"
+        className="w-full h-full object-contain rounded-full"
       />
     </div>
   );

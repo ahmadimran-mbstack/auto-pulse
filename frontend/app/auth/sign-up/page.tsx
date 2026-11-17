@@ -197,9 +197,9 @@ function SignUpForm() {
       {/* Visual divider using shadcn Separator */}
       <div className="relative py-2 flex items-center justify-center">
         <div className="absolute inset-0 flex items-center">
-          <Separator className="w-full bg-neutral-200 dark:bg-border" />
+          <Separator className="w-full bg-[var(--lp-border-hairline)]" />
         </div>
-        <div className="relative bg-white dark:bg-background px-3 text-xs text-muted-foreground uppercase tracking-wider font-normal">
+        <div className="relative bg-[var(--lp-bg)] px-3 text-xs text-[var(--lp-text-muted)] uppercase tracking-wider font-normal">
           or
         </div>
       </div>
@@ -207,7 +207,7 @@ function SignUpForm() {
       <form onSubmit={handleSubmit} className="space-y-4 text-left">
         {/* Full Name input */}
         <div className="space-y-1.5">
-          <Label htmlFor="name" className="text-sm font-normal text-foreground">
+          <Label htmlFor="name" className="text-sm font-normal text-[var(--lp-text-heading)]">
             Full name
           </Label>
           <Input
@@ -219,13 +219,13 @@ function SignUpForm() {
             placeholder="Jane Doe"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="h-11 rounded-lg border border-neutral-200 dark:border-border bg-white dark:bg-card px-3.5 text-sm text-foreground font-normal placeholder:text-muted-foreground focus-visible:border-neutral-900 focus-visible:ring-1 focus-visible:ring-neutral-900/20 outline-none"
+            className="h-11 rounded-lg border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
           />
         </div>
 
         {/* Email input */}
         <div className="space-y-1.5">
-          <Label htmlFor="email" className="text-sm font-normal text-foreground">
+          <Label htmlFor="email" className="text-sm font-normal text-[var(--lp-text-heading)]">
             Email
           </Label>
           <Input
@@ -237,20 +237,20 @@ function SignUpForm() {
             placeholder="name@company.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="h-11 rounded-lg border border-neutral-200 dark:border-border bg-white dark:bg-card px-3.5 text-sm text-foreground font-normal placeholder:text-muted-foreground focus-visible:border-neutral-900 focus-visible:ring-1 focus-visible:ring-neutral-900/20 outline-none"
+            className="h-11 rounded-lg border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
           />
         </div>
 
         {/* Password input with generator helper and eye toggle */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <Label htmlFor="password" className="text-sm font-normal text-foreground">
+            <Label htmlFor="password" className="text-sm font-normal text-[var(--lp-text-heading)]">
               Password
             </Label>
             <button
               type="button"
               onClick={handleGeneratePassword}
-              className="text-xs text-neutral-600 dark:text-muted-foreground hover:text-foreground hover:underline font-normal cursor-pointer"
+              className="text-xs text-[var(--lp-ice)] hover:text-[var(--lp-text-heading)] hover:underline font-normal cursor-pointer"
             >
               Generate strong
             </button>
@@ -265,12 +265,12 @@ function SignUpForm() {
               placeholder="Create a strong password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="h-11 rounded-lg border border-neutral-200 dark:border-border bg-white dark:bg-card px-3.5 pr-10 text-sm text-foreground font-normal placeholder:text-muted-foreground focus-visible:border-neutral-900 focus-visible:ring-1 focus-visible:ring-neutral-900/20 outline-none"
+              className="h-11 rounded-lg border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 pr-10 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
             />
             <button
               type="button"
               onClick={() => setShowPassword((prev) => !prev)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer focus:outline-none transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--lp-text-muted)] hover:text-[var(--lp-text-heading)] cursor-pointer focus:outline-none transition-colors"
               aria-label={showPassword ? "Hide password" : "Show password"}
             >
               {showPassword ? (
@@ -284,55 +284,55 @@ function SignUpForm() {
 
         {/* Notice after generating and copying password */}
         {copiedNotice && (
-          <p className="text-xs text-primary font-normal">
+          <p className="text-xs text-[var(--lp-ice)] font-normal">
             Generated password copied to clipboard.
           </p>
         )}
 
         {/* Password security condition checklist */}
         {password.length > 0 && (
-          <div className="p-3 rounded-lg bg-neutral-50 dark:bg-card border border-neutral-200 dark:border-border space-y-1.5 font-normal">
-            <p className="text-xs font-normal text-muted-foreground mb-1">
+          <div className="p-3 rounded-lg bg-[var(--lp-surface)] border border-[var(--lp-border)] space-y-1.5 font-normal">
+            <p className="text-xs font-normal text-[var(--lp-text-muted)] mb-1">
               Password requirements:
             </p>
             <div className="grid grid-cols-2 gap-1 text-xs">
               <div className="flex items-center gap-1.5">
                 {criteria.minLength ? (
-                  <Check className="size-3 text-emerald-600 shrink-0" />
+                  <Check className="size-3 text-[#62c073] shrink-0" />
                 ) : (
-                  <Circle className="size-3 text-muted-foreground shrink-0" />
+                  <Circle className="size-3 text-[var(--lp-text-muted)] shrink-0" />
                 )}
-                <span className={criteria.minLength ? "text-foreground font-normal" : "text-muted-foreground font-normal"}>
+                <span className={criteria.minLength ? "text-[var(--lp-text-heading)] font-normal" : "text-[var(--lp-text-muted)] font-normal"}>
                   8+ characters
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
                 {criteria.hasUppercase ? (
-                  <Check className="size-3 text-emerald-600 shrink-0" />
+                  <Check className="size-3 text-[#62c073] shrink-0" />
                 ) : (
-                  <Circle className="size-3 text-muted-foreground shrink-0" />
+                  <Circle className="size-3 text-[var(--lp-text-muted)] shrink-0" />
                 )}
-                <span className={criteria.hasUppercase ? "text-foreground font-normal" : "text-muted-foreground font-normal"}>
+                <span className={criteria.hasUppercase ? "text-[var(--lp-text-heading)] font-normal" : "text-[var(--lp-text-muted)] font-normal"}>
                   1 uppercase letter
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
                 {criteria.hasNumber ? (
-                  <Check className="size-3 text-emerald-600 shrink-0" />
+                  <Check className="size-3 text-[#62c073] shrink-0" />
                 ) : (
-                  <Circle className="size-3 text-muted-foreground shrink-0" />
+                  <Circle className="size-3 text-[var(--lp-text-muted)] shrink-0" />
                 )}
-                <span className={criteria.hasNumber ? "text-foreground font-normal" : "text-muted-foreground font-normal"}>
+                <span className={criteria.hasNumber ? "text-[var(--lp-text-heading)] font-normal" : "text-[var(--lp-text-muted)] font-normal"}>
                   1 number
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
                 {criteria.hasSpecial ? (
-                  <Check className="size-3 text-emerald-600 shrink-0" />
+                  <Check className="size-3 text-[#62c073] shrink-0" />
                 ) : (
-                  <Circle className="size-3 text-muted-foreground shrink-0" />
+                  <Circle className="size-3 text-[var(--lp-text-muted)] shrink-0" />
                 )}
-                <span className={criteria.hasSpecial ? "text-foreground font-normal" : "text-muted-foreground font-normal"}>
+                <span className={criteria.hasSpecial ? "text-[var(--lp-text-heading)] font-normal" : "text-[var(--lp-text-muted)] font-normal"}>
                   1 special symbol
                 </span>
               </div>
@@ -346,7 +346,7 @@ function SignUpForm() {
             ref={errorRef}
             tabIndex={-1}
             role="alert"
-            className="p-3 rounded-lg bg-status-danger-bg text-status-danger-fg text-sm border border-destructive/20 outline-none font-normal"
+            className="p-3 rounded-lg bg-[#ff6369]/10 text-[#ff8589] text-sm border border-[#ff6369]/30 outline-none font-normal"
           >
             {error}
           </div>
@@ -356,7 +356,7 @@ function SignUpForm() {
         <Button
           type="submit"
           disabled={!canSubmit}
-          className="w-full h-11 rounded-lg bg-neutral-950 text-white hover:bg-neutral-900 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200 transition-colors font-normal text-sm flex items-center justify-center gap-2"
+          className="w-full h-11 rounded-lg bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] transition-colors font-normal text-sm flex items-center justify-center gap-2"
         >
           {isPending ? (
             <>

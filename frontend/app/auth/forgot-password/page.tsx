@@ -91,7 +91,7 @@ export default function ForgotPasswordPage() {
       <form onSubmit={handleSubmit} className="space-y-4 text-left font-normal">
         {/* Email input field */}
         <div className="space-y-1.5">
-          <Label htmlFor="email" className="text-sm font-normal text-foreground">
+          <Label htmlFor="email" className="text-sm font-normal text-[var(--lp-text-heading)]">
             Email address
           </Label>
           <Input
@@ -103,7 +103,7 @@ export default function ForgotPasswordPage() {
             placeholder="name@company.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="h-11 rounded-lg border border-neutral-200 dark:border-border bg-white dark:bg-card px-3.5 text-sm text-foreground font-normal placeholder:text-muted-foreground focus-visible:border-neutral-900 focus-visible:ring-1 focus-visible:ring-neutral-900/20 outline-none"
+            className="h-11 rounded-lg border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
           />
         </div>
 
@@ -113,7 +113,7 @@ export default function ForgotPasswordPage() {
             ref={errorRef}
             tabIndex={-1}
             role="alert"
-            className="p-3 rounded-lg bg-status-danger-bg text-status-danger-fg text-sm border border-destructive/20 outline-none font-normal"
+            className="p-3 rounded-lg bg-[#ff6369]/10 text-[#ff8589] text-sm border border-[#ff6369]/30 outline-none font-normal"
           >
             {error}
           </div>
@@ -123,7 +123,7 @@ export default function ForgotPasswordPage() {
         <Button
           type="submit"
           disabled={isPending || !email.trim()}
-          className="w-full h-11 rounded-lg bg-neutral-950 text-white hover:bg-neutral-900 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200 transition-colors font-normal text-sm flex items-center justify-center gap-2"
+          className="w-full h-11 rounded-lg bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] transition-colors font-normal text-sm flex items-center justify-center gap-2"
         >
           {isPending ? (
             <>
