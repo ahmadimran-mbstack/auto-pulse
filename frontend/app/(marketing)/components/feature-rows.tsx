@@ -3,6 +3,11 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { useGSAP } from "@gsap/react";
+
+gsap.registerPlugin(ScrollTrigger, useGSAP);
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { GrainyPanel, type GrainyPalette } from "./grainy-panel";
@@ -15,9 +20,10 @@ import {
 } from "./mock-cards";
 import { LinkedInIcon, SlackIcon, GmailIcon } from "./platform-icons";
 
-// Feature data structure containing headline, eyebrow badge, panel configuration, and three sub-rows
+// Feature data structure containing step number, eyebrow badge, headline, panel configuration, and three sub-rows
 interface FeatureItem {
   id: string;
+  stepNumber: string;
   badge: string;
   headline: string;
   panelVariant: GrainyPalette;
@@ -31,6 +37,7 @@ interface FeatureItem {
 const features: FeatureItem[] = [
   {
     id: "topic-finder",
+    stepNumber: "01",
     badge: "Topic finder",
     headline: "Finds what is worth posting about",
     panelVariant: "navy-ice",
@@ -55,7 +62,8 @@ const features: FeatureItem[] = [
   },
   {
     id: "drafter",
-    badge: "Drafter",
+    stepNumber: "02 and 03",
+    badge: "Hook strategist and Writer",
     headline: "Writes the first draft for you",
     panelVariant: "ice-navy",
     panelAngle: 210,
@@ -79,6 +87,7 @@ const features: FeatureItem[] = [
   },
   {
     id: "checker",
+    stepNumber: "04",
     badge: "Checker",
     headline: "Checks every draft before you see it",
     panelVariant: "ink-glow",
@@ -102,6 +111,7 @@ const features: FeatureItem[] = [
   },
   {
     id: "approval",
+    stepNumber: "05",
     badge: "Approval and publishing",
     headline: "You approve, it publishes",
     panelVariant: "deep-blue",
@@ -315,7 +325,8 @@ function FeatureRowBlock({
     <ScrollReveal>
       {/* Feature row grid: panel first on mobile, alternating order on desktop */}
       <div
-        className={`grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-14 items-center py-8 first:pt-0 last:pb-0 lg:py-20 lg:first:pt-20 lg:last:pb-20 ${
+        id={`feature-${feature.id}`}
+        className={`scroll-mt-24 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-14 items-center py-8 first:pt-0 last:pb-0 lg:py-20 lg:first:pt-20 lg:last:pb-20 ${
           isReversed ? "lg:flex-row-reverse" : ""
         }`}
       >
@@ -356,12 +367,15 @@ function FeatureRowBlock({
             isReversed ? "lg:order-1" : "lg:order-2"
           }`}
         >
-          {/* Eyebrow badge with subtle border */}
+          {/* Eyebrow badge with mono step number matching the pipeline map */}
           <Badge
             variant="outline"
-            className="rounded-full text-xs font-normal border-[var(--lp-border)] text-[var(--lp-ice)] bg-[var(--lp-surface)] mb-4 px-3 py-1"
+            className="rounded-full text-xs font-normal border-[var(--lp-border)] text-[var(--lp-ice)] bg-[var(--lp-surface)] mb-4 px-3 py-1 inline-flex items-center gap-2"
           >
-            {feature.badge}
+            <span className="font-mono text-[11px] text-[var(--lp-text-muted)]">
+              {feature.stepNumber}
+            </span>
+            <span>{feature.badge}</span>
           </Badge>
 
           {/* Quiet headline scaled smoothly with clamp on mobile */}
@@ -429,13 +443,69 @@ function FeatureRowBlock({
   );
 }
 
-// Main FeatureRows section container
+// Main FeatureRows section container with an xl-only tracing beam rail in the left gutter.
 export function FeatureRows() {
+  const sectionRef = useRef<HTMLElement>(null);
+  const beamRef = useRef<HTMLDivElement>(null);
+
+  useGSAP(
+    () => {
+      const section = sectionRef.current;
+      const beam = beamRef.current;
+      if (!section || !beam) return;
+
+      const mm = gsap.matchMedia();
+      mm.add("(prefers-reduced-motion: no-preference) and (min-width: 1280px)", () => {
+        gsap.fromTo(
+          beam,
+          { scaleY: 0 },
+          {
+            scaleY: 1,
+            ease: "none",
+            scrollTrigger: {
+              trigger: section,
+              start: "top 60%",
+              end: "bottom 70%",
+              scrub: true,
+            },
+          }
+        );
+      });
+
+      return () => mm.revert();
+    },
+    { scope: sectionRef }
+  );
+
   return (
     /* Features section on forced-dark #08090C canvas */
-    <section id="features" className="bg-[var(--lp-bg)] py-16 lg:py-24 overflow-x-hidden">
+    <section
+      id="features"
+      ref={sectionRef}
+      className="bg-[var(--lp-bg)] py-16 lg:py-24 overflow-x-hidden scroll-mt-24"
+    >
       {/* Consistent 20px mobile container padding */}
-      <div className="max-w-6xl mx-auto px-5 lg:px-6 divide-y divide-[var(--lp-border-hairline)]">
+      <div className="relative max-w-6xl mx-auto px-5 lg:px-6 divide-y divide-[var(--lp-border-hairline)]">
+        {/* Thin Tracing Beam rail in the left gutter at xl and up without shifting content */}
+        <div
+          aria-hidden="true"
+          className="hidden xl:flex flex-col justify-between items-center absolute -left-8 top-24 bottom-24 w-4 pointer-events-none"
+        >
+          <div className="absolute inset-y-2 left-1/2 -translate-x-1/2 w-px bg-[var(--lp-border-hairline)]" />
+          <div
+            ref={beamRef}
+            className="absolute inset-y-2 left-1/2 -translate-x-1/2 w-px origin-top bg-[var(--lp-ice)]"
+          />
+          {features.map((f) => (
+            <span
+              key={f.id}
+              className="relative z-10 flex h-5 w-5 items-center justify-center rounded-full border border-[var(--lp-border)] bg-[var(--lp-surface)] font-mono text-[9px] text-[var(--lp-ice)]"
+            >
+              {f.id === "drafter" ? "2·3" : f.stepNumber}
+            </span>
+          ))}
+        </div>
+
         {features.map((feature, index) => (
           <FeatureRowBlock
             key={feature.id}

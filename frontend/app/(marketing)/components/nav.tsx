@@ -12,7 +12,7 @@ export function Nav() {
     },
     {
       name: "How it works",
-      link: "#how-it-works",
+      link: "#pipeline",
     },
     {
       name: "FAQ",
