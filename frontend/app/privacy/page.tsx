@@ -147,14 +147,14 @@ export default function PrivacyPage() {
           We share data only with the service providers required to host, build, and deliver {PRODUCT_NAME}:
         </p>
 
-        {/* Table summarizing third-party services and data exchanged */}
-        <div className="rounded-lg border border-border overflow-hidden">
-          <Table>
-            <TableHeader>
+        {/* Table summarizing third-party services and data exchanged with visible dark borders */}
+        <div className="rounded-lg border border-[var(--lp-border)] bg-[var(--lp-surface)] overflow-hidden">
+          <Table className="[&_tr]:border-[var(--lp-border)]">
+            <TableHeader className="bg-[var(--lp-surface-raised)]">
               <TableRow>
-                <TableHead className="w-1/4 text-foreground font-medium">Service</TableHead>
-                <TableHead className="w-1/3 text-foreground font-medium">Purpose</TableHead>
-                <TableHead className="text-foreground font-medium">Data received</TableHead>
+                <TableHead className="w-1/4 text-[var(--lp-text-heading)] font-medium">Service</TableHead>
+                <TableHead className="w-1/3 text-[var(--lp-text-heading)] font-medium">Purpose</TableHead>
+                <TableHead className="text-[var(--lp-text-heading)] font-medium">Data received</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

@@ -54,20 +54,21 @@ export function LegalShell({ title, sections, children }: LegalShellProps) {
   }, [sections]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-background text-foreground antialiased">
+    /* Dark-only legal document wrapper with #08090C background and #C9CFD9 reading text */
+    <div className="min-h-screen flex flex-col bg-[var(--lp-bg)] text-[var(--lp-text-body)] antialiased">
       {/* Top bar with logo on the left and sign-in link on the right */}
-      <header className="sticky top-0 z-40 w-full border-b border-border/80 bg-background/90 backdrop-blur-md">
+      <header className="sticky top-0 z-40 w-full border-b border-[var(--lp-border-hairline)] bg-[var(--lp-bg)]/90 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Logo size={34} href="/" />
-            <span className="font-normal text-base tracking-tight text-foreground">
+            <span className="font-normal text-base tracking-tight text-[var(--lp-text-heading)]">
               {LEGAL_CONFIG.PRODUCT_NAME}
             </span>
           </div>
 
           <Link
             href="/auth/sign-in"
-            className="text-sm font-normal text-muted-foreground hover:text-foreground transition-colors"
+            className="text-sm font-normal text-[var(--lp-ice)] underline underline-offset-4 hover:text-[var(--lp-text-heading)] transition-colors"
           >
             Sign in
           </Link>
@@ -77,28 +78,28 @@ export function LegalShell({ title, sections, children }: LegalShellProps) {
       {/* Main page content area */}
       <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-10 sm:py-14">
         {/* Page header with title and effective date */}
-        <div className="mb-10 sm:mb-12 border-b border-border/70 pb-6 sm:pb-8">
-          <h1 className="text-3xl sm:text-[44px] font-normal tracking-[-0.035em] text-foreground leading-[1.1] mb-2">
+        <div className="mb-10 sm:mb-12 border-b border-[var(--lp-border-hairline)] pb-6 sm:pb-8">
+          <h1 className="text-3xl sm:text-[44px] font-normal tracking-[-0.035em] text-[var(--lp-text-heading)] leading-[1.1] mb-2">
             {title}
           </h1>
-          <p className="text-sm text-muted-foreground font-normal">
+          <p className="text-sm text-[var(--lp-text-muted)] font-normal">
             Last updated: {LEGAL_CONFIG.LAST_UPDATED}
           </p>
         </div>
 
         {/* Mobile collapsible table of contents (native details element) */}
-        <details className="lg:hidden mb-8 rounded-lg border border-border bg-card/60 p-4 text-sm group">
-          <summary className="font-medium cursor-pointer text-foreground flex items-center justify-between select-none">
+        <details className="lg:hidden mb-8 rounded-lg border border-[var(--lp-border)] bg-[var(--lp-surface)] p-4 text-sm group">
+          <summary className="font-medium cursor-pointer text-[var(--lp-text-heading)] flex items-center justify-between select-none">
             <span>Table of contents</span>
-            <span className="text-xs text-muted-foreground group-open:hidden">Tap to expand</span>
-            <span className="text-xs text-muted-foreground hidden group-open:inline">Tap to collapse</span>
+            <span className="text-xs text-[var(--lp-text-muted)] group-open:hidden">Tap to expand</span>
+            <span className="text-xs text-[var(--lp-text-muted)] hidden group-open:inline">Tap to collapse</span>
           </summary>
-          <nav className="mt-3 pt-3 border-t border-border flex flex-col space-y-2">
+          <nav className="mt-3 pt-3 border-t border-[var(--lp-border-hairline)] flex flex-col space-y-2">
             {sections.map((section) => (
               <a
                 key={section.id}
                 href={`#${section.id}`}
-                className="text-muted-foreground hover:text-foreground py-1 transition-colors text-sm"
+                className="text-[var(--lp-ice)] underline underline-offset-4 hover:text-[var(--lp-text-heading)] py-1 transition-colors text-sm"
               >
                 {section.title}
               </a>
@@ -110,10 +111,10 @@ export function LegalShell({ title, sections, children }: LegalShellProps) {
         <div className="flex flex-col lg:flex-row gap-12 xl:gap-16 items-start">
           {/* Desktop sticky sidebar with table of contents */}
           <aside className="hidden lg:block w-64 shrink-0 sticky top-24 self-start max-h-[calc(100vh-8rem)] overflow-y-auto pr-4">
-            <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-4">
+            <div className="text-xs font-medium uppercase tracking-wider text-[var(--lp-text-muted)] mb-4">
               Contents
             </div>
-            <nav className="space-y-1 text-sm border-l border-border/70">
+            <nav className="space-y-1 text-sm border-l border-[var(--lp-border-hairline)]">
               {sections.map((section) => {
                 const isActive = activeId === section.id;
                 return (
@@ -121,10 +122,10 @@ export function LegalShell({ title, sections, children }: LegalShellProps) {
                     key={section.id}
                     href={`#${section.id}`}
                     className={cn(
-                      "block py-1.5 pl-4 text-sm transition-colors border-l-2 -ml-px",
+                      "block py-1.5 pl-4 text-sm transition-colors border-l-2 -ml-px rounded-r-md",
                       isActive
-                        ? "border-foreground text-foreground font-medium"
-                        : "border-transparent text-muted-foreground hover:text-foreground"
+                        ? "border-[var(--lp-ice)] text-[var(--lp-ice)] bg-[var(--lp-surface)] font-medium"
+                        : "border-transparent text-[var(--lp-text-muted)] hover:text-[var(--lp-text-heading)]"
                     )}
                   >
                     {section.title}
@@ -134,26 +135,26 @@ export function LegalShell({ title, sections, children }: LegalShellProps) {
             </nav>
           </aside>
 
-          {/* Right column reading text container */}
-          <article className="max-w-[680px] w-full text-foreground/90 leading-[1.7] space-y-10 text-base font-normal">
+          {/* Right column reading text container in #C9CFD9 with comfortable line height */}
+          <article className="max-w-[680px] w-full text-[var(--lp-text-body)] leading-[1.75] space-y-10 text-base font-normal [&_h2]:text-[var(--lp-text-heading)] [&_p]:text-[var(--lp-text-body)] [&_li]:text-[var(--lp-text-body)] [&_strong]:text-[var(--lp-text-heading)] [&_a]:text-[var(--lp-ice)] [&_a]:underline [&_a]:underline-offset-4">
             {children}
           </article>
         </div>
       </main>
 
       {/* Public footer with legal cross-links and contact information */}
-      <footer className="border-t border-border/70 bg-card/40 mt-16 py-10">
-        <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
+      <footer className="border-t border-[var(--lp-border-hairline)] bg-[var(--lp-surface)] mt-16 py-10">
+        <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[var(--lp-text-muted)]">
           <div className="flex items-center gap-6">
-            <Link href="/privacy" className="hover:text-foreground transition-colors">
+            <Link href="/privacy" className="text-[var(--lp-ice)] underline underline-offset-4 hover:text-[var(--lp-text-heading)] transition-colors">
               Privacy Policy
             </Link>
-            <Link href="/terms" className="hover:text-foreground transition-colors">
+            <Link href="/terms" className="text-[var(--lp-ice)] underline underline-offset-4 hover:text-[var(--lp-text-heading)] transition-colors">
               Terms of Service
             </Link>
             <a
               href={`mailto:${LEGAL_CONFIG.CONTACT_EMAIL}`}
-              className="hover:text-foreground transition-colors"
+              className="text-[var(--lp-ice)] underline underline-offset-4 hover:text-[var(--lp-text-heading)] transition-colors"
             >
               Contact ({LEGAL_CONFIG.CONTACT_EMAIL})
             </a>
