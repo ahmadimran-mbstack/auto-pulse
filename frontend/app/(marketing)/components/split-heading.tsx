@@ -12,14 +12,14 @@ gsap.registerPlugin(ScrollTrigger, SplitText, useGSAP);
 interface SplitHeadingProps {
   children: string;
   className?: string;
-  as?: "h2" | "h3";
+  as?: "h2" | "p";
 }
 
 // Animates each wrapped line rising from its masked baseline once on scroll.
 export function SplitHeading({
   children,
   className = "",
-  as: Tag = "h2",
+  as: Tag = "p",
 }: SplitHeadingProps) {
   const headingRef = useRef<HTMLHeadingElement>(null);
 

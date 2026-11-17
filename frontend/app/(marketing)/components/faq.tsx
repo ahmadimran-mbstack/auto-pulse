@@ -123,9 +123,9 @@ export function Faq() {
         <ScrollReveal>
           {/* Section title */}
           <div className="mb-8 lg:mb-10 text-left">
-            <h2 className="landing-heading text-[clamp(1.75rem,7vw,2.5rem)] lg:text-5xl text-[var(--lp-text-heading)]">
+            <p className="landing-heading text-[clamp(1.75rem,7vw,2.5rem)] lg:text-5xl text-[var(--lp-text-heading)]">
               Frequently Asked Questions
-            </h2>
+            </p>
             <p className="mt-3 text-[15px] lg:text-lg text-[var(--lp-text-muted)] font-normal">
               Clear facts on how drafts are checked, delivered, and approved.
             </p>
