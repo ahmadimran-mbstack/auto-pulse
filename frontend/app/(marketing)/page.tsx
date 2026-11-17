@@ -3,7 +3,10 @@ import React from "react";
 import { Nav } from "./components/nav";
 import { Hero } from "./components/hero";
 import { ThreeFacts } from "./components/facts";
+import { PipelineMap } from "./components/pipeline-map";
 import { FeatureRows } from "./components/feature-rows";
+import { OneRealRun } from "./components/one-real-run";
+import { WhoItsFor } from "./components/who-its-for";
 import { GetStarted } from "./components/get-started";
 import { BentoGrid } from "./components/bento-grid";
 import { Faq } from "./components/faq";
@@ -25,8 +28,17 @@ export default function MarketingPage() {
         {/* 3. Three plain facts */}
         <ThreeFacts />
 
+        {/* 3B. The pipeline map */}
+        <PipelineMap />
+
         {/* 4. Feature rows with alternating mock cards and grainy gradient panels */}
         <FeatureRows />
+
+        {/* 4B. One real run (renders only when verified) */}
+        <OneRealRun />
+
+        {/* 4C. Who it's for */}
+        <WhoItsFor />
 
         {/* 5. Get started in three steps */}
         <GetStarted />
