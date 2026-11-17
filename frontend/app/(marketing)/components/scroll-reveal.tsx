@@ -23,20 +23,32 @@ const containerVariants = {
   }),
 };
 
-// Item variants: fade and move up 16px, 500ms duration, custom easing
+// Item variants: fade and move up 20px, 550ms duration, cubic-bezier(0.22, 1, 0.36, 1)
 export const scrollItemVariants = {
-  hidden: { opacity: 0, y: 16 },
+  hidden: { opacity: 0, y: 20 },
   visible: {
     opacity: 1,
     y: 0,
     transition: {
-      duration: 0.5,
+      duration: 0.55,
       ease: [0.22, 1, 0.36, 1] as const,
     },
   },
 };
 
-// ScrollReveal wraps elements with viewport-triggered entrance animation executed once
+// Reduced-motion variants: remove movement and keep only a short 200ms opacity fade
+const reducedContainerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      duration: 0.2,
+      ease: [0.22, 1, 0.36, 1] as const,
+    },
+  },
+};
+
+// ScrollReveal wraps elements with viewport-triggered entrance animation executed once at 80px into view
 export function ScrollReveal({
   children,
   className,
@@ -45,6 +57,7 @@ export function ScrollReveal({
 }: ScrollRevealProps) {
   const [reducedMotion, setReducedMotion] = useState(false);
 
+  // Listen for OS prefers-reduced-motion changes
   useEffect(() => {
     if (typeof window === "undefined") return;
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -54,8 +67,19 @@ export function ScrollReveal({
     return () => mq.removeEventListener("change", handler);
   }, []);
 
+  // Keep only a short opacity fade without movement when reduced motion is enabled
   if (reducedMotion) {
-    return <div className={className}>{children}</div>;
+    return (
+      <motion.div
+        variants={reducedContainerVariants}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, margin: "-80px" }}
+        className={className}
+      >
+        {children}
+      </motion.div>
+    );
   }
 
   return (
@@ -64,7 +88,7 @@ export function ScrollReveal({
       custom={{ delay, stagger }}
       initial="hidden"
       whileInView="visible"
-      viewport={{ once: true, margin: "-32px" }}
+      viewport={{ once: true, margin: "-80px" }}
       className={className}
     >
       {children}

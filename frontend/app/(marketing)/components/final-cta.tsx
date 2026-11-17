@@ -12,10 +12,9 @@ import { LinkedInIcon } from "./platform-icons";
 // This component renders the final conversion section with a white pill button on navy-deep background.
 export function FinalCta() {
   return (
-    /* Mark the final CTA as dark and use 64px mobile vertical spacing */
+    /* Final CTA on #001740 navy-deep canvas with 64px mobile vertical spacing */
     <section
-      data-nav-theme="dark"
-      className="relative overflow-hidden bg-navy-deep text-white py-16 lg:py-32 border-t border-border-dark"
+      className="relative overflow-hidden bg-[var(--lp-navy-deep)] text-[var(--lp-text-heading)] py-16 lg:py-32 border-t border-[var(--lp-border-hairline)]"
     >
       {/* Huge cropped faceted logo mark at 5 to 6 percent opacity (allowed in hero and final CTA only) */}
       <div
@@ -58,14 +57,14 @@ export function FinalCta() {
           </p>
 
           {/* Quiet supporting text at least 15px on mobile */}
-          <p className="mt-5 lg:mt-6 text-[15px] sm:text-lg lg:text-xl text-text-muted-dark max-w-2xl mx-auto font-normal leading-relaxed">
+          <p className="mt-5 lg:mt-6 text-[15px] sm:text-lg lg:text-xl text-[var(--lp-text-body)] max-w-2xl mx-auto font-normal leading-relaxed">
             Daily drafts prepared from your profile and current industry topics. You approve each one before it goes live.
           </p>
 
           {/* Full-width button on mobile, centered pill button on tablet and desktop */}
           <div className="mt-8 flex justify-center">
             <Link href="/auth/sign-up" className="w-full sm:w-auto">
-              <Button className="w-full sm:w-auto rounded-full bg-white text-ink hover:bg-neutral-100 px-8 h-12 min-h-[44px] text-[15px] lg:text-base font-normal">
+              <Button className="w-full sm:w-auto rounded-full bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] active:scale-[0.98] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] px-8 h-12 min-h-[44px] text-[15px] lg:text-base font-normal">
                 Get started
               </Button>
             </Link>

@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 export const CardSpotlight = ({
   children,
   radius = 350,
-  color = "rgba(26, 86, 184, 0.05)",
+  color = "rgba(191, 210, 238, 0.08)",
   className,
   ...props
 }: {
@@ -47,19 +47,21 @@ export const CardSpotlight = ({
   };
   const handleMouseLeave = () => setIsHovering(false);
   return (
+    /* Dark-surface bento card with 2px hover lift, brightened border, and cursor spotlight */
     <div
       data-slot="card"
       className={cn(
-        "group/spotlight rounded-2xl relative border border-border-light/80 bg-white text-ink overflow-hidden transition-all duration-300",
+        "touch-disable-hover group/spotlight rounded-2xl relative border border-[var(--lp-border)] hover:border-[var(--lp-border-hover)] bg-[var(--lp-surface)] text-[var(--lp-text-body)] overflow-hidden transition-all duration-[350ms] ease-[cubic-bezier(0.22,1,0.36,1)] lg:hover:-translate-y-0.5",
         className
       )}
+      style={{ boxShadow: "var(--lp-highlight-top)" }}
       onMouseMove={handleMouseMove}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       {...props}
     >
       <motion.div
-        className="pointer-events-none absolute z-0 -inset-px rounded-[inherit] opacity-0 transition duration-300 group-hover/spotlight:opacity-100"
+        className="touch-hide-hover pointer-events-none absolute z-0 -inset-px rounded-[inherit] opacity-0 transition duration-[350ms] group-hover/spotlight:opacity-100"
         style={{
           backgroundColor: color,
           maskImage: useMotionTemplate`
