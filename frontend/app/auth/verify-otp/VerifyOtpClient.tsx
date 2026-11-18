@@ -142,83 +142,85 @@ export function VerifyOtpClient({ email }: VerifyOtpClientProps) {
   };
 
   return (
-    <form onSubmit={handleVerifyOtp} className="space-y-4 text-left font-normal">
-      {/* Neutral notice for both new and existing accounts */}
-      <Alert className="border-[var(--lp-border)] bg-[var(--lp-surface)] text-[var(--lp-text-body)] font-normal">
-        <AlertDescription className="text-sm font-normal">
-          Check your email. If you already have an account,{" "}
-          <Link
-            href={`/auth/sign-in?email=${encodeURIComponent(email)}`}
-            className="text-[var(--lp-ice)] hover:underline"
-          >
-            sign in instead
-          </Link>
-          .
-        </AlertDescription>
-      </Alert>
-
-      {/* Success notification */}
-      {successMessage && (
-        <Alert className="border-[#46a758]/30 bg-[#46a758]/10 text-[#62c073] font-normal">
-          <CheckCircle2
-            className="size-4 text-[#62c073] shrink-0"
-            aria-hidden="true"
-          />
-          <AlertDescription className="text-sm font-normal text-[var(--lp-text-body)]">
-            {successMessage}
+    <form onSubmit={handleVerifyOtp} className="text-left font-normal">
+      <div className="flex flex-col gap-3">
+        {/* Neutral notice for both new and existing accounts */}
+        <Alert className="border-[var(--lp-border)] bg-[var(--lp-surface)] text-[var(--lp-text-body)] font-normal">
+          <AlertDescription className="text-sm leading-[1.4] font-normal">
+            Check your email. If you already have an account,{" "}
+            <Link
+              href={`/auth/sign-in?email=${encodeURIComponent(email)}`}
+              className="text-[var(--lp-ice)] hover:underline"
+            >
+              sign in instead
+            </Link>
+            .
           </AlertDescription>
         </Alert>
-      )}
 
-      {/* Code input field */}
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <Label
-            htmlFor="otp"
-            className="text-sm font-normal text-[var(--lp-text-heading)]"
-          >
-            Verification code
-          </Label>
-          <button
-            type="button"
-            onClick={handleResendOtp}
-            disabled={countdown > 0 || isPending || isResending}
-            className="text-xs text-[var(--lp-ice)] hover:text-[var(--lp-text-heading)] hover:underline font-normal disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
-          >
-            {countdown > 0 ? `Resend code in ${countdown}s` : "Resend code"}
-          </button>
+        {/* Success notification */}
+        {successMessage && (
+          <Alert className="border-[#46a758]/30 bg-[#46a758]/10 text-[#62c073] font-normal">
+            <CheckCircle2
+              className="size-4 text-[#62c073] shrink-0"
+              aria-hidden="true"
+            />
+            <AlertDescription className="text-sm leading-[1.4] font-normal text-[var(--lp-text-body)]">
+              {successMessage}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Code input field */}
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <Label
+              htmlFor="otp"
+              className="text-[13px] leading-[1.2] py-0 !font-normal text-[var(--lp-text-heading)]"
+            >
+              Verification code
+            </Label>
+            <button
+              type="button"
+              onClick={handleResendOtp}
+              disabled={countdown > 0 || isPending || isResending}
+              className="text-[13px] leading-[1.2] text-[var(--lp-ice)] hover:text-[var(--lp-text-heading)] hover:underline font-normal disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+            >
+              {countdown > 0 ? `Resend code in ${countdown}s` : "Resend code"}
+            </button>
+          </div>
+          <Input
+            id="otp"
+            name="otp"
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            placeholder="6-digit code"
+            value={otp}
+            onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+            className="h-10 rounded-[8px] border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 text-[var(--lp-text-heading)] font-mono text-center tracking-widest text-sm font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
+          />
         </div>
-        <Input
-          id="otp"
-          name="otp"
-          type="text"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          maxLength={6}
-          placeholder="6-digit code"
-          value={otp}
-          onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-          className="h-11 rounded-lg border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 text-[var(--lp-text-heading)] font-mono text-center tracking-widest text-lg font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
-        />
       </div>
 
-      {/* Inline error notice */}
+      {/* Inline error notice: 12px above, 8px 12px padding */}
       {error && (
         <div
           ref={errorRef}
           tabIndex={-1}
           role="alert"
-          className="p-3 rounded-lg bg-[#ff6369]/10 text-[#ff8589] text-sm border border-[#ff6369]/30 outline-none font-normal"
+          className="mt-3 px-3 py-2 rounded-[8px] bg-[#ff6369]/10 text-[#ff8589] text-sm border border-[#ff6369]/30 outline-none font-normal"
         >
           {error}
         </div>
       )}
 
-      {/* Verification submission button */}
+      {/* Verification submission button: 16px below last field */}
       <Button
         type="submit"
         disabled={isPending || otp.trim().length < 6}
-        className="w-full h-11 rounded-lg bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] transition-colors font-normal text-sm flex items-center justify-center gap-2"
+        className="mt-4 w-full h-10 rounded-[8px] bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] transition-colors !font-normal text-sm flex items-center justify-center gap-2"
       >
         {isPending ? (
           <>
@@ -231,7 +233,7 @@ export function VerifyOtpClient({ email }: VerifyOtpClientProps) {
       </Button>
 
       {/* Link back to sign up to use a different email */}
-      <div className="text-center pt-2">
+      <div className="text-center mt-3">
         <Link
           href="/auth/sign-up"
           className="text-xs text-muted-foreground hover:text-foreground underline font-normal"

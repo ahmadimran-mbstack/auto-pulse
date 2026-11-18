@@ -129,10 +129,10 @@ function SignUpForm() {
   };
 
   return (
-    <div className="w-full space-y-4 font-normal">
+    <div className="w-full font-normal">
       {/* Existing account conflict alert */}
       {existingAccountEmail && (
-        <Alert className="mb-4 border-signal-line bg-signal-soft text-foreground text-left font-normal">
+        <Alert className="mb-3 border-signal-line bg-signal-soft text-foreground text-left font-normal">
           <AlertCircle className="size-4 text-primary shrink-0" aria-hidden="true" />
           <AlertTitle className="font-normal">Account already exists</AlertTitle>
           <AlertDescription className="text-caption mt-1 font-normal">
@@ -156,7 +156,7 @@ function SignUpForm() {
 
       {/* URL parameter error */}
       {urlError && (
-        <Alert variant="destructive" className="mb-4 text-left font-normal">
+        <Alert variant="destructive" className="mb-3 text-left font-normal">
           <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
           <AlertDescription className="text-meta font-normal">
             Authentication error ({urlError}). Please register with your email address below.
@@ -169,8 +169,8 @@ function SignUpForm() {
         <GoogleSignInButton text="Sign up with Google" />
       </div>
 
-      {/* Visual divider using shadcn Separator */}
-      <div className="relative py-2 flex items-center justify-center">
+      {/* OR divider with 14px above and below */}
+      <div className="relative my-3.5 flex items-center justify-center">
         <div className="absolute inset-0 flex items-center">
           <Separator className="w-full bg-[var(--lp-border-hairline)]" />
         </div>
@@ -179,69 +179,70 @@ function SignUpForm() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4 text-left">
-        {/* Full Name input */}
-        <div className="space-y-1.5">
-          <Label htmlFor="name" className="text-sm font-normal text-[var(--lp-text-heading)]">
-            Full name
-          </Label>
-          <Input
-            id="name"
-            name="name"
-            type="text"
-            required
-            autoComplete="name"
-            placeholder="Jane Doe"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="h-11 rounded-lg border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
-          />
-        </div>
-
-        {/* Email input */}
-        <div className="space-y-1.5">
-          <Label htmlFor="email" className="text-sm font-normal text-[var(--lp-text-heading)]">
-            Email
-          </Label>
-          <Input
-            id="email"
-            name="email"
-            type="email"
-            required
-            autoComplete="email"
-            placeholder="name@company.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="h-11 rounded-lg border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
-          />
-        </div>
-
-        {/* Password input with generator helper and eye toggle */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="password" className="text-sm font-normal text-[var(--lp-text-heading)]">
-              Password
+      <form onSubmit={handleSubmit} className="text-left">
+        <div className="flex flex-col gap-3">
+          {/* Full Name input */}
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="name" className="text-[13px] leading-[1.2] py-0 !font-normal text-[var(--lp-text-heading)]">
+              Full name
             </Label>
-            <button
-              type="button"
-              onClick={handleGeneratePassword}
-              className="text-xs text-[var(--lp-ice)] hover:text-[var(--lp-text-heading)] hover:underline font-normal cursor-pointer"
-            >
-              Generate strong
-            </button>
-          </div>
-          <div className="relative">
             <Input
-              id="password"
-              name="password"
-              type={showPassword ? "text" : "password"}
+              id="name"
+              name="name"
+              type="text"
               required
-              autoComplete="new-password"
-              placeholder="Create a strong password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="h-11 rounded-lg border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 pr-10 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
+              autoComplete="name"
+              placeholder="Jane Doe"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="h-10 rounded-[8px] border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
             />
+          </div>
+
+          {/* Email input */}
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="email" className="text-[13px] leading-[1.2] py-0 !font-normal text-[var(--lp-text-heading)]">
+              Email
+            </Label>
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              required
+              autoComplete="email"
+              placeholder="name@company.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="h-10 rounded-[8px] border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
+            />
+          </div>
+
+          {/* Password input with generator helper and eye toggle */}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password" className="text-[13px] leading-[1.2] py-0 !font-normal text-[var(--lp-text-heading)]">
+                Password
+              </Label>
+              <button
+                type="button"
+                onClick={handleGeneratePassword}
+                className="text-[13px] leading-[1.2] text-[var(--lp-ice)] hover:text-[var(--lp-text-heading)] hover:underline font-normal cursor-pointer"
+              >
+                Generate strong
+              </button>
+            </div>
+            <div className="relative">
+              <Input
+                id="password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                required
+                autoComplete="new-password"
+                placeholder="Create a strong password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="h-10 rounded-[8px] border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 pr-10 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
+              />
             <button
               type="button"
               onClick={() => setShowPassword((prev) => !prev)}
@@ -255,19 +256,20 @@ function SignUpForm() {
               )}
             </button>
           </div>
+          </div>
         </div>
 
         {/* Notice after generating and copying password */}
         {copiedNotice && (
-          <p className="text-xs text-[var(--lp-ice)] font-normal">
+          <p className="mt-1 text-xs leading-[1.3] text-[var(--lp-ice)] font-normal">
             Generated password copied to clipboard.
           </p>
         )}
 
         {/* Password security condition checklist */}
         {password.length > 0 && (
-          <div className="p-3 rounded-lg bg-[var(--lp-surface)] border border-[var(--lp-border)] space-y-1.5 font-normal">
-            <p className="text-xs font-normal text-[var(--lp-text-muted)] mb-1">
+          <div className="mt-1 p-2.5 rounded-[8px] bg-[var(--lp-surface)] border border-[var(--lp-border)] space-y-1 font-normal">
+            <p className="text-xs leading-[1.3] font-normal text-[var(--lp-text-muted)]">
               Password requirements:
             </p>
             <div className="grid grid-cols-2 gap-1 text-xs">
@@ -315,23 +317,23 @@ function SignUpForm() {
           </div>
         )}
 
-        {/* Error notification display */}
+        {/* Error notification display: 12px above, 8px 12px padding */}
         {error && (
           <div
             ref={errorRef}
             tabIndex={-1}
             role="alert"
-            className="p-3 rounded-lg bg-[#ff6369]/10 text-[#ff8589] text-sm border border-[#ff6369]/30 outline-none font-normal"
+            className="mt-3 px-3 py-2 rounded-[8px] bg-[#ff6369]/10 text-[#ff8589] text-sm border border-[#ff6369]/30 outline-none font-normal"
           >
             {error}
           </div>
         )}
 
-        {/* Primary submission button */}
+        {/* Primary submission button: 16px below last field */}
         <Button
           type="submit"
           disabled={!canSubmit}
-          className="w-full h-11 rounded-lg bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] transition-colors font-normal text-sm flex items-center justify-center gap-2"
+          className="mt-4 w-full h-10 rounded-[8px] bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] transition-colors !font-normal text-sm flex items-center justify-center gap-2"
         >
           {isPending ? (
             <>

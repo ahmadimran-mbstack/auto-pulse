@@ -102,10 +102,10 @@ function SignInForm() {
   };
 
   return (
-    <div className="w-full space-y-4 font-normal">
+    <div className="w-full font-normal">
       {/* Account linking error notification */}
       {urlError === "account_not_linked" ? (
-        <Alert variant="destructive" className="mb-4 font-normal">
+        <Alert variant="destructive" className="mb-3 font-normal">
           <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
           <AlertTitle className="font-normal">Account already exists</AlertTitle>
           <AlertDescription className="text-caption leading-relaxed font-normal">
@@ -113,14 +113,14 @@ function SignInForm() {
           </AlertDescription>
         </Alert>
       ) : urlError === "access_denied" ? (
-        <Alert variant="destructive" className="mb-4 font-normal">
+        <Alert variant="destructive" className="mb-3 font-normal">
           <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
           <AlertDescription className="text-meta font-normal">
             Google sign in was cancelled or access was denied. Please try again.
           </AlertDescription>
         </Alert>
       ) : urlError ? (
-        <Alert variant="destructive" className="mb-4 font-normal">
+        <Alert variant="destructive" className="mb-3 font-normal">
           <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
           <AlertDescription className="text-meta font-normal">
             Authentication error ({urlError}). Please sign in with your email and password.
@@ -130,7 +130,7 @@ function SignInForm() {
 
       {/* Password reset success notification */}
       {urlMessage === "password_reset_success" && (
-        <Alert className="mb-4 border-signal-line bg-signal-soft text-foreground font-normal">
+        <Alert className="mb-3 border-signal-line bg-signal-soft text-foreground font-normal">
           <CheckCircle2 className="size-4 text-primary shrink-0" aria-hidden="true" />
           <AlertDescription className="text-meta font-normal">
             Your password has been successfully reset. Please sign in with your new password.
@@ -143,8 +143,8 @@ function SignInForm() {
         <GoogleSignInButton text="Continue with Google" />
       </div>
 
-      {/* Visual divider using shadcn Separator */}
-      <div className="relative py-2 flex items-center justify-center">
+      {/* OR divider with 14px above and below */}
+      <div className="relative my-3.5 flex items-center justify-center">
         <div className="absolute inset-0 flex items-center">
           <Separator className="w-full bg-[var(--lp-border-hairline)]" />
         </div>
@@ -154,82 +154,84 @@ function SignInForm() {
       </div>
 
       {/* Email and Password Form */}
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Email field */}
-        <div className="space-y-1.5 text-left">
-          <Label htmlFor="email" className="text-sm font-normal text-[var(--lp-text-heading)]">
-            Email
-          </Label>
-          <Input
-            id="email"
-            name="email"
-            type="email"
-            required
-            autoComplete="email"
-            placeholder="name@company.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="h-11 rounded-lg border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
-          />
-        </div>
-
-        {/* Password field with eye toggle and forgot password link */}
-        <div className="space-y-1.5 text-left">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="password" className="text-sm font-normal text-[var(--lp-text-heading)]">
-              Password
+      <form onSubmit={handleSubmit}>
+        <div className="flex flex-col gap-3">
+          {/* Email field */}
+          <div className="flex flex-col gap-1.5 text-left">
+            <Label htmlFor="email" className="text-[13px] leading-[1.2] py-0 !font-normal text-[var(--lp-text-heading)]">
+              Email
             </Label>
-            <Link
-              href="/auth/forgot-password"
-              className="text-sm text-[var(--lp-ice)] hover:text-[var(--lp-text-heading)] hover:underline font-normal"
-            >
-              Forgot password?
-            </Link>
-          </div>
-          <div className="relative">
             <Input
-              id="password"
-              name="password"
-              type={showPassword ? "text" : "password"}
+              id="email"
+              name="email"
+              type="email"
               required
-              autoComplete="current-password"
-              placeholder="Enter your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="h-11 rounded-lg border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 pr-10 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
+              autoComplete="email"
+              placeholder="name@company.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="h-10 rounded-[8px] border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
             />
-            <button
-              type="button"
-              onClick={() => setShowPassword((prev) => !prev)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--lp-text-muted)] hover:text-[var(--lp-text-heading)] cursor-pointer focus:outline-none transition-colors"
-              aria-label={showPassword ? "Hide password" : "Show password"}
-            >
-              {showPassword ? (
-                <EyeOff className="size-4 shrink-0" aria-hidden="true" />
-              ) : (
-                <Eye className="size-4 shrink-0" aria-hidden="true" />
-              )}
-            </button>
+          </div>
+
+          {/* Password field with eye toggle and forgot password link */}
+          <div className="flex flex-col gap-1.5 text-left">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password" className="text-[13px] leading-[1.2] py-0 !font-normal text-[var(--lp-text-heading)]">
+                Password
+              </Label>
+              <Link
+                href="/auth/forgot-password"
+                className="text-[13px] leading-[1.2] text-[var(--lp-ice)] hover:text-[var(--lp-text-heading)] hover:underline font-normal"
+              >
+                Forgot password?
+              </Link>
+            </div>
+            <div className="relative">
+              <Input
+                id="password"
+                name="password"
+                type={showPassword ? "text" : "password"}
+                required
+                autoComplete="current-password"
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="h-10 rounded-[8px] border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 pr-10 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--lp-text-muted)] hover:text-[var(--lp-text-heading)] cursor-pointer focus:outline-none transition-colors"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? (
+                  <EyeOff className="size-4 shrink-0" aria-hidden="true" />
+                ) : (
+                  <Eye className="size-4 shrink-0" aria-hidden="true" />
+                )}
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Inline error notice */}
+        {/* Inline error notice: 12px above, 8px 12px padding */}
         {error && (
           <div
             ref={errorRef}
             tabIndex={-1}
             role="alert"
-            className="p-3 rounded-lg bg-[#ff6369]/10 text-[#ff8589] text-sm border border-[#ff6369]/30 outline-none text-left font-normal"
+            className="mt-3 px-3 py-2 rounded-[8px] bg-[#ff6369]/10 text-[#ff8589] text-sm border border-[#ff6369]/30 outline-none text-left font-normal"
           >
             {error}
           </div>
         )}
 
-        {/* Primary submit button */}
+        {/* Primary submit button: 16px below last field */}
         <Button
           type="submit"
           disabled={isPending || !email.trim() || !password}
-          className="w-full h-11 rounded-lg bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] transition-colors font-normal text-sm flex items-center justify-center gap-2"
+          className="mt-4 w-full h-10 rounded-[8px] bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] transition-colors !font-normal text-sm flex items-center justify-center gap-2"
         >
           {isPending ? (
             <>
