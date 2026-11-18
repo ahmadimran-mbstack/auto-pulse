@@ -33,7 +33,6 @@ interface AuthLayoutProps {
 export default async function AuthLayout({ children }: AuthLayoutProps) {
   const cookieStore = await cookies();
   const isSignedOut = cookieStore.get("autopulse_signed_out")?.value === "true";
-  const isOtpPending = cookieStore.get("autopulse_otp_pending")?.value === "true";
 
   // If the user has explicitly signed out, allow auth screens to render unconditionally in dark mode
   if (isSignedOut) {
@@ -52,9 +51,9 @@ export default async function AuthLayout({ children }: AuthLayoutProps) {
     // Gracefully handle session retrieval errors in layout (e.g. unauthenticated or cookie restrictions)
   }
 
-  // If user is already authenticated and email is verified, and not awaiting OTP verification,
+  // If user is already authenticated and email is verified,
   // redirect them to dashboard (which automatically routes to /onboarding if unfinished)
-  if (session?.user && session.user.emailVerified && !isOtpPending) {
+  if (session?.user && session.user.emailVerified) {
     redirect("/app");
   }
 

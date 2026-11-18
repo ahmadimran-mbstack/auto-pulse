@@ -44,17 +44,6 @@ export async function signUpWithEmail(
     };
   }
 
-  // Mark OTP as pending until user verifies their code
-  const cookieStore = await cookies();
-  cookieStore.set("autopulse_otp_pending", "true", {
-    path: "/",
-    maxAge: 600,
-    sameSite: "lax",
-    httpOnly: false,
-  });
-
-  // Automatically redirect to OTP verification page
-  redirect(
-    `/auth/verify-otp?email=${encodeURIComponent(email)}&type=email-verification`
-  );
+  // Redirect to the OTP verification page
+  redirect("/auth/verify-otp");
 }

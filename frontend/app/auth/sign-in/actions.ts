@@ -28,20 +28,15 @@ export async function signInWithEmail(
   });
 
   if (error) {
+    const errCode = (error as { code?: string }).code;
+    if (errCode === "EMAIL_NOT_VERIFIED") {
+      redirect("/auth/verify-otp");
+    }
     return {
-      error: error.message || "Failed to sign in. Please verify your credentials.",
+      error: "Incorrect email or password.",
     };
   }
 
-  // Mark OTP as pending until user verifies their code
-  const cookieStore = await cookies();
-  cookieStore.set("autopulse_otp_pending", "true", {
-    path: "/",
-    maxAge: 600,
-    sameSite: "lax",
-    httpOnly: false,
-  });
-
-  // Automatically redirect to OTP verification page
-  redirect(`/auth/verify-otp?email=${encodeURIComponent(email)}&type=sign-in`);
+  // Verified users with the right password go straight to the app
+  redirect("/app");
 }

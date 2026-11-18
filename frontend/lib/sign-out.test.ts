@@ -63,7 +63,7 @@ describe("Sign Out & Cookie Invalidation", () => {
       expect(AUTH_COOKIE_NAMES).toContain("better-auth.session_token");
       expect(AUTH_COOKIE_NAMES).toContain("better-auth.local.session_data");
       expect(AUTH_COOKIE_NAMES).toContain("autopulse_token");
-      expect(AUTH_COOKIE_NAMES).toContain("autopulse_otp_pending");
+      expect(AUTH_COOKIE_NAMES).toContain("autopulse_verify_email");
     });
   });
 

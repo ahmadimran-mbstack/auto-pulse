@@ -25,7 +25,7 @@ export const AUTH_COOKIE_NAMES = [
   "better-auth.session_challange",
   "better-auth.csrf_token",
   "autopulse_token",
-  "autopulse_otp_pending",
+  "autopulse_verify_email",
   "autopulse_onboarding_completed",
   "session_token",
   "session",

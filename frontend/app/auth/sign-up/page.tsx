@@ -18,15 +18,6 @@ import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, Check, Circle, Eye, EyeOff, Loader2 } from "lucide-react";
 
-interface OtpClient {
-  emailOtp: {
-    sendVerificationOtp: (options: {
-      email: string;
-      type: "sign-in" | "email-verification" | "forget-password";
-    }) => Promise<{ data?: unknown; error?: { message?: string } }>;
-  };
-}
-
 // Inner registration form with interactive password criteria and validation
 function SignUpForm() {
   const router = useRouter();
@@ -125,24 +116,8 @@ function SignUpForm() {
       // Clear any prior signed-out sentinel flag
       document.cookie = "autopulse_signed_out=; path=/; max-age=0; SameSite=Lax";
 
-      // 2. Mark OTP as pending in cookie
-      document.cookie = "autopulse_otp_pending=true; path=/; max-age=600; SameSite=Lax";
-
-      // 3. Send email verification OTP
-      try {
-        const client = authClient as unknown as OtpClient;
-        await client.emailOtp.sendVerificationOtp({
-          email: cleanEmail,
-          type: "email-verification",
-        });
-      } catch (otpErr) {
-        console.error("Failed to trigger verification OTP:", otpErr);
-      }
-
-      // 4. Automatically navigate to OTP verification screen
-      router.push(
-        `/auth/verify-otp?email=${encodeURIComponent(cleanEmail)}&type=email-verification`
-      );
+      // Neon Auth sends the single verification email on signUp.email; navigate to verify page
+      router.replace("/auth/verify-otp");
     } catch (err: unknown) {
       const message =
         err instanceof Error

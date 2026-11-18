@@ -3,7 +3,6 @@
 import { Suspense, useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { authClient } from "@/lib/auth/client";
 import { AuthShell } from "../components/AuthShell";
 import { GoogleSignInButton } from "../components/GoogleSignInButton";
 import { Button } from "@/components/ui/button";
@@ -12,15 +11,6 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, CheckCircle2, Eye, EyeOff, Loader2 } from "lucide-react";
-
-interface OtpClient {
-  emailOtp: {
-    sendVerificationOtp: (options: {
-      email: string;
-      type: "sign-in" | "email-verification" | "forget-password";
-    }) => Promise<{ data?: unknown; error?: { message?: string } }>;
-  };
-}
 
 // Inner form handling user authentication inputs and submissions
 function SignInForm() {
@@ -58,16 +48,44 @@ function SignInForm() {
     setIsPending(true);
 
     try {
-      // 1. Authenticate user credentials with Neon Auth
-      const result = await authClient.signIn.email({
-        email: cleanEmail,
-        password,
+      // 1. Authenticate user credentials directly through the Next.js auth proxy
+      const res = await fetch("/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email: cleanEmail, password }),
       });
 
-      if (result.error) {
-        setError(
-          result.error.message || "Failed to sign in. Please verify your email and password."
-        );
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        const isUnverified =
+          res.status === 403 &&
+          (data?.code === "EMAIL_NOT_VERIFIED" ||
+            String(data?.message || "").toLowerCase().includes("email not verified"));
+
+        // Open the verify page only when the account exists, password is right, and email is unverified
+        if (isUnverified) {
+          document.cookie = "autopulse_signed_out=; path=/; max-age=0; SameSite=Lax";
+          try {
+            await fetch("/api/auth/email-otp/send-verification-otp", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({
+                email: cleanEmail,
+                type: "email-verification",
+              }),
+            });
+          } catch {
+            // Rate limit or send failure is handled on the verify page
+          }
+          router.replace("/auth/verify-otp");
+          return;
+        }
+
+        // Wrong password and unknown email show the exact same message and send nothing
+        setError("Incorrect email or password.");
         setIsPending(false);
         return;
       }
@@ -75,30 +93,10 @@ function SignInForm() {
       // Clear any prior signed-out sentinel flag upon authenticating
       document.cookie = "autopulse_signed_out=; path=/; max-age=0; SameSite=Lax";
 
-      // 2. Mark OTP verification as required before dashboard access
-      document.cookie = "autopulse_otp_pending=true; path=/; max-age=600; SameSite=Lax";
-
-      // 3. Dispatch sign-in verification OTP
-      try {
-        const client = authClient as unknown as OtpClient;
-        await client.emailOtp.sendVerificationOtp({
-          email: cleanEmail,
-          type: "sign-in",
-        });
-      } catch (otpErr) {
-        console.error("Failed to trigger sign-in OTP:", otpErr);
-      }
-
-      // 4. Automatically navigate to OTP verification screen
-      router.push(
-        `/auth/verify-otp?email=${encodeURIComponent(cleanEmail)}&type=sign-in`
-      );
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : "An unexpected error occurred during sign in. Please try again.";
-      setError(message);
+      // Verified users with the right password go straight to the app
+      router.replace("/app");
+    } catch {
+      setError("Incorrect email or password.");
       setIsPending(false);
     }
   };
