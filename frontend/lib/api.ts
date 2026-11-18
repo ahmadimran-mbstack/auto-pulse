@@ -223,9 +223,15 @@ export async function apiCall<T>(
   if (!response.ok) {
     const json = await response.json().catch(() => ({}));
     const errorObj = json?.error || {};
+    const detailMsg =
+      typeof json?.detail === "string"
+        ? json.detail
+        : typeof json?.detail?.message === "string"
+        ? json.detail.message
+        : undefined;
     throw new ApiClientError(response.status, {
-      code: errorObj.code || "api_error",
-      message: errorObj.message || "An unexpected error occurred.",
+      code: errorObj.code || json?.detail?.code || "api_error",
+      message: errorObj.message || detailMsg || "An unexpected error occurred.",
     });
   }
 

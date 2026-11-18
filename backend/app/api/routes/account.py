@@ -174,6 +174,8 @@ def delete_my_account(
                 text("DELETE FROM neon_auth.verification WHERE identifier LIKE :pat"),
                 {"pat": f"%{user.email.strip().lower()}%"},
             )
+        db.execute(text('DELETE FROM neon_auth.invitation WHERE "inviterId"::text = :uid'), {"uid": uid})
+        db.execute(text('DELETE FROM neon_auth.member WHERE "userId"::text = :uid'), {"uid": uid})
         db.execute(text('DELETE FROM neon_auth.session WHERE "userId"::text = :uid'), {"uid": uid})
         db.execute(text('DELETE FROM neon_auth.account WHERE "userId"::text = :uid'), {"uid": uid})
         db.execute(text('DELETE FROM neon_auth."user" WHERE id::text = :uid'), {"uid": uid})
