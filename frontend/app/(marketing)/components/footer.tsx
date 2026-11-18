@@ -90,7 +90,7 @@ export function Footer() {
 
         {/* Bottom copyright notice stacked and left-aligned on mobile */}
         <div className="pt-8 flex flex-col sm:flex-row items-start sm:items-center justify-between text-xs text-[var(--lp-text-muted)] gap-3 sm:gap-4">
-          <p>(c) 2026 MB Stack. All rights reserved.</p>
+          <p>(c) 2026 AutoPulse. A product by MB Stack. All rights reserved.</p>
           <p className="flex items-center gap-1.5">
             <LinkedInIcon className="w-3.5 h-3.5 shrink-0" />
             <span>LinkedIn is a trademark of LinkedIn Corporation.</span>
