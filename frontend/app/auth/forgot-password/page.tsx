@@ -88,42 +88,44 @@ export default function ForgotPasswordPage() {
         </p>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-4 text-left font-normal">
-        {/* Email input field */}
-        <div className="space-y-1.5">
-          <Label htmlFor="email" className="text-sm font-normal text-[var(--lp-text-heading)]">
-            Email address
-          </Label>
-          <Input
-            id="email"
-            name="email"
-            type="email"
-            required
-            autoComplete="email"
-            placeholder="name@company.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="h-11 rounded-lg border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
-          />
+      <form onSubmit={handleSubmit} className="text-left font-normal">
+        <div className="flex flex-col gap-3">
+          {/* Email input field */}
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="email" className="text-[13px] leading-[1.2] py-0 !font-normal text-[var(--lp-text-heading)]">
+              Email address
+            </Label>
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              required
+              autoComplete="email"
+              placeholder="name@company.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="h-10 rounded-[8px] border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
+            />
+          </div>
         </div>
 
-        {/* Inline error notice */}
+        {/* Inline error notice: 12px above, 8px 12px padding */}
         {error && (
           <div
             ref={errorRef}
             tabIndex={-1}
             role="alert"
-            className="p-3 rounded-lg bg-[#ff6369]/10 text-[#ff8589] text-sm border border-[#ff6369]/30 outline-none font-normal"
+            className="mt-3 px-3 py-2 rounded-[8px] bg-[#ff6369]/10 text-[#ff8589] text-sm border border-[#ff6369]/30 outline-none font-normal"
           >
             {error}
           </div>
         )}
 
-        {/* Primary submit action */}
+        {/* Primary submit action: 16px below last field */}
         <Button
           type="submit"
           disabled={isPending || !email.trim()}
-          className="w-full h-11 rounded-lg bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] transition-colors font-normal text-sm flex items-center justify-center gap-2"
+          className="mt-4 w-full h-10 rounded-[8px] bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] transition-colors !font-normal text-sm flex items-center justify-center gap-2"
         >
           {isPending ? (
             <>
