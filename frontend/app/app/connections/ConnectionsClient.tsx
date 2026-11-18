@@ -110,7 +110,7 @@ export function ConnectionsClient({ user }: ConnectionsClientProps) {
     } else if (slackParam === "denied") {
       toast.error("Slack connection was cancelled or denied.");
     } else if (slackParam) {
-      toast.error("Failed to connect to Slack. Please try again.");
+      toast.error(`Failed to connect to Slack (${slackParam}). Please try again.`);
     }
 
     if (connectedParam === "linkedin") {

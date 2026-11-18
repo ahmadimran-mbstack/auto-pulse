@@ -46,12 +46,13 @@ class SlackAuthRevokedError(SlackError):
 
 
 
-# Return the explicit SLACK_REDIRECT_URI without guessing or fallback
+# Return the explicit SLACK_REDIRECT_URI or canonical frontend callback URL
 def get_slack_redirect_uri() -> str:
     uri = (settings.SLACK_REDIRECT_URI or "").strip()
-    if not uri:
-        raise SlackOAuthError("missing_redirect_uri")
-    return uri
+    if uri:
+        return uri
+    base = settings.FRONTEND_URL.split(",")[0].strip().rstrip("/")
+    return f"{base}/api/integrations/slack/callback"
 
 
 def build_authorization_url(raw_state: str) -> str:
