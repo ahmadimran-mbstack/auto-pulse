@@ -118,7 +118,7 @@ def test_slack_callback_success_flow(client, db_test_schema, auth_headers_user_a
 
         assert callback_resp.status_code == 302
         location = callback_resp.headers["Location"]
-        assert "dashboard" in location
+        assert "/app/connections" in location
         assert "slack=connected" in location
         mock_exchange.assert_called_once_with("mock_code")
         mock_open_dm.assert_called_once_with(

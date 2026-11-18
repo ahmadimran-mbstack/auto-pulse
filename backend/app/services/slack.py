@@ -46,11 +46,12 @@ class SlackAuthRevokedError(SlackError):
 
 
 
+# Return the explicit SLACK_REDIRECT_URI without guessing or fallback
 def get_slack_redirect_uri() -> str:
-    """Returns the configured or default Slack OAuth redirect URI."""
-    if settings.SLACK_REDIRECT_URI:
-        return settings.SLACK_REDIRECT_URI
-    return f"{settings.APP_BASE_URL.rstrip('/')}/connections/slack/callback"
+    uri = (settings.SLACK_REDIRECT_URI or "").strip()
+    if not uri:
+        raise SlackOAuthError("missing_redirect_uri")
+    return uri
 
 
 def build_authorization_url(raw_state: str) -> str:
@@ -69,7 +70,7 @@ def exchange_code_for_token(code: str, redirect_uri: Optional[str] = None) -> Di
     Exchanges authorization code at oauth.v2.access.
     Never logs the token, code, or raw response body.
     """
-    effective_redirect_uri = redirect_uri or get_slack_redirect_uri()
+    effective_redirect_uri = get_slack_redirect_uri()
     payload = {
         "client_id": settings.SLACK_CLIENT_ID or "",
         "client_secret": settings.SLACK_CLIENT_SECRET or "",

@@ -179,12 +179,13 @@ export function useProfileQuery(userId: string) {
   });
 }
 
-// 6. Connections Query (Freshness: 30s)
+// 6. Connections Query (Freshness: 30s, refetches on window focus)
 export function useConnectionsQuery(userId: string) {
   return useQuery<SocialConnection[]>({
     queryKey: queryKeys.connections(userId),
     queryFn: () => getConnections(),
     staleTime: 30_000,
+    refetchOnWindowFocus: true,
     enabled: !!userId,
   });
 }
@@ -309,12 +310,38 @@ export function useRetryPublicationMutation(userId: string) {
   });
 }
 
+// Optimistically disconnect LinkedIn and roll back if the request fails
 export function useDisconnectLinkedInMutation(userId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => disconnectLinkedInConnection(),
-    onSuccess: () => {
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: queryKeys.connections(userId) });
+      await qc.cancelQueries({ queryKey: queryKeys.linkedinStatus(userId) });
+      const prevConnections = qc.getQueryData<SocialConnection[]>(queryKeys.connections(userId));
+      const prevLinkedin = qc.getQueryData<LinkedInStatusResponse>(queryKeys.linkedinStatus(userId));
+
+      qc.setQueryData<SocialConnection[]>(
+        queryKeys.connections(userId),
+        (old) => (old ? old.filter((c) => c.provider !== "linkedin") : [])
+      );
+      qc.setQueryData<LinkedInStatusResponse>(queryKeys.linkedinStatus(userId), (old) =>
+        old ? { ...old, connected: false, status: "disconnected" } : old
+      );
+
+      return { prevConnections, prevLinkedin };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prevConnections !== undefined) {
+        qc.setQueryData(queryKeys.connections(userId), ctx.prevConnections);
+      }
+      if (ctx?.prevLinkedin !== undefined) {
+        qc.setQueryData(queryKeys.linkedinStatus(userId), ctx.prevLinkedin);
+      }
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.connections(userId) });
+      qc.invalidateQueries({ queryKey: queryKeys.linkedinStatus(userId) });
       qc.invalidateQueries({ queryKey: queryKeys.dashboard(userId) });
     },
   });
@@ -335,7 +362,8 @@ export function useLinkedInStatusQuery(userId: string) {
   return useQuery<LinkedInStatusResponse>({
     queryKey: queryKeys.linkedinStatus(userId),
     queryFn: () => getLinkedInStatus(),
-    staleTime: 10_000,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
     enabled: !!userId,
   });
 }
@@ -427,16 +455,38 @@ export function useSlackStatusQuery(userId: string = "current") {
   return useQuery<SlackStatusResponse>({
     queryKey: queryKeys.slackStatus(userId),
     queryFn: () => getSlackStatus(),
-    staleTime: 10_000,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
   });
 }
 
-// Mutation to disconnect Slack integration
+// Optimistically disconnect Slack and roll back if the request fails
 export function useDisconnectSlackMutation(userId: string = "current") {
   const qc = useQueryClient();
-  return useMutation<SlackDisconnectResponse, Error, void>({
+  return useMutation<SlackDisconnectResponse, Error, void, { prevSlack?: SlackStatusResponse }>({
     mutationFn: () => disconnectSlack(),
-    onSuccess: () => {
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: queryKeys.slackStatus(userId) });
+      const prevSlack = qc.getQueryData<SlackStatusResponse>(queryKeys.slackStatus(userId));
+      qc.setQueryData<SlackStatusResponse>(queryKeys.slackStatus(userId), (old) =>
+        old
+          ? {
+              ...old,
+              connected: false,
+              status: "not_connected",
+              team_id: null,
+              team_name: null,
+            }
+          : old
+      );
+      return { prevSlack };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prevSlack !== undefined) {
+        qc.setQueryData(queryKeys.slackStatus(userId), ctx.prevSlack);
+      }
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: queryKeys.slackStatus(userId) });
       qc.invalidateQueries({ queryKey: queryKeys.profile(userId) });
       qc.invalidateQueries({ queryKey: queryKeys.dashboard(userId) });

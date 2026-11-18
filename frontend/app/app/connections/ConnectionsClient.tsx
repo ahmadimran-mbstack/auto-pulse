@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   CheckIcon,
@@ -29,6 +30,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  queryKeys,
   useConnectionsQuery,
   useDisconnectLinkedInMutation,
   useSlackStatusQuery,
@@ -56,8 +58,12 @@ interface ConnectionsClientProps {
 }
 
 export function ConnectionsClient({ user }: ConnectionsClientProps) {
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
+  const qc = useQueryClient();
   const slackParam = searchParams.get("slack");
+  const connectedParam = searchParams.get("connected");
 
   // Query state
   const {
@@ -93,25 +99,33 @@ export function ConnectionsClient({ user }: ConnectionsClientProps) {
   const [showLinkedInDisconnectDialog, setShowLinkedInDisconnectDialog] = React.useState(false);
   const [showSlackDisconnectDialog, setShowSlackDisconnectDialog] = React.useState(false);
 
-  // Handle ?slack=connected | ?slack=denied | ?slack=error returned from Slack OAuth
+  // Handle OAuth callback query params, invalidate connection caches, and clean URL via Next router
   React.useEffect(() => {
-    if (!slackParam) return;
+    if (!slackParam && !connectedParam) return;
 
     if (slackParam === "connected") {
       toast.success("Slack workspace connected successfully!");
+      qc.invalidateQueries({ queryKey: queryKeys.slackStatus(user.id) });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard(user.id) });
     } else if (slackParam === "denied") {
       toast.error("Slack connection was cancelled or denied.");
-    } else if (slackParam === "error") {
+    } else if (slackParam) {
       toast.error("Failed to connect to Slack. Please try again.");
     }
 
-    // Clean up query param from URL without page reload
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      url.searchParams.delete("slack");
-      window.history.replaceState({}, "", url.pathname + (url.search ? url.search : ""));
+    if (connectedParam === "linkedin") {
+      toast.success("LinkedIn account connected successfully!");
+      qc.invalidateQueries({ queryKey: queryKeys.connections(user.id) });
+      qc.invalidateQueries({ queryKey: queryKeys.linkedinStatus(user.id) });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard(user.id) });
     }
-  }, [slackParam]);
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("slack");
+    params.delete("connected");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [slackParam, connectedParam, pathname, router, searchParams, qc, user.id]);
 
   // Loading skeleton
   if (isConnectionsLoading || isSlackLoading || isProfileLoading) {
@@ -199,9 +213,9 @@ export function ConnectionsClient({ user }: ConnectionsClientProps) {
 
   // Disconnect LinkedIn
   const handleConfirmLinkedInDisconnect = async () => {
+    setShowLinkedInDisconnectDialog(false);
     try {
       await disconnectLinkedInMutation.mutateAsync();
-      setShowLinkedInDisconnectDialog(false);
       toast.success("LinkedIn profile disconnected.");
     } catch (err) {
       toast.error(
@@ -212,9 +226,9 @@ export function ConnectionsClient({ user }: ConnectionsClientProps) {
 
   // Disconnect Slack
   const handleConfirmSlackDisconnect = async () => {
+    setShowSlackDisconnectDialog(false);
     try {
       await disconnectSlackMutation.mutateAsync();
-      setShowSlackDisconnectDialog(false);
       toast.success("Slack workspace disconnected.");
     } catch (err) {
       toast.error(
@@ -471,8 +485,19 @@ export function ConnectionsClient({ user }: ConnectionsClientProps) {
                 </Button>
               )}
 
-              {(linkedinDisplayState === "connected" ||
-                linkedinDisplayState === "expiring_soon") && (
+              {linkedinDisplayState === "connected" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowLinkedInDisconnectDialog(true)}
+                  disabled={disconnectLinkedInMutation.isPending}
+                  className="text-destructive hover:bg-destructive/10"
+                >
+                  Disconnect
+                </Button>
+              )}
+
+              {linkedinDisplayState === "expiring_soon" && (
                 <>
                   <Button
                     variant="outline"

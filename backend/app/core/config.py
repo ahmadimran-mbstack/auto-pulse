@@ -21,8 +21,11 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("DATABASE_URL", "POSTGRES_URI")
     )
 
-    # Allowed frontend origin or comma-separated origins for CORS
+    # Single canonical frontend URL used for OAuth and email redirects
     FRONTEND_URL: str
+
+    # Comma-separated list of allowed CORS origins
+    CORS_ALLOWED_ORIGINS: Optional[str] = None
 
     # Regex pattern for allowed origins (e.g. Vercel preview and production deployments)
     CORS_ORIGIN_REGEX: Optional[str] = r"^https:\/\/(?:[a-zA-Z0-9-]+\.)*vercel\.app$"
@@ -186,14 +189,18 @@ class Settings(BaseSettings):
     def DATABASE_URL_DIRECT(self) -> str:
         return self.DATABASE_URL.replace("-pooler.", ".")
 
-    # Split comma-separated frontend URLs into a clean list of origins for CORS
+    # Split CORS_ALLOWED_ORIGINS (and include FRONTEND_URL) into a clean list of origins for CORS
     @property
     def cors_origins(self) -> List[str]:
+        raw_sources = self.CORS_ALLOWED_ORIGINS or self.FRONTEND_URL
         origins = [
             origin.strip().rstrip("/")
-            for origin in self.FRONTEND_URL.split(",")
+            for origin in raw_sources.split(",")
             if origin.strip()
         ]
+        front = self.FRONTEND_URL.strip().rstrip("/")
+        if front and front not in origins:
+            origins.append(front)
         # Always allow primary production and preview Vercel domains
         for vercel_domain in ("https://autopulse-three.vercel.app", "https://autopulse.vercel.app"):
             if vercel_domain not in origins:

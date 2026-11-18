@@ -31,10 +31,10 @@ api_router = APIRouter(prefix="/api/connections/slack", tags=["slack-connection"
 api_integrations_router = APIRouter(prefix="/api/integrations/slack", tags=["slack-integrations"])
 
 
-# Helper to build clean frontend redirect target
+# Build the direct frontend redirect URL without intermediate redirect hops
 def _build_frontend_redirect(return_to: str, param: str) -> str:
-    target_path = "app/onboarding/4" if return_to == "onboarding" else "dashboard"
-    base = settings.FRONTEND_URL.rstrip("/")
+    target_path = "onboarding/approvals" if return_to == "onboarding" else "app/connections"
+    base = settings.FRONTEND_URL.split(",")[0].strip().rstrip("/")
     return f"{base}/{target_path}?{param}"
 
 
