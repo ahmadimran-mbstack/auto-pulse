@@ -254,10 +254,10 @@ export async function patchProfile(payload: PatchProfilePayload): Promise<Profil
   });
 }
 
-export async function deleteAccount(confirm: "DELETE" = "DELETE"): Promise<void> {
+// Permanently delete the signed-in user's account using the token identity only
+export async function deleteAccount(): Promise<void> {
   return apiCall<void>("/account", {
     method: "DELETE",
-    body: JSON.stringify({ confirm }),
   });
 }
 

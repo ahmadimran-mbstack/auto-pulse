@@ -24,6 +24,7 @@ import {
   clearAllAppCaches,
 } from "@/lib/queries";
 import { deleteAccount, ApiClientError } from "@/lib/api";
+import { signOutAction } from "@/app/app/actions";
 import { authClient } from "@/lib/auth/client";
 import { useSignOut } from "@/hooks/use-sign-out";
 import { getTimezonesLazy } from "@/lib/timezones";
@@ -1333,45 +1334,18 @@ function AccountTabPanel({
     }
   };
 
-  // Handles account deletion per strict specification:
-  // 1. DELETE /account first
-  // 2. Neon Auth delete user method if available
-  // 3. Clear cache and redirect to landing page
+  // Delete the user's data and auth account on the backend, then sign out locally
   const handleDeleteAccount = async () => {
-    if (deleteConfirmText.trim() !== "DELETE") return;
+    if (deleteConfirmText.trim().toLowerCase() !== email.trim().toLowerCase()) return;
     setIsDeleting(true);
 
     try {
-      // Step 1: Call DELETE /account on AutoPulse backend
-      await deleteAccount("DELETE");
-
-      // Step 2: Check and invoke Neon Auth delete method if available
-      let neonAuthDeleted = false;
-      try {
-        const clientAny = authClient as unknown as Record<string, unknown>;
-        if (typeof clientAny.deleteUser === "function") {
-          await (clientAny.deleteUser as () => Promise<unknown>)();
-          neonAuthDeleted = true;
-        }
-      } catch (authErr) {
-        console.warn("Neon auth client deleteUser failed or unavailable:", authErr);
-      }
-
-      // Clear memory query cache and token cache
+      await deleteAccount();
+      await signOutAction().catch(() => {});
       clearAllAppCaches();
-
-      if (!neonAuthDeleted) {
-        // If client-side deleteUser is missing or failed, do NOT pretend it worked
-        toast.info(
-          "Your account data was removed. Your sign-in record will be removed by our team.",
-          { duration: 8000 }
-        );
-      } else {
-        toast.success("Your account was deleted.");
-      }
-
+      toast.success("Your account was deleted for good.");
       setShowDeleteDialog(false);
-      router.push("/");
+      window.location.replace("/");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to delete account";
       toast.error(msg);
@@ -1555,20 +1529,20 @@ function AccountTabPanel({
             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
             <AlertDialogDescription className="space-y-2 text-left">
               <span>
-                This action will delete your profile, connections, drafts, and posts in AutoPulse. Posts already published to LinkedIn will stay on LinkedIn.
+                Your AutoPulse data will be deleted for good, and LinkedIn posts already published will stay on LinkedIn.
               </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
 
           <div className="space-y-2 py-2 text-left">
             <Label htmlFor="delete-confirm-input" className="text-xs text-foreground font-medium">
-              To confirm deletion, type <span className="font-mono font-semibold text-destructive">DELETE</span> below:
+              To confirm deletion, type your email <span className="font-mono font-semibold text-destructive">{email}</span> below:
             </Label>
             <Input
               id="delete-confirm-input"
               value={deleteConfirmText}
               onChange={(e) => setDeleteConfirmText(e.target.value)}
-              placeholder="DELETE"
+              placeholder={email}
               className="font-mono"
               autoFocus
             />
@@ -1583,7 +1557,7 @@ function AccountTabPanel({
             </AlertDialogCancel>
             <Button
               variant="destructive"
-              disabled={deleteConfirmText.trim() !== "DELETE" || isDeleting}
+              disabled={deleteConfirmText.trim().toLowerCase() !== email.trim().toLowerCase() || isDeleting}
               onClick={handleDeleteAccount}
             >
               {isDeleting ? (

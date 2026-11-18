@@ -10,6 +10,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 import re
 from sqlalchemy import text
 from app.api.routes.health import router as health_router
+from app.api.routes.account import router as account_router
+from app.api.routes.auth_limits import router as auth_limits_router
 from app.api.routes.me import router as me_router
 from app.api.routes.profile import router as profile_router
 from app.api.routes.connections import router as connections_router
@@ -211,6 +213,8 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 # Register API route modules
 app.include_router(health_router)
+app.include_router(account_router)
+app.include_router(auth_limits_router)
 app.include_router(me_router)
 app.include_router(profile_router)
 app.include_router(connections_router)
