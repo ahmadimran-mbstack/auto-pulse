@@ -1,7 +1,8 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
-import { Activity, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { useSignOut } from "@/hooks/use-sign-out";
 import { Button } from "@/components/ui/button";
 
@@ -18,8 +19,23 @@ export function OnboardingHeader() {
           href="/onboarding"
           className="flex items-center gap-2 group transition-opacity hover:opacity-90"
         >
-          <div className="size-7 rounded-md bg-card border border-border flex items-center justify-center text-primary group-hover:border-primary/40 transition-colors">
-            <Activity className="size-4" strokeWidth={2} />
+          <div className="relative flex size-6 shrink-0 items-center justify-center rounded-sm overflow-hidden">
+            <Image
+              src="/logo-mark-blue-bg.png"
+              alt="AutoPulse logo"
+              width={24}
+              height={24}
+              priority
+              className="hidden h-full w-full object-contain dark:block"
+            />
+            <Image
+              src="/logo-mark-white-bg.png"
+              alt="AutoPulse logo"
+              width={24}
+              height={24}
+              priority
+              className="block h-full w-full object-contain dark:hidden"
+            />
           </div>
           <span className="font-display font-semibold text-h3 text-foreground tracking-tight">
             AutoPulse
