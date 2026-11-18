@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   ArrowRight,
@@ -28,8 +29,10 @@ import {
   type RunEventsResponse,
 } from "@/lib/api";
 import {
+  queryKeys,
   useCancelPlaygroundRunMutation,
   useCreatePlaygroundRunMutation,
+  useProfileQuery,
   useRunQuery,
 } from "@/lib/queries";
 import { AgentActivityPanel } from "./AgentActivityPanel";
@@ -63,7 +66,10 @@ const TERMINAL_STATUSES = new Set([
 ]);
 
 export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProps) {
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
+  const qc = useQueryClient();
   const initialUrlRunId = searchParams.get("run");
 
   const [topicHint, setTopicHint] = React.useState("");
@@ -88,21 +94,26 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
 
   const createMutation = useCreatePlaygroundRunMutation();
   const cancelMutation = useCancelPlaygroundRunMutation();
+  const { data: profile, isLoading: isProfileLoading } = useProfileQuery(userId);
+  const hasNiche = Boolean(profile?.niche_description?.trim());
 
   const isTerminal = Boolean(runStatus && TERMINAL_STATUSES.has(runStatus));
   const isRunning = Boolean(runId && !isTerminal);
 
-  // Sync URL ?run=ID without triggering a full page reload
-  const syncRunIdToUrl = React.useCallback((nextId: string | null) => {
-    if (typeof window === "undefined") return;
-    const url = new URL(window.location.href);
-    if (nextId) {
-      url.searchParams.set("run", nextId);
-    } else {
-      url.searchParams.delete("run");
-    }
-    window.history.replaceState({}, "", url.toString());
-  }, []);
+  // Sync URL ?run=ID using Next.js router so browser history stays intact
+  const syncRunIdToUrl = React.useCallback(
+    (nextId: string | null) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (nextId) {
+        params.set("run", nextId);
+      } else {
+        params.delete("run");
+      }
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams]
+  );
 
   // Pause polling when the browser tab is hidden
   React.useEffect(() => {
@@ -223,14 +234,17 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
       setPendingPost({ text: postText, metadata: meta });
     } else {
       setEditorText(postText);
-      toast.success("Post ready in editor");
+      toast.success("Post saved to Drafts and ready in editor");
     }
-  }, [events, runData, runId, runStatus, appliedRunId, editorText]);
 
-  // Start a new run (double-click safe)
+    // Refresh Posts and Dashboard caches so the new draft shows under Drafts right away
+    qc.invalidateQueries({ queryKey: queryKeys.all(userId) });
+  }, [events, runData, runId, runStatus, appliedRunId, editorText, qc, userId]);
+
+  // Start a new run (double-click safe, requires a filled profile niche)
   const handleStartRun = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (isRunning || createMutation.isPending) return;
+    if (isRunning || createMutation.isPending || !hasNiche) return;
 
     try {
       const res = await createMutation.mutateAsync(topicHint.trim() || undefined);
@@ -301,7 +315,7 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
               />
               <Button
                 type="submit"
-                disabled={isRunning || createMutation.isPending}
+                disabled={isRunning || createMutation.isPending || (!isProfileLoading && !hasNiche)}
                 className="sm:w-auto font-normal text-sm gap-2"
               >
                 {createMutation.isPending || isRunning ? (
@@ -317,6 +331,19 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
                 )}
               </Button>
             </div>
+            {!isProfileLoading && !hasNiche ? (
+              <p className="text-xs text-destructive">
+                Your niche description is empty.{" "}
+                <Link href="/app/settings?tab=content" className="underline font-medium">
+                  Fill it in Settings
+                </Link>{" "}
+                before running the writing agents.
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Leave empty to let AutoPulse choose a topic from your profile.
+              </p>
+            )}
           </form>
         </CardContent>
       </Card>

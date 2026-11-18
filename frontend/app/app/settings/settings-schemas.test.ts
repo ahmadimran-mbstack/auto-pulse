@@ -40,8 +40,25 @@ describe("settings-schemas", () => {
       expect(res.success).toBe(true);
     });
 
+    it("rejects empty or whitespace-only niche_description and >500 chars", () => {
+      const emptyRes = contentFormSchema.safeParse({
+        niche_description: "   ",
+        topics_include: [],
+        topics_avoid: [],
+      });
+      expect(emptyRes.success).toBe(false);
+
+      const longRes = contentFormSchema.safeParse({
+        niche_description: "A".repeat(501),
+        topics_include: [],
+        topics_avoid: [],
+      });
+      expect(longRes.success).toBe(false);
+    });
+
     it("rejects invalid tone values", () => {
       const res = contentFormSchema.safeParse({
+        niche_description: "Postgres internals",
         tone: "silly",
         topics_include: [],
         topics_avoid: [],

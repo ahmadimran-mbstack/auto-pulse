@@ -10,7 +10,7 @@ from app.core.auth import User, current_user
 from app.core.config import settings
 from app.core.limiter import enforce_rate_limit
 from app.db.session import SessionLocal, get_db
-from app.models.post import GenerationRun, PlaygroundRun, RunEvent
+from app.models.post import GenerationRun, PlaygroundRun, Post, RunEvent
 from app.models.profile import Profile
 from app.repositories import post as post_repo
 from app.schemas.post import (
@@ -24,6 +24,7 @@ from app.schemas.post import (
 from app.services.content_profile import get_content_profile
 from app.services.pipeline import execute_pipeline
 from app.services.pipeline_config import MAX_ROUNDS, PLAIN_TECH_ERROR_MESSAGE, STUCK_RUN_SILENCE_SECONDS
+from app.services.prompts import PROMPT_VERSION
 from app.services.run_events import RunEventEmitter
 from app.services.run_lock import acquire_manual_run_lock, force_release_manual_run_lock, release_manual_run_lock
 from app.services.search import get_search_adapter
@@ -31,6 +32,63 @@ from app.services.search import get_search_adapter
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/playground", tags=["playground"])
+
+
+# Save a single draft Post per playground run without triggering approval or publishing
+def _save_playground_draft_post(
+    db: Session,
+    gen_run: Optional[GenerationRun],
+    user_id: str,
+    draft_dict: Optional[Dict[str, Any]],
+    final_state: Dict[str, Any],
+) -> Optional[Post]:
+    if not draft_dict or not isinstance(draft_dict, dict):
+        return None
+    if gen_run and gen_run.post_id:
+        return db.query(Post).filter(Post.id == gen_run.post_id).first()
+
+    caption = (draft_dict.get("post_text") or draft_dict.get("caption") or "").strip()
+    if not caption:
+        return None
+
+    chosen = final_state.get("chosen_topic") or {}
+    finder_out = final_state.get("finder_output") or {}
+    sources = final_state.get("sources") or finder_out.get("sources") or []
+    topic_title = (
+        chosen.get("title")
+        or finder_out.get("topic_title")
+        or draft_dict.get("image_headline")
+        or "Playground Draft"
+    )
+
+    post = Post(
+        user_id=user_id,
+        run_date=gen_run.run_date if gen_run else datetime.datetime.now(datetime.timezone.utc).date(),
+        status="draft",
+        approval_source="playground",
+        publish_at=None,
+        topic_title=str(topic_title),
+        topic_label=final_state.get("topic_label") or finder_out.get("topic_label"),
+        topic_url=str(chosen.get("url") or ""),
+        key_facts=final_state.get("key_facts") or finder_out.get("key_facts"),
+        angle=final_state.get("angle") or finder_out.get("angle"),
+        hook_type=final_state.get("hook_type"),
+        hook_style=final_state.get("hook_style") or final_state.get("hook_type"),
+        post_format=final_state.get("post_format"),
+        ai_score=final_state.get("ai_score"),
+        needs_review=bool(final_state.get("needs_review", False)),
+        sources=sources if isinstance(sources, list) else [],
+        caption=caption,
+        hashtags=draft_dict.get("hashtags") if isinstance(draft_dict.get("hashtags"), list) else [],
+        image_spec={"headline": draft_dict.get("image_headline") or ""} if draft_dict.get("image_headline") else {},
+        llm_model=settings.LLM_MODEL,
+        prompt_version=PROMPT_VERSION,
+    )
+    db.add(post)
+    db.flush()
+    if gen_run:
+        gen_run.post_id = post.id
+    return post
 
 
 def run_playground_pipeline_task(run_id: uuid.UUID, user_id: str, topic_hint: Optional[str] = None) -> None:
@@ -165,6 +223,7 @@ def run_playground_pipeline_task(run_id: uuid.UUID, user_id: str, topic_hint: Op
             # Cancelled by user
             if state_status == "cancelled" or final_state.get("cancelled") or (p_run and p_run.cancel_requested):
                 clean_draft = final_state.get("best_clean_draft") or final_state.get("draft")
+                _save_playground_draft_post(db, gen_run, user_id, clean_draft, final_state)
                 if gen_run:
                     gen_run.status = "cancelled"
                     gen_run.current_step = "cancelled"
@@ -212,6 +271,8 @@ def run_playground_pipeline_task(run_id: uuid.UUID, user_id: str, topic_hint: Op
                     return
 
             if err_code or state_status in ("failed_quality", "failed_error", "failed"):
+                best_effort = final_state.get("best_clean_draft") or final_state.get("best_draft")
+                _save_playground_draft_post(db, gen_run, user_id, best_effort, final_state)
                 if gen_run:
                     gen_run.status = "failed_error"
                     gen_run.current_step = "failed_error"
@@ -269,6 +330,9 @@ def run_playground_pipeline_task(run_id: uuid.UUID, user_id: str, topic_hint: Op
                 p_run.best_draft = final_state.get("draft")
                 p_run.trace = final_state.get("agent_trace")
                 p_run.internal_trace = internal_trace_val
+
+            # Save the generated post as a draft linked to this run
+            _save_playground_draft_post(db, gen_run, user_id, final_state.get("draft"), final_state)
 
             db.commit()
             duration_val = gen_run.duration if gen_run else '?'
@@ -334,6 +398,17 @@ def create_playground_run(
     """
     # Rate limit: max 10 playground runs per minute per user
     enforce_rate_limit(f"playground:{user.id}", max_requests=10, window_seconds=60)
+
+    # Block playground runs when the user's profile niche description is empty
+    profile = db.query(Profile).filter(Profile.user_id == user.id).first()
+    if not profile or not (profile.niche_description or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "niche_required",
+                "message": "Please add your niche description in Settings before running the writing agents.",
+            },
+        )
 
     new_run_id = uuid.uuid4()
     lock_ttl = settings.TOTAL_RUN_DEADLINE_SECONDS + 30

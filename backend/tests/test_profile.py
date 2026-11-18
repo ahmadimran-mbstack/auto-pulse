@@ -198,16 +198,16 @@ def test_invalid_input_returns_422_with_field_messages(client, db_test_schema, e
     private_key, _ = ed25519_keys
     headers = _auth_headers(private_key, sub="user-invalid")
 
-    # Short niche (fewer than 20 characters)
+    # Blank niche (empty after trimming)
     r_niche = client.put(
         "/profile/onboarding/1",
-        json={"niche_description": "Too short"},
+        json={"niche_description": "   "},
         headers=headers,
     )
     assert r_niche.status_code == 422
     err_niche = r_niche.json()["error"]
     assert err_niche["code"] == "validation_error"
-    assert err_niche["fields"]["niche_description"] == "Use at least 20 characters."
+    assert err_niche["fields"]["niche_description"] == "Niche description is required."
 
     # 11 topics
     eleven_topics = [f"Topic_{i}" for i in range(11)]

@@ -18,6 +18,15 @@ def test_create_playground_run_enqueued(client, db_test_schema, ed25519_keys, mo
     private_key, _ = ed25519_keys
     headers = _auth_headers(private_key, sub="user-alice", name="Alice")
 
+    # Seed profile with a niche description so playground run is allowed
+    SessionLocal = db_test_schema["SessionLocal"]
+    schema_name = db_test_schema["schema_name"]
+    from app.models.profile import Profile
+    with SessionLocal() as db:
+        db.execute(text(f'SET search_path TO "{schema_name}"'))
+        db.add(Profile(user_id="user-alice", niche_description="AI Engineering"))
+        db.commit()
+
     # Mock Redis rate limiter so it doesn't fail if redis is not running
     monkeypatch.setattr("app.api.routes.playground.enforce_rate_limit", lambda *args, **kwargs: None)
 
@@ -135,16 +144,18 @@ def test_playground_never_creates_post_or_approval(db_test_schema, monkeypatch):
 
     with SessionLocal() as db:
         db.execute(text(f'SET search_path TO "{schema_name}"'))
-        # 1. Playground run is completed with results
+        # 1. Playground run is succeeded with results
         run = db.query(PlaygroundRun).filter(PlaygroundRun.id == run_id).first()
-        assert run.status == "completed"
+        assert run.status == "succeeded"
         assert run.result is not None
         assert run.trace is not None
 
-        # 2. Crucial assertion: 0 Post records and 0 Approval records created!
-        post_count = db.query(Post).filter(Post.user_id == user_id).count()
+        # 2. Saves exactly 1 draft Post and 0 Approval records
+        posts = db.query(Post).filter(Post.user_id == user_id).all()
         approval_count = db.query(Approval).filter(Approval.user_id == user_id).count()
-        assert post_count == 0, "Playground runs must NEVER create Post records"
+        assert len(posts) == 1
+        assert posts[0].status == "draft"
+        assert posts[0].approval_source == "playground"
         assert approval_count == 0, "Playground runs must NEVER create Approval records"
 
 

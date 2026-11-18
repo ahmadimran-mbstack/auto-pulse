@@ -9,6 +9,16 @@ from pydantic import BaseModel, ConfigDict, field_validator
 HEX_COLOR_REGEX = re.compile(r"^#[0-9A-Fa-f]{6}$")
 ALLOWED_TONES = {"professional", "friendly", "direct", "educational", "inspiring"}
 
+# Shared validation limits matching the frontend Zod schema
+NICHE_MIN_LENGTH = 1
+NICHE_MAX_LENGTH = 500
+ROLE_MAX_LENGTH = 80
+INDUSTRY_MAX_LENGTH = 80
+AUDIENCE_MAX_LENGTH = 200
+VOICE_NOTES_MAX_LENGTH = 500
+SAMPLE_POSTS_MAX_LENGTH = 3000
+BRAND_NAME_MAX_LENGTH = 60
+
 
 # Helper to check for illegal control characters
 def _reject_control_characters(text_value: str, allow_newlines: bool = False) -> None:
@@ -82,24 +92,27 @@ class OnboardingStep1Request(BaseModel):
     @field_validator("role_title", mode="before")
     @classmethod
     def validate_role_title(cls, v: Any) -> Optional[str]:
-        return _clean_text_field(v, max_length=80, allow_newlines=False)
+        return _clean_text_field(v, max_length=ROLE_MAX_LENGTH, allow_newlines=False)
 
     @field_validator("industry", mode="before")
     @classmethod
     def validate_industry(cls, v: Any) -> Optional[str]:
-        return _clean_text_field(v, max_length=80, allow_newlines=False)
+        return _clean_text_field(v, max_length=INDUSTRY_MAX_LENGTH, allow_newlines=False)
 
     @field_validator("niche_description", mode="before")
     @classmethod
-    def validate_niche_description(cls, v: Any) -> Optional[str]:
-        return _clean_text_field(
-            v, min_length=20, max_length=500, allow_newlines=True
+    def validate_niche_description(cls, v: Any) -> str:
+        cleaned = _clean_text_field(
+            v, min_length=NICHE_MIN_LENGTH, max_length=NICHE_MAX_LENGTH, allow_newlines=True
         )
+        if not cleaned:
+            raise ValueError("Niche description is required.")
+        return cleaned
 
     @field_validator("audience", mode="before")
     @classmethod
     def validate_audience(cls, v: Any) -> Optional[str]:
-        return _clean_text_field(v, max_length=200, allow_newlines=False)
+        return _clean_text_field(v, max_length=AUDIENCE_MAX_LENGTH, allow_newlines=False)
 
     @field_validator("topics_include", mode="before")
     @classmethod
@@ -306,3 +319,76 @@ class PatchProfileRequest(BaseModel):
     timezone: Optional[str] = None
     post_time: Optional[str] = None
     post_days: Optional[List[int]] = None
+
+    # Validate niche_description when sent in PATCH so blank or >500 values are rejected
+    @field_validator("niche_description", mode="before")
+    @classmethod
+    def validate_patch_niche_description(cls, v: Any) -> Optional[str]:
+        cleaned = _clean_text_field(
+            v, min_length=NICHE_MIN_LENGTH, max_length=NICHE_MAX_LENGTH, allow_newlines=True
+        )
+        if not cleaned:
+            raise ValueError("Niche description is required.")
+        return cleaned
+
+    @field_validator("role_title", mode="before")
+    @classmethod
+    def validate_patch_role_title(cls, v: Any) -> Optional[str]:
+        return _clean_text_field(v, max_length=ROLE_MAX_LENGTH, allow_newlines=False)
+
+    @field_validator("industry", mode="before")
+    @classmethod
+    def validate_patch_industry(cls, v: Any) -> Optional[str]:
+        return _clean_text_field(v, max_length=INDUSTRY_MAX_LENGTH, allow_newlines=False)
+
+    @field_validator("audience", mode="before")
+    @classmethod
+    def validate_patch_audience(cls, v: Any) -> Optional[str]:
+        return _clean_text_field(v, max_length=AUDIENCE_MAX_LENGTH, allow_newlines=False)
+
+    @field_validator("voice_notes", mode="before")
+    @classmethod
+    def validate_patch_voice_notes(cls, v: Any) -> Optional[str]:
+        return _clean_text_field(v, max_length=VOICE_NOTES_MAX_LENGTH, allow_newlines=True)
+
+    @field_validator("sample_posts", mode="before")
+    @classmethod
+    def validate_patch_sample_posts(cls, v: Any) -> Optional[str]:
+        return _clean_text_field(v, max_length=SAMPLE_POSTS_MAX_LENGTH, allow_newlines=True)
+
+    @field_validator("brand_name", mode="before")
+    @classmethod
+    def validate_patch_brand_name(cls, v: Any) -> Optional[str]:
+        return _clean_text_field(v, max_length=BRAND_NAME_MAX_LENGTH, allow_newlines=False)
+
+    @field_validator("brand_primary_hex", mode="before")
+    @classmethod
+    def validate_patch_brand_primary_hex(cls, v: Any) -> Optional[str]:
+        cleaned = _clean_text_field(v, max_length=7, allow_newlines=False)
+        if cleaned is None:
+            return None
+        if not HEX_COLOR_REGEX.match(cleaned):
+            raise ValueError("Brand primary color must be in #RRGGBB hex format.")
+        return cleaned
+
+    @field_validator("brand_accent_hex", mode="before")
+    @classmethod
+    def validate_patch_brand_accent_hex(cls, v: Any) -> Optional[str]:
+        cleaned = _clean_text_field(v, max_length=7, allow_newlines=False)
+        if cleaned is None:
+            return None
+        if not HEX_COLOR_REGEX.match(cleaned):
+            raise ValueError("Brand accent color must be in #RRGGBB hex format.")
+        return cleaned
+
+    @field_validator("tone", mode="before")
+    @classmethod
+    def validate_patch_tone(cls, v: Any) -> Optional[str]:
+        cleaned = _clean_text_field(v, max_length=50, allow_newlines=False)
+        if cleaned is None:
+            return None
+        if cleaned not in ALLOWED_TONES:
+            raise ValueError(
+                "Tone must be one of: professional, friendly, direct, educational, inspiring."
+            )
+        return cleaned

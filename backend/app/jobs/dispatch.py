@@ -40,12 +40,13 @@ def compute_publish_at(
     return publish_dt
 
 
-# Marks posts in draft or awaiting_approval whose publish_at has passed as expired
+# Marks posts in draft or awaiting_approval whose publish_at has passed as expired (never expires playground drafts)
 def expire_passed_posts(db: Session) -> int:
     stmt = text(
         "UPDATE posts "
         "SET status = 'expired', updated_at = now() "
         "WHERE status IN ('draft', 'awaiting_approval') "
+        "  AND (approval_source IS NULL OR approval_source != 'playground') "
         "  AND (publish_at IS NULL OR publish_at <= now()) "
         "RETURNING id"
     )
@@ -376,6 +377,13 @@ def run_dispatch(db: Session) -> None:
     )
 
     for profile in active_profiles:
+        # Skip users pending deletion or with an empty niche description
+        from app.api.routes.account import is_user_deletion_pending
+        if getattr(profile, "deletion_pending", False) or is_user_deletion_pending(profile.user_id):
+            continue
+        if not (profile.niche_description or "").strip():
+            logger.info(f"Skipping scheduled draft for user {profile.user_id}: niche_description is empty")
+            continue
         if not profile.timezone or not profile.post_time or not profile.post_days:
             continue
 

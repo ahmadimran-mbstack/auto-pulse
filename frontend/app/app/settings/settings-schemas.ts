@@ -1,29 +1,51 @@
 import { z } from "zod";
 
-// Zod validation schemas for all settings tabs, mirroring backend rules
+// Shared validation constants matching backend Pydantic validators
+export const NICHE_MIN_LENGTH = 1;
+export const NICHE_MAX_LENGTH = 500;
+export const ROLE_MAX_LENGTH = 80;
+export const INDUSTRY_MAX_LENGTH = 80;
+export const AUDIENCE_MAX_LENGTH = 200;
+export const VOICE_NOTES_MAX_LENGTH = 500;
+export const SAMPLE_POSTS_MAX_LENGTH = 3000;
+export const BRAND_NAME_MAX_LENGTH = 60;
+
+// Shared niche description schema used by both onboarding and settings
+export const nicheDescriptionField = z
+  .string()
+  .trim()
+  .min(NICHE_MIN_LENGTH, "Niche description is required.")
+  .max(NICHE_MAX_LENGTH, `Use at most ${NICHE_MAX_LENGTH} characters.`);
+
+// Shared schema for onboarding step 1
+export const onboardingStep1Schema = z.object({
+  role_title: z.string().trim().max(ROLE_MAX_LENGTH, `Use at most ${ROLE_MAX_LENGTH} characters.`).optional(),
+  industry: z.string().trim().max(INDUSTRY_MAX_LENGTH, `Use at most ${INDUSTRY_MAX_LENGTH} characters.`).optional(),
+  niche_description: nicheDescriptionField,
+  audience: z.string().trim().max(AUDIENCE_MAX_LENGTH, `Use at most ${AUDIENCE_MAX_LENGTH} characters.`).optional(),
+  topics_include: z.array(z.string()).max(10, "You can add at most 10 topics."),
+  topics_avoid: z.array(z.string()).max(10, "You can add at most 10 topics."),
+});
 
 export const profileFormSchema = z.object({
   display_name: z.string().max(100, "Name must be 100 characters or less").optional(),
-  role_title: z.string().max(100, "Role must be 100 characters or less").optional(),
-  industry: z.string().max(100, "Industry must be 100 characters or less").optional(),
+  role_title: z.string().trim().max(ROLE_MAX_LENGTH, `Use at most ${ROLE_MAX_LENGTH} characters.`).optional(),
+  industry: z.string().trim().max(INDUSTRY_MAX_LENGTH, `Use at most ${INDUSTRY_MAX_LENGTH} characters.`).optional(),
 });
 
 export type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
 export const contentFormSchema = z.object({
-  niche_description: z
-    .string()
-    .max(1000, "Niche description must be 1000 characters or less")
-    .optional(),
-  audience: z.string().max(500, "Audience must be 500 characters or less").optional(),
+  niche_description: nicheDescriptionField,
+  audience: z.string().trim().max(AUDIENCE_MAX_LENGTH, `Use at most ${AUDIENCE_MAX_LENGTH} characters.`).optional(),
   topics_include: z.array(z.string()),
   topics_avoid: z.array(z.string()),
   tone: z
     .enum(["professional", "friendly", "direct", "educational", "inspiring"])
     .nullable()
     .optional(),
-  voice_notes: z.string().max(1000, "Voice notes must be 1000 characters or less").optional(),
-  sample_posts: z.string().max(2000, "Sample posts must be 2000 characters or less").optional(),
+  voice_notes: z.string().trim().max(VOICE_NOTES_MAX_LENGTH, `Use at most ${VOICE_NOTES_MAX_LENGTH} characters.`).optional(),
+  sample_posts: z.string().trim().max(SAMPLE_POSTS_MAX_LENGTH, `Use at most ${SAMPLE_POSTS_MAX_LENGTH} characters.`).optional(),
 });
 
 export type ContentFormValues = z.infer<typeof contentFormSchema>;

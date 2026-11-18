@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getProfile, saveStep1, ApiClientError } from "@/lib/api";
+import { onboardingStep1Schema } from "@/app/app/settings/settings-schemas";
 import { OnboardingShell, OnboardingSkeleton } from "../components/OnboardingShell";
 import { TagInput } from "../components/TagInput";
 import { Input } from "@/components/ui/input";
@@ -64,36 +65,24 @@ export default function OnboardingTopicsPage() {
     };
   }, []);
 
-  // Validates field length and required constraints before submitting
+  // Validates fields using the shared Zod schema used by both onboarding and settings
   const validateForm = (): Record<string, string> => {
+    const parsed = onboardingStep1Schema.safeParse({
+      role_title: roleTitle,
+      industry,
+      niche_description: nicheDescription,
+      audience,
+      topics_include: topicsInclude,
+      topics_avoid: topicsAvoid,
+    });
+    if (parsed.success) return {};
     const errors: Record<string, string> = {};
-    const trimmedNiche = nicheDescription.trim();
-
-    if (!trimmedNiche) {
-      errors.niche_description = "Niche description is required.";
-    } else if (trimmedNiche.length < 20) {
-      errors.niche_description = "Use at least 20 characters.";
-    } else if (trimmedNiche.length > 500) {
-      errors.niche_description = "Use at most 500 characters.";
+    for (const issue of parsed.error.issues) {
+      const key = String(issue.path[0] || "");
+      if (key && !errors[key]) {
+        errors[key] = issue.message;
+      }
     }
-
-    if (roleTitle.trim().length > 80) {
-      errors.role_title = "Use at most 80 characters.";
-    }
-    if (industry.trim().length > 80) {
-      errors.industry = "Use at most 80 characters.";
-    }
-    if (audience.trim().length > 200) {
-      errors.audience = "Use at most 200 characters.";
-    }
-
-    if (topicsInclude.length > 10) {
-      errors.topics_include = "You can add at most 10 topics.";
-    }
-    if (topicsAvoid.length > 10) {
-      errors.topics_avoid = "You can add at most 10 topics.";
-    }
-
     return errors;
   };
 
