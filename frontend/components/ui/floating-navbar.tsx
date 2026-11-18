@@ -10,6 +10,7 @@ import {
   useMotionValueEvent,
 } from "motion/react";
 import { cn } from "@/lib/utils";
+import { useSessionStatus } from "@/app/(marketing)/components/use-session-status";
 
 /* Floating dark-glass pill navbar with responsive mobile dropdown menu */
 export const FloatingNav = ({
@@ -29,6 +30,7 @@ export const FloatingNav = ({
 
   /* Track whether the mobile dropdown menu is open */
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { isLoaded, isSignedIn } = useSessionStatus();
 
   /* Show the navbar at the top or when scrolling up, and hide it when scrolling down */
   useMotionValueEvent(scrollYProgress, "change", (current) => {
@@ -156,19 +158,31 @@ export const FloatingNav = ({
             {/* Vertical divider between navigation links and auth buttons on tablet and desktop */}
             <div className="h-4 w-px bg-[var(--lp-border)] hidden md:block" />
 
-            {/* Sign in link and white Get started pill button shown on tablet and desktop */}
-            <div className="hidden md:flex items-center gap-1 sm:gap-2">
-              <Link
-                href="/auth/sign-in"
-                className="relative text-xs sm:text-sm text-[var(--lp-text-body)] hover:text-[var(--lp-text-heading)] transition-colors duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] px-2.5 py-1.5 font-normal after:content-[''] after:absolute after:bottom-1 after:left-2.5 after:right-2.5 after:h-px after:bg-[var(--lp-ice)] after:scale-x-0 hover:after:scale-x-100 after:origin-left after:transition-transform after:duration-200 after:ease-[cubic-bezier(0.22,1,0.36,1)]"
-              >
-                Sign in
-              </Link>
-              <Link href="/auth/sign-up">
-                <button className="relative rounded-full bg-[var(--lp-text-heading)] px-3.5 sm:px-4 py-1.5 text-xs sm:text-sm font-medium text-[var(--lp-bg)] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-[var(--lp-ice)] active:scale-[0.98]">
-                  <span>Get started</span>
-                </button>
-              </Link>
+            {/* Auth actions kept at a fixed width to avoid layout shift while session loads */}
+            <div className="hidden md:flex items-center justify-end gap-1 sm:gap-2 min-w-[168px] h-8">
+              {!isLoaded ? (
+                <span className="inline-block h-8 w-[148px]" aria-hidden="true" />
+              ) : isSignedIn ? (
+                <Link href="/app">
+                  <button className="relative rounded-full bg-[var(--lp-text-heading)] px-4 py-1.5 text-xs sm:text-sm font-medium text-[var(--lp-bg)] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-[var(--lp-ice)] active:scale-[0.98] whitespace-nowrap">
+                    <span>Go to dashboard</span>
+                  </button>
+                </Link>
+              ) : (
+                <>
+                  <Link
+                    href="/auth/sign-in"
+                    className="relative text-xs sm:text-sm text-[var(--lp-text-body)] hover:text-[var(--lp-text-heading)] transition-colors duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] px-2.5 py-1.5 font-normal after:content-[''] after:absolute after:bottom-1 after:left-2.5 after:right-2.5 after:h-px after:bg-[var(--lp-ice)] after:scale-x-0 hover:after:scale-x-100 after:origin-left after:transition-transform after:duration-200 after:ease-[cubic-bezier(0.22,1,0.36,1)] whitespace-nowrap"
+                  >
+                    Sign in
+                  </Link>
+                  <Link href="/auth/sign-up">
+                    <button className="relative rounded-full bg-[var(--lp-text-heading)] px-3.5 sm:px-4 py-1.5 text-xs sm:text-sm font-medium text-[var(--lp-bg)] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-[var(--lp-ice)] active:scale-[0.98] whitespace-nowrap">
+                      <span>Get started</span>
+                    </button>
+                  </Link>
+                </>
+              )}
             </div>
 
             {/* Mobile menu toggle button with 44px tap target */}
@@ -203,21 +217,31 @@ export const FloatingNav = ({
               {/* Divider separating section links from auth actions */}
               <div className="h-px w-full bg-[var(--lp-border-hairline)] my-1.5" />
 
-              {/* Mobile Sign in link */}
-              <Link
-                href="/auth/sign-in"
-                onClick={handleCloseMobileMenu}
-                className="min-h-[44px] flex items-center px-3 rounded-xl text-[15px] font-normal text-[var(--lp-text-body)] hover:text-[var(--lp-text-heading)] hover:bg-white/5 transition-colors duration-200"
-              >
-                Sign in
-              </Link>
+              {isSignedIn ? (
+                <Link href="/app" onClick={handleCloseMobileMenu} className="mt-1">
+                  <button className="w-full min-h-[44px] rounded-full bg-[var(--lp-text-heading)] px-4 py-2.5 text-[15px] font-medium text-[var(--lp-bg)] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-[var(--lp-ice)] active:scale-[0.98]">
+                    Go to dashboard
+                  </button>
+                </Link>
+              ) : (
+                <>
+                  {/* Mobile Sign in link */}
+                  <Link
+                    href="/auth/sign-in"
+                    onClick={handleCloseMobileMenu}
+                    className="min-h-[44px] flex items-center px-3 rounded-xl text-[15px] font-normal text-[var(--lp-text-body)] hover:text-[var(--lp-text-heading)] hover:bg-white/5 transition-colors duration-200"
+                  >
+                    Sign in
+                  </Link>
 
-              {/* Full-width Get started button */}
-              <Link href="/auth/sign-up" onClick={handleCloseMobileMenu} className="mt-1">
-                <button className="w-full min-h-[44px] rounded-full bg-[var(--lp-text-heading)] px-4 py-2.5 text-[15px] font-medium text-[var(--lp-bg)] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-[var(--lp-ice)] active:scale-[0.98]">
-                  Get started
-                </button>
-              </Link>
+                  {/* Full-width Get started button */}
+                  <Link href="/auth/sign-up" onClick={handleCloseMobileMenu} className="mt-1">
+                    <button className="w-full min-h-[44px] rounded-full bg-[var(--lp-text-heading)] px-4 py-2.5 text-[15px] font-medium text-[var(--lp-bg)] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-[var(--lp-ice)] active:scale-[0.98]">
+                      Get started
+                    </button>
+                  </Link>
+                </>
+              )}
             </div>
           )}
         </motion.div>

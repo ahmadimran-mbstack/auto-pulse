@@ -9,6 +9,7 @@ import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import GradientBlinds from "@/components/GradientBlinds";
 import { LinkedInIcon } from "./platform-icons";
+import { useSessionStatus } from "./use-session-status";
 
 // Headline words to animate sequentially 40ms apart
 const headlineWords = [
@@ -25,6 +26,10 @@ const headlineWords = [
 
 // This component renders the hero section with ribbon backdrop and animated elements
 export function Hero() {
+  const { isLoaded, isSignedIn } = useSessionStatus();
+  const ctaHref = isSignedIn ? "/app" : "/auth/sign-up";
+  const ctaLabel = isSignedIn ? "Go to dashboard" : "Get started";
+
   return (
     <section
       className="relative overflow-hidden bg-[var(--lp-navy-deep)] text-[var(--lp-text-heading)] min-h-screen flex flex-col justify-end pt-20 pb-8 sm:pb-10 md:pb-12"
@@ -94,11 +99,11 @@ export function Hero() {
             transition={{ duration: 0.6, delay: 0.45, ease: [0.22, 1, 0.36, 1] }}
             className="mt-6 flex flex-wrap items-center justify-start gap-3.5"
           >
-            {/* Primary CTA with hover brightness, press scale 0.98, and 2px arrow shift */}
-            <Link href="/auth/sign-up" className="group">
-              <Button className="rounded-xl bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] active:scale-[0.98] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] px-6 h-10 text-md font-medium gap-1.5 flex items-center">
-                <span>Get started</span>
-                <ChevronRight className="w-4 h-4 transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:translate-x-0.5" />
+            {/* Primary CTA kept at a fixed width to prevent layout shift while session loads */}
+            <Link href={ctaHref} className="group">
+              <Button className="rounded-xl bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] active:scale-[0.98] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] px-6 h-10 min-w-[172px] text-md font-medium gap-1.5 flex items-center justify-center">
+                <span className={isLoaded ? "opacity-100" : "opacity-0"}>{ctaLabel}</span>
+                <ChevronRight className={`w-4 h-4 transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:translate-x-0.5 ${isLoaded ? "opacity-100" : "opacity-0"}`} />
               </Button>
             </Link>
             {/* Secondary CTA with hover brightness and press scale 0.98 */}

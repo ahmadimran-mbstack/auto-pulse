@@ -81,7 +81,7 @@ export default function OnboardingApprovalsPage() {
 
     // Clean up query parameters without full page reload
     if (typeof window !== "undefined") {
-      window.history.replaceState({}, "", window.location.pathname);
+      router.replace("/onboarding/approvals", { scroll: false });
     }
   }, [searchParams, refetchSlack]);
 

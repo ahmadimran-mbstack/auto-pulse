@@ -3,7 +3,7 @@
 import * as React from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Image as ImageIcon,
@@ -61,6 +61,8 @@ interface PlaygroundClientProps {
 }
 
 export function PlaygroundClient({ user }: PlaygroundClientProps) {
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   // Queries and mutations
@@ -116,7 +118,18 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
     return "PUBLIC";
   });
 
-  const [activeTab, setActiveTab] = React.useState<"agents" | "composer">("agents");
+  // Keep the active Playground tab synced with the URL ?tab= parameter
+  const activeTab: "agents" | "composer" =
+    searchParams.get("tab") === "composer" ? "composer" : "agents";
+
+  const handleTabChange = React.useCallback(
+    (nextTab: "agents" | "composer") => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("tab", nextTab);
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [pathname, router, searchParams]
+  );
   const [imageFile, setImageFile] = React.useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = React.useState<string | null>(null);
   const [isDragging, setIsDragging] = React.useState(false);
@@ -143,7 +156,7 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
     if (meta) {
       setDraftMeta(meta);
     }
-    setActiveTab("composer");
+    handleTabChange("composer");
     toast.success("Draft transferred to LinkedIn composer");
   };
 
@@ -255,9 +268,11 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
     toast.success("LinkedIn connected successfully!");
     refetchStatus();
 
-    // Strip the query parameter from URL cleanly without full reload
-    const newUrl = window.location.pathname;
-    window.history.replaceState({}, document.title, newUrl);
+    // Strip the query parameter using Next.js router so browser history stays intact
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("connected");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
 
     // If the draft was stored with autoPost, trigger immediate publication
     const savedDraftRaw = sessionStorage.getItem("linkedin_playground_draft");
@@ -402,7 +417,7 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as "agents" | "composer")} className="w-full flex flex-col gap-4">
+      <Tabs value={activeTab} onValueChange={(val) => handleTabChange(val as "agents" | "composer")} className="w-full flex flex-col gap-4">
         <TabsList className="grid w-full grid-cols-2 max-w-xs h-9">
           <TabsTrigger value="agents">Write with Agents</TabsTrigger>
           <TabsTrigger value="composer">LinkedIn Composer</TabsTrigger>
@@ -415,283 +430,283 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
         <TabsContent value="composer" className="space-y-6 mt-4">
           {/* Success banner shown after publishing */}
           {publishedPost && (
-        <Card className="border border-status-success-fg/30 bg-status-success-bg/40 p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <CheckCircle2 className="size-5 text-status-success-fg shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-foreground inline-flex items-center gap-1.5">
-                  <span>Published to</span>
-                  <PlatformLabel platform="linkedin" size="sm" />
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Your post was shared with {publishedPost.visibility.toLowerCase()} visibility.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              <Button
-                variant="default"
-                size="sm"
-                asChild
-                className="h-8 gap-1.5 text-xs font-medium shadow-xs"
-              >
-                <Link href={publishedPost.post_id ? `/app/posts/${publishedPost.post_id}` : "/app/posts"}>
-                  <span>View in Dashboard</span>
-                  <ExternalLink className="size-3" />
-                </Link>
-              </Button>
-              {publishedPost.linkedin_post_id && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  asChild
-                  className="h-8 gap-1.5 text-xs bg-background"
-                >
-                  <a
-                    href={`https://www.linkedin.com/feed/update/${encodeURIComponent(
-                      publishedPost.linkedin_post_id
-                    )}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <span>View on LinkedIn</span>
-                    <ExternalLink className="size-3" />
-                  </a>
-                </Button>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setPublishedPost(null)}
-                className="h-8 text-xs text-muted-foreground"
-              >
-                Dismiss
-              </Button>
-            </div>
-          </div>
-        </Card>
-      )}
-
-      {/* Main Composer Card */}
-      <Card className="border border-card-border bg-card rounded-lg overflow-hidden">
-        <CardContent className="p-4 sm:p-6 space-y-6">
-          {/* 1. Optional Image Area */}
-          <div className="space-y-2">
-            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Attachment (Optional)
-            </Label>
-
-            {imagePreviewUrl ? (
-              <div className="relative group rounded-lg overflow-hidden border border-border bg-muted/20">
-                <div className="relative w-full h-48 sm:h-64">
-                  <Image
-                    src={imagePreviewUrl}
-                    alt="Post attachment preview"
-                    fill
-                    className="object-cover"
-                    unoptimized
-                  />
+            <Card className="border border-status-success-fg/30 bg-status-success-bg/40 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <CheckCircle2 className="size-5 text-status-success-fg shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-foreground inline-flex items-center gap-1.5">
+                      <span>Published to</span>
+                      <PlatformLabel platform="linkedin" size="sm" />
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Your post was shared with {publishedPost.visibility.toLowerCase()} visibility.
+                    </p>
+                  </div>
                 </div>
 
-                {/* Floating controls on top of image */}
-                <div className="absolute top-3 right-3 flex items-center gap-2 bg-background/80 backdrop-blur-sm p-1.5 rounded-md border border-border">
+                <div className="flex items-center gap-2 flex-wrap">
                   <Button
-                    type="button"
+                    variant="default"
+                    size="sm"
+                    asChild
+                    className="h-8 gap-1.5 text-xs font-medium shadow-xs"
+                  >
+                    <Link href={publishedPost.post_id ? `/app/posts/${publishedPost.post_id}` : "/app/posts"}>
+                      <span>View in Dashboard</span>
+                      <ExternalLink className="size-3" />
+                    </Link>
+                  </Button>
+                  {publishedPost.linkedin_post_id && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      asChild
+                      className="h-8 gap-1.5 text-xs bg-background"
+                    >
+                      <a
+                        href={`https://www.linkedin.com/feed/update/${encodeURIComponent(
+                          publishedPost.linkedin_post_id
+                        )}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <span>View on LinkedIn</span>
+                        <ExternalLink className="size-3" />
+                      </a>
+                    </Button>
+                  )}
+                  <Button
                     variant="ghost"
                     size="sm"
+                    onClick={() => setPublishedPost(null)}
+                    className="h-8 text-xs text-muted-foreground"
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* Main Composer Card */}
+          <Card className="border border-card-border bg-card rounded-lg overflow-hidden">
+            <CardContent className="p-4 sm:p-6 space-y-6">
+              {/* 1. Optional Image Area */}
+              <div className="space-y-2">
+                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Attachment (Optional)
+                </Label>
+
+                {imagePreviewUrl ? (
+                  <div className="relative group rounded-lg overflow-hidden border border-border bg-muted/20">
+                    <div className="relative w-full h-48 sm:h-64">
+                      <Image
+                        src={imagePreviewUrl}
+                        alt="Post attachment preview"
+                        fill
+                        className="object-cover"
+                        unoptimized
+                      />
+                    </div>
+
+                    {/* Floating controls on top of image */}
+                    <div className="absolute top-3 right-3 flex items-center gap-2 bg-background/80 backdrop-blur-sm p-1.5 rounded-md border border-border">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="h-7 px-2 text-xs gap-1.5 text-foreground hover:bg-accent"
+                      >
+                        <RefreshCw className="size-3.5" />
+                        <span>Replace</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleRemoveImage}
+                        className="h-7 px-2 text-xs gap-1.5 text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="size-3.5" />
+                        <span>Remove</span>
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDragging(true);
+                    }}
+                    onDragLeave={() => setIsDragging(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDragging(false);
+                      const dropped = e.dataTransfer.files?.[0];
+                      if (dropped) handleSelectFile(dropped);
+                    }}
                     onClick={() => fileInputRef.current?.click()}
-                    className="h-7 px-2 text-xs gap-1.5 text-foreground hover:bg-accent"
+                    className={cn(
+                      "flex flex-col items-center justify-center h-44 rounded-lg border-2 border-dashed border-border bg-muted/10 p-6 text-center cursor-pointer transition-colors",
+                      "hover:border-foreground/30 hover:bg-muted/20",
+                      isDragging && "border-primary bg-primary/5"
+                    )}
                   >
-                    <RefreshCw className="size-3.5" />
-                    <span>Replace</span>
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleRemoveImage}
-                    className="h-7 px-2 text-xs gap-1.5 text-destructive hover:bg-destructive/10"
-                  >
-                    <Trash2 className="size-3.5" />
-                    <span>Remove</span>
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setIsDragging(true);
-                }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setIsDragging(false);
-                  const dropped = e.dataTransfer.files?.[0];
-                  if (dropped) handleSelectFile(dropped);
-                }}
-                onClick={() => fileInputRef.current?.click()}
-                className={cn(
-                  "flex flex-col items-center justify-center h-44 rounded-lg border-2 border-dashed border-border bg-muted/10 p-6 text-center cursor-pointer transition-colors",
-                  "hover:border-foreground/30 hover:bg-muted/20",
-                  isDragging && "border-primary bg-primary/5"
-                )}
-              >
-                <div className="size-10 rounded-full bg-secondary flex items-center justify-center text-muted-foreground mb-2">
-                  <ImageIcon className="size-5" />
-                </div>
-                <p className="text-sm font-medium text-foreground">
-                  Click or drag image to attach
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  JPEG, PNG, GIF, or WebP up to 5 MB
-                </p>
-              </div>
-            )}
-
-            {/* Hidden native file input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/gif,image/webp"
-              onChange={(e) => {
-                const selected = e.target.files?.[0];
-                if (selected) handleSelectFile(selected);
-              }}
-              className="hidden"
-            />
-          </div>
-
-          {/* 2. Rich Text Content Editor */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Post Content
-              </Label>
-              <span className="text-xs text-muted-foreground">
-                Bold, Italic, and Underline supported
-              </span>
-            </div>
-
-            <RichPostEditor
-              value={contentHtml}
-              onChange={(html, text) => {
-                setContentHtml(html);
-                setPlainText(text);
-              }}
-              onSubmitShortcut={() => {
-                if (!isSubmitDisabled) {
-                  handlePublish();
-                }
-              }}
-              disabled={isPosting}
-            />
-          </div>
-
-          {/* 3. Post Visibility Selector */}
-          <div className="space-y-3 pt-2 border-t border-border">
-            <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Who can see this post?
-            </Label>
-
-            <RadioGroup
-              value={visibility}
-              onValueChange={(val) => setVisibility(val as "PUBLIC" | "CONNECTIONS")}
-              className="grid grid-cols-1 sm:grid-cols-2 gap-3"
-            >
-              {/* Option 1: Anyone (PUBLIC) */}
-              <label
-                htmlFor="vis-anyone"
-                className={cn(
-                  "flex items-start gap-3 p-3.5 rounded-lg border cursor-pointer transition-all",
-                  visibility === "PUBLIC"
-                    ? "border-primary bg-primary/5 text-foreground ring-1 ring-primary"
-                    : "border-border bg-card text-muted-foreground hover:border-foreground/30 hover:text-foreground"
-                )}
-              >
-                <RadioGroupItem value="PUBLIC" id="vis-anyone" className="mt-0.5" />
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-                    <Globe className="size-4" />
-                    <span>Anyone</span>
+                    <div className="size-10 rounded-full bg-secondary flex items-center justify-center text-muted-foreground mb-2">
+                      <ImageIcon className="size-5" />
+                    </div>
+                    <p className="text-sm font-medium text-foreground">
+                      Click or drag image to attach
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      JPEG, PNG, GIF, or WebP up to 5 MB
+                    </p>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Visible to anyone on or off LinkedIn
-                  </p>
-                </div>
-              </label>
-
-              {/* Option 2: Connections Only (CONNECTIONS) */}
-              <label
-                htmlFor="vis-connections"
-                className={cn(
-                  "flex items-start gap-3 p-3.5 rounded-lg border cursor-pointer transition-all",
-                  visibility === "CONNECTIONS"
-                    ? "border-primary bg-primary/5 text-foreground ring-1 ring-primary"
-                    : "border-border bg-card text-muted-foreground hover:border-foreground/30 hover:text-foreground"
                 )}
-              >
-                <RadioGroupItem
-                  value="CONNECTIONS"
-                  id="vis-connections"
-                  className="mt-0.5"
+
+                {/* Hidden native file input */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  onChange={(e) => {
+                    const selected = e.target.files?.[0];
+                    if (selected) handleSelectFile(selected);
+                  }}
+                  className="hidden"
                 />
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-                    <Users className="size-4" />
-                    <span>Connections only</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Visible only to your LinkedIn network
-                  </p>
+              </div>
+
+              {/* 2. Rich Text Content Editor */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Post Content
+                  </Label>
+                  <span className="text-xs text-muted-foreground">
+                    Bold, Italic, and Underline supported
+                  </span>
                 </div>
-              </label>
-            </RadioGroup>
-          </div>
 
-          {/* 4. Action Buttons */}
-          <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-4 border-t border-border">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                if (plainText.trim() || imageFile) {
-                  setShowClearDialog(true);
-                } else {
-                  handleConfirmClear();
-                }
-              }}
-              disabled={isPosting || (!plainText.trim() && !imageFile)}
-              className="w-full sm:w-auto text-muted-foreground hover:text-foreground"
-            >
-              Clear draft
-            </Button>
+                <RichPostEditor
+                  value={contentHtml}
+                  onChange={(html, text) => {
+                    setContentHtml(html);
+                    setPlainText(text);
+                  }}
+                  onSubmitShortcut={() => {
+                    if (!isSubmitDisabled) {
+                      handlePublish();
+                    }
+                  }}
+                  disabled={isPosting}
+                />
+              </div>
 
-            <Button
-              type="button"
-              onClick={() => handlePublish()}
-              disabled={isSubmitDisabled}
-              className="w-full sm:w-auto h-10 px-6 font-medium text-sm text-primary-foreground bg-primary hover:bg-primary/90 transition-colors"
-            >
-              {isPosting ? (
-                <>
-                  <Loader2 className="size-4 animate-spin mr-2" />
-                  Posting...
-                </>
-              ) : (
-                <span className="inline-flex items-center gap-1.5">
-                  <span>Post to</span>
-                  <PlatformLabel platform="linkedin" size="sm" textClassName="text-primary-foreground" />
-                </span>
-              )}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-      </TabsContent>
+              {/* 3. Post Visibility Selector */}
+              <div className="space-y-3 pt-2 border-t border-border">
+                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Who can see this post?
+                </Label>
+
+                <RadioGroup
+                  value={visibility}
+                  onValueChange={(val) => setVisibility(val as "PUBLIC" | "CONNECTIONS")}
+                  className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+                >
+                  {/* Option 1: Anyone (PUBLIC) */}
+                  <label
+                    htmlFor="vis-anyone"
+                    className={cn(
+                      "flex items-start gap-3 p-3.5 rounded-lg border cursor-pointer transition-all",
+                      visibility === "PUBLIC"
+                        ? "border-primary bg-primary/5 text-foreground ring-1 ring-primary"
+                        : "border-border bg-card text-muted-foreground hover:border-foreground/30 hover:text-foreground"
+                    )}
+                  >
+                    <RadioGroupItem value="PUBLIC" id="vis-anyone" className="mt-0.5" />
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                        <Globe className="size-4" />
+                        <span>Anyone</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Visible to anyone on or off LinkedIn
+                      </p>
+                    </div>
+                  </label>
+
+                  {/* Option 2: Connections Only (CONNECTIONS) */}
+                  <label
+                    htmlFor="vis-connections"
+                    className={cn(
+                      "flex items-start gap-3 p-3.5 rounded-lg border cursor-pointer transition-all",
+                      visibility === "CONNECTIONS"
+                        ? "border-primary bg-primary/5 text-foreground ring-1 ring-primary"
+                        : "border-border bg-card text-muted-foreground hover:border-foreground/30 hover:text-foreground"
+                    )}
+                  >
+                    <RadioGroupItem
+                      value="CONNECTIONS"
+                      id="vis-connections"
+                      className="mt-0.5"
+                    />
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                        <Users className="size-4" />
+                        <span>Connections only</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Visible only to your LinkedIn network
+                      </p>
+                    </div>
+                  </label>
+                </RadioGroup>
+              </div>
+
+              {/* 4. Action Buttons */}
+              <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-4 border-t border-border">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    if (plainText.trim() || imageFile) {
+                      setShowClearDialog(true);
+                    } else {
+                      handleConfirmClear();
+                    }
+                  }}
+                  disabled={isPosting || (!plainText.trim() && !imageFile)}
+                  className="w-full sm:w-auto text-muted-foreground hover:text-foreground"
+                >
+                  Clear draft
+                </Button>
+
+                <Button
+                  type="button"
+                  onClick={() => handlePublish()}
+                  disabled={isSubmitDisabled}
+                  className="w-full sm:w-auto h-10 px-6 font-medium text-sm text-primary-foreground bg-primary hover:bg-primary/90 transition-colors"
+                >
+                  {isPosting ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin mr-2" />
+                      Posting...
+                    </>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5">
+                      <span>Post to</span>
+                      <PlatformLabel platform="linkedin" size="sm" textClassName="text-primary-foreground" />
+                    </span>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Connect LinkedIn Modal Dialog */}

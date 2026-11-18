@@ -8,9 +8,14 @@ import { Button } from "@/components/ui/button";
 import PixelBlast from "@/components/PixelBlast";
 import { ScrollReveal } from "./scroll-reveal";
 import { LinkedInIcon } from "./platform-icons";
+import { useSessionStatus } from "./use-session-status";
 
 // This component renders the final conversion section with a white pill button on navy-deep background.
 export function FinalCta() {
+  const { isLoaded, isSignedIn } = useSessionStatus();
+  const ctaHref = isSignedIn ? "/app" : "/auth/sign-up";
+  const ctaLabel = isSignedIn ? "Go to dashboard" : "Get started";
+
   return (
     /* Final CTA on #001740 navy-deep canvas with 64px mobile vertical spacing */
     <section
@@ -61,11 +66,11 @@ export function FinalCta() {
             Daily drafts prepared from your profile and current industry topics. You approve each one before it goes live.
           </p>
 
-          {/* Full-width button on mobile, centered pill button on tablet and desktop */}
+          {/* Full-width button on mobile, fixed-width centered pill button on tablet and desktop */}
           <div className="mt-8 flex justify-center">
-            <Link href="/auth/sign-up" className="w-full sm:w-auto">
-              <Button className="w-full sm:w-auto rounded-full bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] active:scale-[0.98] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] px-8 h-12 min-h-[44px] text-[15px] lg:text-base font-normal">
-                Get started
+            <Link href={ctaHref} className="w-full sm:w-auto">
+              <Button className="w-full sm:w-[190px] rounded-full bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] active:scale-[0.98] transition-all duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] px-8 h-12 min-h-[44px] text-[15px] lg:text-base font-normal">
+                <span className={isLoaded ? "opacity-100" : "opacity-0"}>{ctaLabel}</span>
               </Button>
             </Link>
           </div>
