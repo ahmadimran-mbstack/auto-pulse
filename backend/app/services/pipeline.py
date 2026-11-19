@@ -191,6 +191,12 @@ class PipelineState(TypedDict, total=False):
     error_code: Optional[str]
     error_detail: Optional[str]
 
+    # Customization context
+    use_customization: bool
+    customization: Optional[Dict[str, Any]]
+    policy: Optional[Dict[str, Any]]
+    retrieved_context: Optional[Dict[str, Any]]
+
 
 # Initialize a chat model from settings or model string with resilient fallback
 def create_chat_model(model_name: str, temperature: Optional[float] = None) -> Any:
@@ -714,6 +720,33 @@ def build_graph(
         }
 
     # Node 4: GTM AGENT (Generates content brief before drafting)
+    def retrieve_node(state: PipelineState) -> Dict[str, Any]:
+        start_t = time.perf_counter()
+        seconds = dict(state.get("seconds_per_node", {}))
+        cust = state.get("customization") or {}
+        if not cust or cust.get("is_empty", True):
+            seconds["retrieve"] = round(time.perf_counter() - start_t, 3)
+            return {"retrieved_context": None, "seconds_per_node": seconds}
+
+        from app.services.customization.compiler import CustomizationContext
+        from app.services.customization.retrieval import retrieve_for_topic
+
+        finder_dict = state.get("finder_output") or {}
+        chosen = state.get("chosen") or {}
+        topic_label = state.get("topic_label") or finder_dict.get("topic_label") or chosen.get("title") or ""
+        angle = state.get("angle") or finder_dict.get("angle") or ""
+        why_now = state.get("why_now") or finder_dict.get("why_now") or ""
+        ctx_obj = CustomizationContext.model_validate(cust)
+        retrieved = retrieve_for_topic(
+            user_id=state.get("user_id", ""),
+            topic_label=topic_label,
+            angle=angle,
+            why_now=why_now,
+            context=ctx_obj,
+        )
+        seconds["retrieve"] = round(time.perf_counter() - start_t, 3)
+        return {"retrieved_context": retrieved, "seconds_per_node": seconds}
+
     def gtm_brief_node(state: PipelineState) -> Dict[str, Any]:
         _notify_step("gtm_brief", state.get("round", 0), state)
         start_t = time.perf_counter()
@@ -769,6 +802,10 @@ def build_graph(
                 f"Use one of these grounded facts if relevant: {facts_hint or 'none (pick a non-number hook)'}\n"
             )
 
+        from app.agents.gtm import resolve_playbook_rules
+
+        playbook_rules_override = resolve_playbook_rules(state.get("customization"))
+
         counters["llm_calls"] = counters.get("llm_calls", 0) + 1
         counters["tokens_in"] = counters.get("tokens_in", 0) + 650
         counters["tokens_out"] = counters.get("tokens_out", 0) + 280
@@ -787,6 +824,7 @@ def build_graph(
                 allowed_hook_styles=allowed_styles,
                 recent_hooks=recent_hooks,
                 feedback_block=gtm_feedback,
+                playbook_rules_override=playbook_rules_override,
             )
         except Exception as exc:
             seconds["gtm_brief"] = round(time.perf_counter() - start_t, 3)
@@ -831,6 +869,43 @@ def build_graph(
         key_facts = state.get("key_facts") or (state.get("finder_output") or {}).get("key_facts") or []
         hook_text = state.get("hook_text") or (state.get("gtm_brief") or {}).get("hook_text") or (state.get("gtm_brief") or {}).get("chosen_hook") or ""
 
+        policy = state.get("policy")
+        cust = state.get("customization") or {}
+        retrieved = state.get("retrieved_context") or {}
+        customization_block = ""
+        if cust and not cust.get("is_empty", True):
+            g = cust.get("guidance") or {}
+            facts_list = retrieved.get("facts") or g.get("business_facts") or []
+            facts_txt = "\n".join(
+                f"[{i}] {f.get('text', '')} (Source: {f.get('source_label', '')})"
+                for i, f in enumerate(facts_list, 1)
+            ) or "None."
+            exemplars_list = retrieved.get("exemplars") or g.get("exemplars") or []
+            ex_txt = "\n---\n".join(e.get("text", "") for e in exemplars_list) or "None."
+            customization_block = (
+                "\n# Author Preferences (follow unless they conflict with SYSTEM safety/grounding):\n"
+                "<<<USER_PREFERENCES>>>\n"
+                f"Custom instructions:\n{g.get('custom_instructions') or 'None.'}\n\n"
+                f"Playbook rules:\n{g.get('playbook_rules_text') or 'Default.'}\n\n"
+                f"Voice: {g.get('voice_summary') or 'Default.'}\n"
+                f"Traits: {', '.join(g.get('voice_traits') or [])}\n"
+                f"Prefer words: {', '.join(g.get('vocabulary_preferred') or [])}\n"
+                f"Never use: {', '.join(g.get('vocabulary_avoid') or [])}\n"
+                "<<<END_USER_PREFERENCES>>>\n\n"
+                "# Business context (facts you MAY use; numbers here are allowed):\n"
+                "<<<UNTRUSTED_BUSINESS_CONTEXT>>>\n"
+                f"Business mention policy: {g.get('business_mention', 'natural')}\n"
+                f"{g.get('business_brief_text') or ''}\n"
+                f"Facts relevant to this topic:\n{facts_txt}\n"
+                f"Spell exactly: {', '.join(g.get('terminology') or [])}\n"
+                f"Never claim: {', '.join(g.get('claims_to_avoid') or [])}\n"
+                "<<<END_UNTRUSTED_BUSINESS_CONTEXT>>>\n\n"
+                "# Style exemplars (match rhythm and formatting; NEVER copy sentences):\n"
+                "<<<UNTRUSTED_STYLE_EXEMPLARS>>>\n"
+                f"{ex_txt}\n"
+                "<<<END_UNTRUSTED_STYLE_EXEMPLARS>>>\n"
+            )
+
         counters["llm_calls"] = counters.get("llm_calls", 0) + 1
         counters["tokens_in"] = counters.get("tokens_in", 0) + 950
         counters["tokens_out"] = counters.get("tokens_out", 0) + 420
@@ -847,6 +922,8 @@ def build_graph(
                     angle=angle,
                     key_facts=key_facts,
                     hook_text=hook_text,
+                    policy=policy,
+                    customization_block=customization_block,
                 )
             else:
                 # Mode 2: Targeted Span Rewrite with previous issues and judge critique
@@ -871,6 +948,8 @@ def build_graph(
                     angle=angle,
                     key_facts=key_facts,
                     hook_text=hook_text,
+                    policy=policy,
+                    customization_block=customization_block,
                 )
         except Exception as exc:
             seconds[f"drafter_r{current_round}"] = round(time.perf_counter() - start_t, 3)
@@ -914,6 +993,11 @@ def build_graph(
         post_text = draft.get("post_text", "")
         candidates = state.get("candidates", [])
 
+        cust = state.get("customization") or {}
+        policy = state.get("policy") or {}
+        whitelist_words = (cust.get("guidance") or {}).get("vocabulary_preferred") if not cust.get("is_empty", True) else None
+        extra_banned = policy.get("banned_phrases_extra") if policy else None
+
         counters["llm_calls"] = counters.get("llm_calls", 0) + 1
         counters["tokens_in"] = counters.get("tokens_in", 0) + 650
         counters["tokens_out"] = counters.get("tokens_out", 0) + 280
@@ -923,6 +1007,8 @@ def build_graph(
                 sources=candidates[:3],
                 model=_detector_model,
                 threshold=settings.AI_SCORE_THRESHOLD,
+                whitelist_words=whitelist_words,
+                extra_banned_phrases=extra_banned,
             )
         except Exception as exc:
             seconds[f"detector_r{current_round}"] = round(time.perf_counter() - start_t, 3)
@@ -960,6 +1046,16 @@ def build_graph(
         topic_label = state.get("topic_label") or (state.get("finder_output") or {}).get("topic_label") or ""
         key_facts = state.get("key_facts") or (state.get("finder_output") or {}).get("key_facts") or []
 
+        cust = state.get("customization") or {}
+        retrieved = state.get("retrieved_context") or {}
+        extra_nums: List[str] = []
+        sample_texts: List[str] = []
+        if cust and not cust.get("is_empty", True):
+            g = cust.get("guidance") or {}
+            for f in (retrieved.get("facts") or g.get("business_facts") or []):
+                extra_nums.extend(f.get("numbers") or [])
+            sample_texts = [e.get("text", "") for e in (retrieved.get("exemplars") or g.get("exemplars") or []) if e.get("text")]
+
         eval_context = {
             "profile": profile,
             "key_facts": key_facts,
@@ -970,6 +1066,9 @@ def build_graph(
             "history": state.get("history", []),
             "recent_captions": state.get("recent_captions", []),
             "ai_slop_score": slop_score,
+            "policy": state.get("policy"),
+            "extra_allowed_numbers": extra_nums or None,
+            "sample_texts": sample_texts or None,
         }
 
         counters["llm_calls"] = counters.get("llm_calls", 0) + 1
@@ -1247,6 +1346,8 @@ def build_graph(
         key_facts = state.get("key_facts") or (state.get("finder_output") or {}).get("key_facts") or []
 
         # Build private internal trace (never exposed via any public API)
+        cust = state.get("customization") or {}
+        retrieved = state.get("retrieved_context") or {}
         internal_trace = {
             "candidates": candidates_log,
             "chosen_round": best_clean_round,
@@ -1254,6 +1355,18 @@ def build_graph(
             "stop_reason": exit_reason,
             "below_target": bool(best_clean_draft is not None and best_clean_score < MIN_ACCEPTABLE),
             "llm_calls": counters.get("llm_calls", 0),
+            "customization": {
+                "version_id": cust.get("version_id") or None,
+                "version": cust.get("version") or 0,
+                "is_empty": bool(cust.get("is_empty", True)),
+                "retrieval": {
+                    "query": retrieved.get("query"),
+                    "fact_ids": [f.get("id") for f in (retrieved.get("facts") or [])],
+                    "exemplar_ids": [e.get("id") for e in (retrieved.get("exemplars") or [])],
+                    "fallback": bool(retrieved.get("fallback", True)),
+                    "latency_ms": retrieved.get("latency_ms", 0),
+                },
+            },
         }
 
         if not best_clean_draft:
@@ -1444,6 +1557,7 @@ def build_graph(
         workflow.add_conditional_edges("finder", route_after_node(END), [END])
         return workflow.compile()
 
+    workflow.add_node("retrieve", _wrap_node("retrieve", retrieve_node), retry_policy=transient_retry)
     workflow.add_node("gtm_brief", _wrap_node("gtm_brief", gtm_brief_node), retry_policy=transient_retry)
     workflow.add_node("drafter", _wrap_node("drafter", drafter_node), retry_policy=transient_retry)
     workflow.add_node("check", _wrap_node("check", check_node))
@@ -1473,7 +1587,8 @@ def build_graph(
     workflow.add_edge(START, "plan")
     workflow.add_conditional_edges("plan", route_after_node("search"), ["search", END])
     workflow.add_conditional_edges("search", route_after_node("finder"), ["finder", END])
-    workflow.add_conditional_edges("finder", route_after_node("gtm_brief"), ["gtm_brief", END])
+    workflow.add_conditional_edges("finder", route_after_node("retrieve"), ["retrieve", END])
+    workflow.add_conditional_edges("retrieve", route_after_node("gtm_brief"), ["gtm_brief", END])
     workflow.add_conditional_edges("gtm_brief", route_after_node("drafter"), ["drafter", END])
     workflow.add_conditional_edges("drafter", route_after_node("detector"), ["detector", END])
     workflow.add_conditional_edges("detector", route_after_node("check"), ["check", END])
@@ -1557,6 +1672,7 @@ def execute_pipeline(
     is_manual: bool = False,
     run_id: Optional[str] = None,
     event_emitter: Optional[Any] = None,
+    use_customization: bool = True,
 ) -> Dict[str, Any]:
     """Single unified entrypoint for both daily content generation runs and playground runs."""
     import uuid
@@ -1572,6 +1688,31 @@ def execute_pipeline(
             profile_dict = merged_profile
         except Exception as exc:
             logger.warning(f"Could not load content profile for user {user_id}: {exc}")
+
+    # Load compiled CustomizationContext (never raises; falls back to empty)
+    customization_dict: Dict[str, Any] = {"is_empty": True}
+    policy_dict: Optional[Dict[str, Any]] = None
+    if use_customization:
+        try:
+            from app.services.customization.context import get_customization_context
+
+            ctx = get_customization_context(user_id=user_id)
+            customization_dict = ctx.model_dump()
+            if not ctx.is_empty:
+                policy_dict = ctx.policy.model_dump()
+                profile_dict = dict(profile_dict or {})
+                inc = list(profile_dict.get("topics_include") or [])
+                avd = list(profile_dict.get("topics_avoid") or [])
+                for t in ctx.guidance.topics_include_extra:
+                    if t not in inc:
+                        inc.append(t)
+                for t in ctx.guidance.topics_avoid_extra:
+                    if t not in avd:
+                        avd.append(t)
+                profile_dict["topics_include"] = inc
+                profile_dict["topics_avoid"] = avd
+        except Exception as exc:
+            logger.warning(f"Could not load customization context for user {user_id}: {exc}")
 
     recent_titles = [p.get("topic_title") for p in history if p.get("topic_title")]
     recent_captions = [p.get("caption_preview", "") for p in history if p.get("caption_preview")]
@@ -1618,6 +1759,10 @@ def execute_pipeline(
         "repaired_once": False,
         "topic_retry_count": 0,
         "cancelled": False,
+        "use_customization": use_customization,
+        "customization": customization_dict,
+        "policy": policy_dict,
+        "retrieved_context": None,
         "best_score": 999,
     }
 
