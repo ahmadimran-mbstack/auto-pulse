@@ -1,41 +1,43 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AuthShell } from "../components/AuthShell";
+import { authToast } from "@/lib/auth-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 // Forgot password page requesting an OTP code to reset user credentials
 export default function ForgotPasswordPage() {
   const router = useRouter();
-  const errorRef = useRef<HTMLDivElement>(null);
   const [email, setEmail] = useState("");
   const [isPending, setIsPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Moves focus to error container when an error occurs
-  useEffect(() => {
-    if (error && errorRef.current) {
-      errorRef.current.focus();
-    }
-  }, [error]);
+  const [emailError, setEmailError] = useState<string | null>(null);
 
   // Sends password reset code via the authentication service
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    authToast.dismiss();
+
     const cleanEmail = email.trim();
 
     if (!cleanEmail) {
-      setError("Please enter your email address.");
+      setEmailError("Please enter your email address.");
       return;
     }
 
+    if (!EMAIL_PATTERN.test(cleanEmail)) {
+      setEmailError("Please enter a valid email address.");
+      return;
+    }
+
+    setEmailError(null);
     setIsPending(true);
-    setError(null);
 
     try {
       const res = await fetch("/api/auth/email-otp/send-verification-otp", {
@@ -49,13 +51,28 @@ export default function ForgotPasswordPage() {
 
       const data = await res.json().catch(() => ({}));
 
+      if (res.status === 429) {
+        const waitSeconds = Number(
+          data?.retry_after || res.headers.get("Retry-After") || 60
+        );
+        authToast.warning("Too many attempts", {
+          id: "forgot-password-rate-limit",
+          description: `Please wait ${waitSeconds} seconds before trying again.`,
+        });
+        return;
+      }
+
       if (!res.ok || data.error) {
         const msg =
           data.error?.message ||
           data.message ||
           "Failed to send reset code. Please try again.";
-        setError(msg);
+        authToast.error(msg, { id: "forgot-password-error" });
       } else {
+        authToast.success("Reset code sent", {
+          id: "forgot-password-sent",
+          description: `We sent a verification code to ${cleanEmail}.`,
+        });
         // Navigate directly to the reset-password page with email prefilled
         router.push(
           `/auth/reset-password?email=${encodeURIComponent(cleanEmail)}`
@@ -66,7 +83,7 @@ export default function ForgotPasswordPage() {
         err instanceof Error
           ? err.message
           : "An unexpected error occurred while requesting password reset.";
-      setError(message);
+      authToast.error(message, { id: "forgot-password-error" });
     } finally {
       setIsPending(false);
     }
@@ -88,7 +105,7 @@ export default function ForgotPasswordPage() {
         </p>
       }
     >
-      <form onSubmit={handleSubmit} className="text-left font-normal">
+      <form noValidate onSubmit={handleSubmit} className="text-left font-normal">
         <div className="flex flex-col gap-3">
           {/* Email input field */}
           <div className="flex flex-col gap-1.5">
@@ -99,32 +116,34 @@ export default function ForgotPasswordPage() {
               id="email"
               name="email"
               type="email"
-              required
               autoComplete="email"
               placeholder="name@company.com"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="h-10 rounded-[8px] border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
+              aria-invalid={Boolean(emailError)}
+              aria-describedby={emailError ? "email-error" : undefined}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (emailError) setEmailError(null);
+              }}
+              className={`h-10 rounded-[8px] border bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none ${
+                emailError
+                  ? "border-[#ff6369] focus-visible:border-[#ff6369] focus-visible:ring-[#ff6369]/60"
+                  : "border-[var(--lp-border-input)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-[var(--lp-ice)]/60"
+              }`}
             />
+            {/* Inline field error for email validation */}
+            {emailError && (
+              <p id="email-error" className="mt-1 text-xs leading-[1.3] text-[#ff8589] font-normal">
+                {emailError}
+              </p>
+            )}
           </div>
         </div>
-
-        {/* Inline error notice: 12px above, 8px 12px padding */}
-        {error && (
-          <div
-            ref={errorRef}
-            tabIndex={-1}
-            role="alert"
-            className="mt-3 px-3 py-2 rounded-[8px] bg-[#ff6369]/10 text-[#ff8589] text-sm border border-[#ff6369]/30 outline-none font-normal"
-          >
-            {error}
-          </div>
-        )}
 
         {/* Primary submit action: 16px below last field */}
         <Button
           type="submit"
-          disabled={isPending || !email.trim()}
+          disabled={isPending}
           className="mt-4 w-full h-10 rounded-[8px] bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] transition-colors !font-normal text-sm flex items-center justify-center gap-2"
         >
           {isPending ? (

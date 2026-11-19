@@ -1,15 +1,17 @@
 "use client";
 
-import { Suspense, useState, useEffect, useRef } from "react";
+import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth/client";
+import { authToast } from "@/lib/auth-toast";
 import { AuthShell } from "../components/AuthShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { CheckCircle2, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 interface LegacyResetClient {
   resetPassword?: (options: {
@@ -22,7 +24,6 @@ interface LegacyResetClient {
 function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const errorRef = useRef<HTMLDivElement>(null);
 
   const initialEmail = searchParams.get("email") || "";
   const token = searchParams.get("token");
@@ -35,16 +36,20 @@ function ResetPasswordForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
-  const [error, setError] = useState<string | null>(urlError || null);
   const [resendCooldown, setResendCooldown] = useState(0);
-  const [resendNotice, setResendNotice] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{
+    email?: string;
+    otp?: string;
+    newPassword?: string;
+    confirmPassword?: string;
+  }>({});
 
-  // Moves focus to error container when an error occurs
+  // Shows URL-based reset errors as a toast on mount
   useEffect(() => {
-    if (error && errorRef.current) {
-      errorRef.current.focus();
+    if (urlError) {
+      authToast.error(urlError, { id: "reset-password-url-error" });
     }
-  }, [error]);
+  }, [urlError]);
 
   // Resend cooldown countdown timer
   useEffect(() => {
@@ -55,14 +60,17 @@ function ResetPasswordForm() {
 
   // Requests a fresh OTP code
   const handleResendCode = async () => {
+    authToast.dismiss();
     const cleanEmail = email.trim();
-    if (!cleanEmail) {
-      setError("Please enter your email address to request a new code.");
+    if (!cleanEmail || !EMAIL_PATTERN.test(cleanEmail)) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        email: "Please enter your email address to request a new code.",
+      }));
       return;
     }
 
-    setError(null);
-    setResendNotice(null);
+    setFieldErrors((prev) => ({ ...prev, email: undefined }));
 
     try {
       const res = await fetch("/api/auth/email-otp/send-verification-otp", {
@@ -76,43 +84,80 @@ function ResetPasswordForm() {
 
       const data = await res.json().catch(() => ({}));
 
+      if (res.status === 429) {
+        const waitSeconds = Number(
+          data?.retry_after || res.headers.get("Retry-After") || 60
+        );
+        setResendCooldown(waitSeconds);
+        authToast.warning("Too many attempts", {
+          id: "reset-password-rate-limit",
+          description: `Please wait ${waitSeconds} seconds before requesting another code.`,
+        });
+        return;
+      }
+
       if (!res.ok || data.error) {
-        setError(data.error?.message || "Failed to resend code. Please try again.");
+        authToast.error(
+          data.error?.message || "Failed to resend code. Please try again.",
+          { id: "reset-password-resend-error" }
+        );
       } else {
         setResendCooldown(60);
-        setResendNotice(`A fresh verification code was sent to ${cleanEmail}.`);
+        authToast.success("Code sent", {
+          id: "reset-password-code-sent",
+          description: `A fresh verification code was sent to ${cleanEmail}.`,
+        });
       }
     } catch {
-      setError("Failed to resend verification code. Please check your network connection.");
+      authToast.error(
+        "Failed to resend verification code. Please check your network connection.",
+        { id: "reset-password-resend-error" }
+      );
     }
+  };
+
+  // Validates email, OTP, and password fields inline before submitting
+  const validateFields = (cleanEmail: string, cleanOtp: string) => {
+    const nextErrors: {
+      email?: string;
+      otp?: string;
+      newPassword?: string;
+      confirmPassword?: string;
+    } = {};
+
+    if (!cleanEmail) {
+      nextErrors.email = "Please enter your account email address.";
+    } else if (!EMAIL_PATTERN.test(cleanEmail)) {
+      nextErrors.email = "Please enter a valid email address.";
+    }
+
+    if (!token && (!cleanOtp || cleanOtp.length < 6)) {
+      nextErrors.otp =
+        "Please enter the complete 6-digit verification code sent to your email.";
+    }
+
+    if (newPassword.length < 8) {
+      nextErrors.newPassword = "Password must be at least 8 characters long.";
+    }
+
+    if (newPassword !== confirmPassword) {
+      nextErrors.confirmPassword =
+        "Passwords do not match. Please retype your password.";
+    }
+
+    setFieldErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
   };
 
   // Submits the new password with OTP verification
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setError(null);
-    setResendNotice(null);
+    authToast.dismiss();
 
     const cleanEmail = email.trim();
     const cleanOtp = otp.trim();
 
-    if (!cleanEmail) {
-      setError("Please enter your account email address.");
-      return;
-    }
-
-    if (!token && (!cleanOtp || cleanOtp.length < 6)) {
-      setError("Please enter the complete 6-digit verification code sent to your email.");
-      return;
-    }
-
-    if (newPassword.length < 8) {
-      setError("Password must be at least 8 characters long.");
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setError("Passwords do not match. Please retype your password.");
+    if (!validateFields(cleanEmail, cleanOtp)) {
       return;
     }
 
@@ -129,11 +174,19 @@ function ResetPasswordForm() {
           });
 
           if (result?.error) {
-            setError(result.error.message || "Failed to reset password. The link may have expired.");
+            authToast.error(
+              result.error.message ||
+                "Failed to reset password. The link may have expired.",
+              { id: "reset-password-error" }
+            );
             setIsPending(false);
             return;
           }
 
+          authToast.success(
+            "Your password has been successfully updated. You can now sign in with your new password.",
+            { id: "reset-password-success" }
+          );
           setIsSuccess(true);
           setIsPending(false);
           return;
@@ -153,13 +206,30 @@ function ResetPasswordForm() {
 
       const data = await res.json().catch(() => ({}));
 
+      if (res.status === 429) {
+        const waitSeconds = Number(
+          data?.retry_after || res.headers.get("Retry-After") || 60
+        );
+        authToast.warning("Too many attempts", {
+          id: "reset-password-rate-limit",
+          description: `Please wait ${waitSeconds} seconds before trying again.`,
+        });
+        return;
+      }
+
       if (!res.ok || data.error || data.code === "INVALID_OTP") {
         const msg =
           data.code === "INVALID_OTP"
             ? "Invalid or expired verification code. Please check your inbox or request a new code."
-            : data.error?.message || data.message || "Failed to reset password. Please try again.";
-        setError(msg);
+            : data.error?.message ||
+              data.message ||
+              "Failed to reset password. Please try again.";
+        authToast.error(msg, { id: "reset-password-error" });
       } else {
+        authToast.success(
+          "Your password has been successfully updated. You can now sign in with your new password.",
+          { id: "reset-password-success" }
+        );
         setIsSuccess(true);
       }
     } catch (err: unknown) {
@@ -167,22 +237,16 @@ function ResetPasswordForm() {
         err instanceof Error
           ? err.message
           : "An unexpected error occurred while resetting your password.";
-      setError(message);
+      authToast.error(message, { id: "reset-password-error" });
     } finally {
       setIsPending(false);
     }
   };
 
-  // Success confirmation screen
+  // Success confirmation action without standalone banner
   if (isSuccess) {
     return (
-      <div className="space-y-4 text-left font-normal">
-        <Alert className="border-[#46a758]/30 bg-[#46a758]/10 text-[#62c073] font-normal">
-          <CheckCircle2 className="size-4 text-[#62c073] shrink-0" aria-hidden="true" />
-          <AlertDescription className="text-sm font-normal text-[var(--lp-text-body)]">
-            Your password has been successfully updated. You can now sign in with your new password.
-          </AlertDescription>
-        </Alert>
+      <div className="text-left font-normal">
         <Button
           type="button"
           onClick={() => router.push("/auth/sign-in")}
@@ -195,7 +259,7 @@ function ResetPasswordForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="text-left font-normal">
+    <form noValidate onSubmit={handleSubmit} className="text-left font-normal">
       <div className="flex flex-col gap-3">
         {/* Email input field */}
         <div className="flex flex-col gap-1.5">
@@ -206,13 +270,29 @@ function ResetPasswordForm() {
             id="email"
             name="email"
             type="email"
-            required
             autoComplete="email"
             placeholder="name@company.com"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="h-10 rounded-[8px] border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
+            aria-invalid={Boolean(fieldErrors.email)}
+            aria-describedby={fieldErrors.email ? "email-error" : undefined}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              if (fieldErrors.email) {
+                setFieldErrors((prev) => ({ ...prev, email: undefined }));
+              }
+            }}
+            className={`h-10 rounded-[8px] border bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none ${
+              fieldErrors.email
+                ? "border-[#ff6369] focus-visible:border-[#ff6369] focus-visible:ring-[#ff6369]/60"
+                : "border-[var(--lp-border-input)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-[var(--lp-ice)]/60"
+            }`}
           />
+          {/* Inline field error for email */}
+          {fieldErrors.email && (
+            <p id="email-error" className="mt-1 text-xs leading-[1.3] text-[#ff8589] font-normal">
+              {fieldErrors.email}
+            </p>
+          )}
         </div>
 
         {/* 6-digit verification code input (shown unless token link is present) */}
@@ -242,17 +322,27 @@ function ResetPasswordForm() {
               maxLength={6}
               placeholder="6-digit code"
               value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-              className="h-10 rounded-[8px] border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 text-[var(--lp-text-heading)] font-mono text-center tracking-widest text-sm font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
+              aria-invalid={Boolean(fieldErrors.otp)}
+              aria-describedby={fieldErrors.otp ? "otp-error" : undefined}
+              onChange={(e) => {
+                setOtp(e.target.value.replace(/\D/g, ""));
+                if (fieldErrors.otp) {
+                  setFieldErrors((prev) => ({ ...prev, otp: undefined }));
+                }
+              }}
+              className={`h-10 rounded-[8px] border bg-[var(--lp-surface)] px-3.5 text-[var(--lp-text-heading)] font-mono text-center tracking-widest text-sm font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none ${
+                fieldErrors.otp
+                  ? "border-[#ff6369] focus-visible:border-[#ff6369] focus-visible:ring-[#ff6369]/60"
+                  : "border-[var(--lp-border-input)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-[var(--lp-ice)]/60"
+              }`}
             />
+            {/* Inline field error for OTP code */}
+            {fieldErrors.otp && (
+              <p id="otp-error" className="mt-1 text-xs leading-[1.3] text-[#ff8589] font-normal">
+                {fieldErrors.otp}
+              </p>
+            )}
           </div>
-        )}
-
-        {/* Resend notice alert */}
-        {resendNotice && (
-          <p className="text-xs leading-[1.3] text-[var(--lp-ice)] font-normal">
-            {resendNotice}
-          </p>
         )}
 
         {/* New password input */}
@@ -265,12 +355,27 @@ function ResetPasswordForm() {
               id="newPassword"
               name="newPassword"
               type={showPassword ? "text" : "password"}
-              required
               autoComplete="new-password"
               placeholder="At least 8 characters"
               value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="h-10 rounded-[8px] border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 pr-10 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
+              aria-invalid={Boolean(fieldErrors.newPassword)}
+              aria-describedby={
+                fieldErrors.newPassword ? "new-password-error" : undefined
+              }
+              onChange={(e) => {
+                setNewPassword(e.target.value);
+                if (fieldErrors.newPassword) {
+                  setFieldErrors((prev) => ({
+                    ...prev,
+                    newPassword: undefined,
+                  }));
+                }
+              }}
+              className={`h-10 rounded-[8px] border bg-[var(--lp-surface)] px-3.5 pr-10 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none ${
+                fieldErrors.newPassword
+                  ? "border-[#ff6369] focus-visible:border-[#ff6369] focus-visible:ring-[#ff6369]/60"
+                  : "border-[var(--lp-border-input)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-[var(--lp-ice)]/60"
+              }`}
             />
             <button
               type="button"
@@ -285,6 +390,12 @@ function ResetPasswordForm() {
               )}
             </button>
           </div>
+          {/* Inline field error for new password */}
+          {fieldErrors.newPassword && (
+            <p id="new-password-error" className="mt-1 text-xs leading-[1.3] text-[#ff8589] font-normal">
+              {fieldErrors.newPassword}
+            </p>
+          )}
         </div>
 
         {/* Confirm password input */}
@@ -297,12 +408,29 @@ function ResetPasswordForm() {
               id="confirmPassword"
               name="confirmPassword"
               type={showPassword ? "text" : "password"}
-              required
               autoComplete="new-password"
               placeholder="Retype your new password"
               value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="h-10 rounded-[8px] border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 pr-10 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
+              aria-invalid={Boolean(fieldErrors.confirmPassword)}
+              aria-describedby={
+                fieldErrors.confirmPassword
+                  ? "confirm-password-error"
+                  : undefined
+              }
+              onChange={(e) => {
+                setConfirmPassword(e.target.value);
+                if (fieldErrors.confirmPassword) {
+                  setFieldErrors((prev) => ({
+                    ...prev,
+                    confirmPassword: undefined,
+                  }));
+                }
+              }}
+              className={`h-10 rounded-[8px] border bg-[var(--lp-surface)] px-3.5 pr-10 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none ${
+                fieldErrors.confirmPassword
+                  ? "border-[#ff6369] focus-visible:border-[#ff6369] focus-visible:ring-[#ff6369]/60"
+                  : "border-[var(--lp-border-input)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-[var(--lp-ice)]/60"
+              }`}
             />
             <button
               type="button"
@@ -317,25 +445,19 @@ function ResetPasswordForm() {
               )}
             </button>
           </div>
+          {/* Inline field error for password confirmation */}
+          {fieldErrors.confirmPassword && (
+            <p id="confirm-password-error" className="mt-1 text-xs leading-[1.3] text-[#ff8589] font-normal">
+              {fieldErrors.confirmPassword}
+            </p>
+          )}
         </div>
       </div>
-
-      {/* Inline error notice: 12px above, 8px 12px padding */}
-      {error && (
-        <div
-          ref={errorRef}
-          tabIndex={-1}
-          role="alert"
-          className="mt-3 px-3 py-2 rounded-[8px] bg-[#ff6369]/10 text-[#ff8589] text-sm border border-[#ff6369]/30 outline-none font-normal"
-        >
-          {error}
-        </div>
-      )}
 
       {/* Submit button: 16px below last field */}
       <Button
         type="submit"
-        disabled={isPending || newPassword.length < 8 || newPassword !== confirmPassword}
+        disabled={isPending}
         className="mt-4 w-full h-10 rounded-[8px] bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] transition-colors !font-normal text-sm flex items-center justify-center gap-2"
       >
         {isPending ? (
