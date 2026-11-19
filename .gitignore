@@ -57,3 +57,11 @@ backend/calibration/ai_instructed/
 human_samples/
 ai_lazy/
 ai_instructed/
+docs/stack-and-cost-audit.md
+
+# Internal planning docs
+docs/customization-module.md
+
+# Local object storage (dev)
+.storage/
+backend/.storage/

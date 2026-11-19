@@ -126,6 +126,54 @@ class Settings(BaseSettings):
     SLACK_SIGNING_SECRET: Optional[str] = None
     SLACK_SCOPES: str = "chat:write,im:write"
 
+    # Customization module settings
+    CUSTOMIZATION_ENABLED: bool = False
+    CUSTOMIZATION_BETA_USER_IDS: Optional[str] = None
+    CUSTOMIZATION_MAX_FILE_MB: int = 10
+    CUSTOMIZATION_WORKER_ENABLED: bool = True
+    LLM_MODEL_DISTILLER: str = "gemini-3.5-flash-lite"
+
+    # Object storage (local | s3)
+    STORAGE_BACKEND: str = "local"
+    STORAGE_LOCAL_DIR: str = "./.storage"
+    S3_ENDPOINT_URL: Optional[str] = None
+    S3_BUCKET: Optional[str] = None
+    S3_ACCESS_KEY_ID: Optional[str] = None
+    S3_SECRET_ACCESS_KEY: Optional[str] = None
+    S3_ACCOUNT_API_TOKEN: Optional[str] = None
+    S3_REGION: str = "auto"
+    RETAIN_ORIGINALS: bool = True
+
+    # Embeddings & retrieval (Hugging Face Inference API)
+    HF_EMBEDDING_API_KEY: Optional[str] = None
+    HF_EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+    HF_EMBEDDING_PROVIDER: str = "hf-inference"
+    HF_EMBEDDING_BASE_URL: str = "https://router.huggingface.co/hf-inference/models"
+    EMBEDDING_DIM: int = 384
+    EMBEDDING_BATCH_SIZE: int = 32
+    EMBEDDING_TIMEOUT_SECONDS: int = 20
+    EMBEDDING_QUERY_PREFIX: str = ""
+    RETRIEVAL_ENABLED: bool = True
+    RETRIEVAL_FACTS_TOP_K: int = 8
+    RETRIEVAL_EXEMPLARS_TOP_K: int = 3
+    RETRIEVAL_MIN_SIMILARITY: float = 0.35
+
+    @field_validator("STORAGE_BACKEND")
+    @classmethod
+    def validate_storage_backend(cls, value: str) -> str:
+        cleaned = value.split("#", 1)[0].strip().lower()
+        if cleaned not in {"local", "s3"}:
+            raise ValueError("STORAGE_BACKEND must be either 'local' or 's3'")
+        return cleaned
+
+    def is_customization_enabled_for(self, user_id: Optional[str] = None) -> bool:
+        if self.CUSTOMIZATION_ENABLED:
+            return True
+        if user_id and self.CUSTOMIZATION_BETA_USER_IDS:
+            allowed = {u.strip() for u in self.CUSTOMIZATION_BETA_USER_IDS.split(",") if u.strip()}
+            return user_id in allowed
+        return False
+
     # Configure pydantic-settings to read from backend/.env if it exists
     model_config = SettingsConfigDict(
         env_file=str(ENV_FILE) if ENV_FILE.exists() else None,
