@@ -18,6 +18,7 @@ import {
   Shield,
   PenSquare,
   BarChart3,
+  Sparkles,
 } from "lucide-react";
 
 import { useDashboardQuery, prefetchDashboard, prefetchPosts, prefetchConnections, prefetchProfile, prefetchAnalytics } from "@/lib/queries";
@@ -84,6 +85,7 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
     { title: "Analytics", url: "/app/analytics", icon: BarChart3, exact: false },
     { title: "Posts", url: "/app/posts", icon: FileText, exact: false },
     { title: "Playground", url: "/app/playground", icon: PenSquare, exact: false },
+    { title: "Customize", url: "/app/customize", icon: Sparkles, exact: false },
     { title: "Connections", url: "/app/connections", icon: Share2, exact: false },
   ];
 

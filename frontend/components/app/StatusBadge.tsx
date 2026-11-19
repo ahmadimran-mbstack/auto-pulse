@@ -68,6 +68,36 @@ export const statusMap: Record<string, StatusConfig> = {
     label: "Pending",
     icon: <ClockIcon className="size-3 text-status-warning-fg" />,
   },
+  uploaded: {
+    variant: "info",
+    label: "Queued",
+    icon: <Loader2Icon className="size-3 animate-spin text-status-info-fg" />,
+  },
+  extracting: {
+    variant: "info",
+    label: "Reading",
+    icon: <Loader2Icon className="size-3 animate-spin text-status-info-fg" />,
+  },
+  distilling: {
+    variant: "info",
+    label: "Learning",
+    icon: <Loader2Icon className="size-3 animate-spin text-status-info-fg" />,
+  },
+  embedding: {
+    variant: "info",
+    label: "Indexing",
+    icon: <Loader2Icon className="size-3 animate-spin text-status-info-fg" />,
+  },
+  ready: {
+    variant: "success",
+    label: "Ready",
+    icon: <CheckIcon className="size-3 text-status-success-fg" />,
+  },
+  disabled: {
+    variant: "warning",
+    label: "Off",
+    icon: <ClockIcon className="size-3 text-status-warning-fg" />,
+  },
 };
 
 export interface StatusBannerStyle {
