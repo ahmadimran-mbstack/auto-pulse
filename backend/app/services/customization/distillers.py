@@ -30,77 +30,77 @@ _EMAIL_RE = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
 _PHONE_RE = re.compile(r"(?<!\d)(?:\+?\d{1,3}[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}(?!\d)")
 
 
+class ExtractedConstraint(BaseModel):
+    """Lightweight constraint schema for LLM structured output (avoids FSM state explosion)."""
+
+    type: str = Field(
+        description="One of: length_chars, first_line_max_chars, paragraph_count, hashtag_count, hashtag_case, emoji_policy, banned_phrase, required_phrase_end, required_phrase_start, line_break_style, bullet_style, question_ending"
+    )
+    min: Optional[int] = None
+    max: Optional[int] = None
+    value: Optional[str] = None
+
+
 class PlaybookRule(BaseModel):
-    category: Literal[
-        "hook", "body", "ending", "format", "voice", "cta", "topic", "hashtags", "length", "banned", "other"
-    ]
-    rule: str = Field(max_length=240)
-    rationale: Optional[str] = Field(default=None, max_length=200)
-    strength: Literal["must", "should", "avoid", "never"]
-    example: Optional[str] = Field(default=None, max_length=280)
-    evidence_quote: str = Field(max_length=240)
-    machine: Optional[MachineConstraint] = None
+    category: str = Field(
+        description="One of: hook, body, ending, format, voice, cta, topic, hashtags, length, banned, other"
+    )
+    rule: str = Field(description="Imperative rule, <= 240 chars")
+    rationale: Optional[str] = None
+    strength: str = Field(description="One of: must, should, avoid, never")
+    example: Optional[str] = None
+    evidence_quote: str = Field(description="Exact verbatim quote from the document")
+    machine: Optional[ExtractedConstraint] = None
 
 
 class DistilledPlaybook(BaseModel):
-    summary: str = Field(max_length=600)
-    rules: List[PlaybookRule] = Field(default_factory=list, max_length=60)
-    hook_patterns: List[str] = Field(default_factory=list, max_length=15)
-    post_formats: List[str] = Field(default_factory=list, max_length=10)
-    ctas: List[str] = Field(default_factory=list, max_length=10)
+    summary: str = Field(description="Concise summary <= 600 chars")
+    rules: List[PlaybookRule] = Field(default_factory=list)
+    hook_patterns: List[str] = Field(default_factory=list)
+    post_formats: List[str] = Field(default_factory=list)
+    ctas: List[str] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
 
 
 class BusinessFact(BaseModel):
-    fact: str = Field(max_length=240)
-    category: Literal[
-        "company",
-        "product",
-        "pricing",
-        "customer",
-        "result",
-        "metric",
-        "team",
-        "mission",
-        "differentiator",
-        "market",
-        "event",
-        "other",
-    ]
+    fact: str = Field(description="Atomic factual statement, <= 240 chars")
+    category: str = Field(
+        description="One of: company, product, pricing, customer, result, metric, team, mission, differentiator, market, event, other"
+    )
     numbers: List[str] = Field(default_factory=list)
-    evidence_quote: str = Field(max_length=240)
+    evidence_quote: str = Field(description="Exact verbatim quote from the source")
     source: str = ""
     is_claim_about_results: bool = False
 
 
 class DistilledBusiness(BaseModel):
     company_name: Optional[str] = None
-    one_liner: Optional[str] = Field(default=None, max_length=200)
-    offering: List[str] = Field(default_factory=list, max_length=10)
-    icp: List[str] = Field(default_factory=list, max_length=8)
-    value_props: List[str] = Field(default_factory=list, max_length=10)
-    differentiators: List[str] = Field(default_factory=list, max_length=8)
-    proof_points: List[BusinessFact] = Field(default_factory=list, max_length=40)
-    terminology: List[str] = Field(default_factory=list, max_length=30)
-    claims_to_avoid: List[str] = Field(default_factory=list, max_length=20)
-    content_pillars: List[str] = Field(default_factory=list, max_length=8)
+    one_liner: Optional[str] = None
+    offering: List[str] = Field(default_factory=list)
+    icp: List[str] = Field(default_factory=list)
+    value_props: List[str] = Field(default_factory=list)
+    differentiators: List[str] = Field(default_factory=list)
+    proof_points: List[BusinessFact] = Field(default_factory=list)
+    terminology: List[str] = Field(default_factory=list)
+    claims_to_avoid: List[str] = Field(default_factory=list)
+    content_pillars: List[str] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
 
 
 class DistilledVoice(BaseModel):
-    voice_summary: str = Field(max_length=800)
-    traits: List[str] = Field(default_factory=list, max_length=12)
-    signature_moves: List[str] = Field(default_factory=list, max_length=8)
-    vocabulary_preferred: List[str] = Field(default_factory=list, max_length=30)
-    vocabulary_avoid: List[str] = Field(default_factory=list, max_length=20)
+    voice_summary: str = Field(description="Second-person voice summary <= 800 chars")
+    traits: List[str] = Field(default_factory=list)
+    signature_moves: List[str] = Field(default_factory=list)
+    vocabulary_preferred: List[str] = Field(default_factory=list)
+    vocabulary_avoid: List[str] = Field(default_factory=list)
     recurring_signoff: Optional[str] = None
-    themes: List[str] = Field(default_factory=list, max_length=10)
-    documented_experiences: List[BusinessFact] = Field(default_factory=list, max_length=20)
+    themes: List[str] = Field(default_factory=list)
+    documented_experiences: List[BusinessFact] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
 
 
 class DistilledInstructions(BaseModel):
-    constraints: List[MachineConstraint] = Field(default_factory=list)
+    constraints: List[ExtractedConstraint] = Field(default_factory=list)
     topics_include: List[str] = Field(default_factory=list)
     topics_avoid: List[str] = Field(default_factory=list)
 
@@ -159,6 +159,26 @@ def _chunk_text(text: str, max_chars: int = 32000) -> List[str]:
     return [c for c in chunks if c]
 
 
+_VALID_RULE_CATEGORIES = {
+    "hook", "body", "ending", "format", "voice", "cta", "topic", "hashtags", "length", "banned", "other"
+}
+_VALID_STRENGTHS = {"must", "should", "avoid", "never"}
+_VALID_FACT_CATEGORIES = {
+    "company", "product", "pricing", "customer", "result", "metric", "team",
+    "mission", "differentiator", "market", "event", "other",
+}
+
+
+def _normalize_machine(raw: Optional[ExtractedConstraint]) -> Optional[ExtractedConstraint]:
+    if raw is None:
+        return None
+    try:
+        mc = MachineConstraint.model_validate(raw.model_dump())
+        return ExtractedConstraint(type=mc.type, min=mc.min, max=mc.max, value=mc.value)
+    except Exception:
+        return None
+
+
 def distill_playbook(raw_text: str, model: Optional[Any] = None) -> DistilledPlaybook:
     """Distill a LinkedIn playbook document into verified PlaybookRules."""
     cleaned, warnings = sanitize_for_distillation(raw_text)
@@ -200,6 +220,17 @@ def distill_playbook(raw_text: str, model: Optional[Any] = None) -> DistilledPla
             if _UNSAFE_RULE_RE.search(r.rule):
                 continue
             if verify_evidence_quote(r.evidence_quote, chunk):
+                cat = (r.category or "other").strip().lower()
+                strength = (r.strength or "should").strip().lower()
+                r.category = cat if cat in _VALID_RULE_CATEGORIES else "other"
+                r.strength = strength if strength in _VALID_STRENGTHS else "should"
+                r.rule = r.rule.strip()[:240]
+                if r.rationale:
+                    r.rationale = r.rationale.strip()[:200]
+                if r.example:
+                    r.example = r.example.strip()[:280]
+                r.evidence_quote = r.evidence_quote.strip()[:240]
+                r.machine = _normalize_machine(r.machine)
                 all_rules.append(r)
         hooks.extend(parsed.hook_patterns)
         formats.extend(parsed.post_formats)
@@ -259,6 +290,9 @@ def distill_business(
         for pt in parsed.proof_points:
             if verify_evidence_quote(pt.evidence_quote, chunk):
                 pt.fact = _scrub_pii(pt.fact)[:240]
+                cat = (pt.category or "other").strip().lower()
+                pt.category = cat if cat in _VALID_FACT_CATEGORIES else "other"
+                pt.evidence_quote = pt.evidence_quote.strip()[:240]
                 pt.source = source_label
                 merged.proof_points.append(pt)
 
@@ -320,17 +354,17 @@ def distill_instructions_heuristic(text: str) -> DistilledInstructions:
     if not clean:
         return DistilledInstructions()
 
-    constraints: List[MachineConstraint] = []
+    constraints: List[ExtractedConstraint] = []
     lower = clean.lower()
 
     m_under = re.search(r"(?:under|max(?:imum)?|at\s+most|less\s+than)\s+(\d{3,4})\s+char", lower)
     if m_under:
-        constraints.append(MachineConstraint(type="length_chars", max=int(m_under.group(1))))
+        constraints.append(ExtractedConstraint(type="length_chars", max=int(m_under.group(1))))
 
     m_between = re.search(r"between\s+(\d{3,4})\s+(?:and|to|-)\s+(\d{3,4})\s+char", lower)
     if m_between:
         constraints.append(
-            MachineConstraint(
+            ExtractedConstraint(
                 type="length_chars",
                 min=int(m_between.group(1)),
                 max=int(m_between.group(2)),
@@ -338,21 +372,21 @@ def distill_instructions_heuristic(text: str) -> DistilledInstructions:
         )
 
     if re.search(r"\bno\s+emojis?\b|\bnever\s+use\s+emojis?\b", lower):
-        constraints.append(MachineConstraint(type="emoji_policy", value="none"))
-    elif re.search(r"\buse\s+emojis?\b|\ballow\s+emojis?\b", lower):
-        constraints.append(MachineConstraint(type="emoji_policy", value="allowed"))
+        constraints.append(ExtractedConstraint(type="emoji_policy", value="none"))
+    elif re.search(r"\b(?:use|include|add|allow)(?:\s+\w+){0,3}\s+emojis?\b", lower):
+        constraints.append(ExtractedConstraint(type="emoji_policy", value="allowed"))
 
     if re.search(r"\bno\s+hashtags?\b|\b0\s+hashtags?\b", lower):
-        constraints.append(MachineConstraint(type="hashtag_count", min=0, max=0))
+        constraints.append(ExtractedConstraint(type="hashtag_count", min=0, max=0))
 
     if re.search(r"\balways\s+end\s+with\s+a\s+question\b", lower):
-        constraints.append(MachineConstraint(type="question_ending", value="required"))
+        constraints.append(ExtractedConstraint(type="question_ending", value="required"))
     elif re.search(r"\bnever\s+end\s+with\s+a\s+question\b|\bno\s+question\s+at\s+the\s+end\b", lower):
-        constraints.append(MachineConstraint(type="question_ending", value="forbidden"))
+        constraints.append(ExtractedConstraint(type="question_ending", value="forbidden"))
 
     m_end = re.search(r"(?:always\s+end\s+with|sign[- ]off\s*:?)\s+[\"']([^\"']{3,100})[\"']", clean, re.IGNORECASE)
     if m_end:
-        constraints.append(MachineConstraint(type="required_phrase_end", value=m_end.group(1).strip()))
+        constraints.append(ExtractedConstraint(type="required_phrase_end", value=m_end.group(1).strip()))
 
     return DistilledInstructions(constraints=constraints)
 
