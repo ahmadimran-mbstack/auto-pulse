@@ -1,9 +1,10 @@
 "use client";
 
 // Google OAuth social authentication button
-// Full width, 48px height, 8px radius, border with Google brand icon
+// Full width, 40px height, 8px radius, border with Google brand icon
 import { useState } from "react";
 import { authClient } from "@/lib/auth/client";
+import { authToast } from "@/lib/auth-toast";
 import { Button } from "@/components/ui/button";
 
 interface GoogleSignInButtonProps {
@@ -14,27 +15,36 @@ export function GoogleSignInButton({
   text = "Continue with Google",
 }: GoogleSignInButtonProps) {
   const [isPending, setIsPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  // Initiates Google OAuth authentication flow
+  // Starts Google OAuth sign-in and shows a toast if it fails
   const handleGoogleSignIn = async () => {
+    authToast.dismiss();
     setIsPending(true);
-    setError(null);
 
     try {
       document.cookie = "autopulse_signed_out=; path=/; max-age=0; SameSite=Lax";
-      await authClient.signIn.social({
+      const result = await authClient.signIn.social({
         provider: "google",
         callbackURL: "/app",
         newUserCallbackURL: "/onboarding",
         errorCallbackURL: "/auth/sign-in",
       });
+
+      // Handle SDK error responses that resolve instead of throwing
+      if (result && typeof result === "object" && "error" in result && result.error) {
+        const errObj = result.error as { message?: string };
+        authToast.error(
+          errObj.message || "Failed to initiate Google sign in. Please try again.",
+          { id: "google-sign-in-error" }
+        );
+        setIsPending(false);
+      }
     } catch (err: unknown) {
       const message =
         err instanceof Error
           ? err.message
           : "Failed to initiate Google sign in. Please try again.";
-      setError(message);
+      authToast.error(message, { id: "google-sign-in-error" });
       setIsPending(false);
     }
   };
@@ -74,12 +84,6 @@ export function GoogleSignInButton({
         </svg>
         <span>{isPending ? "Connecting to Google..." : text}</span>
       </Button>
-
-      {error && (
-        <p role="alert" className="mt-2 text-caption text-destructive text-left">
-          {error}
-        </p>
-      )}
     </div>
   );
 }

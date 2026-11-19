@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth/client";
+import { authToast } from "@/lib/auth-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
 interface VerifyEmailOtpClient {
   emailOtp: {
@@ -26,21 +26,25 @@ interface VerifyOtpClientProps {
 // Handles 6-digit email verification without sending on load or allowing arbitrary email input
 export function VerifyOtpClient({ email }: VerifyOtpClientProps) {
   const router = useRouter();
-  const errorRef = useRef<HTMLDivElement>(null);
 
   const [otp, setOtp] = useState("");
   const [isPending, setIsPending] = useState(false);
   const [isResending, setIsResending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [otpError, setOtpError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(60);
 
-  // Move focus to the error banner when a validation or server error appears
+  // Shows the neutral check-your-email notice as an info toast with a Sign in action
   useEffect(() => {
-    if (error && errorRef.current) {
-      errorRef.current.focus();
-    }
-  }, [error]);
+    authToast.info("Check your email.", {
+      id: "verify-otp-check-email",
+      description: "If you already have an account, sign in instead.",
+      action: {
+        label: "Sign in",
+        onClick: () =>
+          router.push(`/auth/sign-in?email=${encodeURIComponent(email)}`),
+      },
+    });
+  }, [email, router]);
 
   // Tick down the resend cooldown timer every second
   useEffect(() => {
@@ -52,8 +56,8 @@ export function VerifyOtpClient({ email }: VerifyOtpClientProps) {
   // Request a fresh verification code and follow the server's cooldown on 429
   const handleResendOtp = async () => {
     if (countdown > 0 || isResending) return;
-    setError(null);
-    setSuccessMessage(null);
+    authToast.dismiss();
+    setOtpError(null);
     setIsResending(true);
 
     try {
@@ -73,26 +77,32 @@ export function VerifyOtpClient({ email }: VerifyOtpClientProps) {
           data?.retry_after || res.headers.get("Retry-After") || 60
         );
         setCountdown(waitSeconds);
-        setError(
-          data?.message ||
-            `Please wait ${waitSeconds} seconds before requesting another code.`
-        );
+        authToast.warning("Too many attempts", {
+          id: "verify-otp-rate-limit",
+          description: `Please wait ${waitSeconds} seconds before requesting another code.`,
+        });
         return;
       }
 
       if (!res.ok || data?.error) {
-        setError(
+        authToast.error(
           data?.error?.message ||
             data?.message ||
-            "Failed to send code. Please try again."
+            "Failed to send code. Please try again.",
+          { id: "verify-otp-resend-error" }
         );
         return;
       }
 
       setCountdown(60);
-      setSuccessMessage("A new verification code was sent to your email.");
+      authToast.success("A new verification code was sent to your email.", {
+        id: "verify-otp-code-sent",
+      });
     } catch {
-      setError("An error occurred while sending the verification code.");
+      authToast.error(
+        "An error occurred while sending the verification code.",
+        { id: "verify-otp-resend-error" }
+      );
     } finally {
       setIsResending(false);
     }
@@ -101,15 +111,15 @@ export function VerifyOtpClient({ email }: VerifyOtpClientProps) {
   // Submit the 6-digit verification code to verify the account email
   const handleVerifyOtp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setError(null);
-    setSuccessMessage(null);
+    authToast.dismiss();
 
     const cleanOtp = otp.trim();
     if (cleanOtp.length < 6) {
-      setError("Please enter the complete 6-digit code.");
+      setOtpError("Please enter the complete 6-digit code.");
       return;
     }
 
+    setOtpError(null);
     setIsPending(true);
 
     try {
@@ -120,8 +130,9 @@ export function VerifyOtpClient({ email }: VerifyOtpClientProps) {
       });
 
       if (result?.error) {
-        setError(
-          result.error.message || "Invalid or expired code. Please try again."
+        authToast.error(
+          result.error.message || "Invalid or expired code. Please try again.",
+          { id: "verify-otp-error" }
         );
         setIsPending(false);
         return;
@@ -129,48 +140,23 @@ export function VerifyOtpClient({ email }: VerifyOtpClientProps) {
 
       document.cookie =
         "autopulse_signed_out=; path=/; max-age=0; SameSite=Lax";
-      setSuccessMessage("Email verified. Redirecting to setup...");
+      authToast.success("Email verified. Redirecting to setup...", {
+        id: "verify-otp-verified",
+      });
       router.replace("/onboarding");
     } catch (err: unknown) {
       const message =
         err instanceof Error
           ? err.message
           : "An error occurred while verifying the code.";
-      setError(message);
+      authToast.error(message, { id: "verify-otp-error" });
       setIsPending(false);
     }
   };
 
   return (
-    <form onSubmit={handleVerifyOtp} className="text-left font-normal">
+    <form noValidate onSubmit={handleVerifyOtp} className="text-left font-normal">
       <div className="flex flex-col gap-3">
-        {/* Neutral notice for both new and existing accounts */}
-        <Alert className="border-[var(--lp-border)] bg-[var(--lp-surface)] text-[var(--lp-text-body)] font-normal">
-          <AlertDescription className="text-sm leading-[1.4] font-normal">
-            Check your email. If you already have an account,{" "}
-            <Link
-              href={`/auth/sign-in?email=${encodeURIComponent(email)}`}
-              className="text-[var(--lp-ice)] hover:underline"
-            >
-              sign in instead
-            </Link>
-            .
-          </AlertDescription>
-        </Alert>
-
-        {/* Success notification */}
-        {successMessage && (
-          <Alert className="border-[#46a758]/30 bg-[#46a758]/10 text-[#62c073] font-normal">
-            <CheckCircle2
-              className="size-4 text-[#62c073] shrink-0"
-              aria-hidden="true"
-            />
-            <AlertDescription className="text-sm leading-[1.4] font-normal text-[var(--lp-text-body)]">
-              {successMessage}
-            </AlertDescription>
-          </Alert>
-        )}
-
         {/* Code input field */}
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
@@ -198,28 +184,31 @@ export function VerifyOtpClient({ email }: VerifyOtpClientProps) {
             maxLength={6}
             placeholder="6-digit code"
             value={otp}
-            onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-            className="h-10 rounded-[8px] border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 text-[var(--lp-text-heading)] font-mono text-center tracking-widest text-sm font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
+            aria-invalid={Boolean(otpError)}
+            aria-describedby={otpError ? "otp-error" : undefined}
+            onChange={(e) => {
+              setOtp(e.target.value.replace(/\D/g, ""));
+              if (otpError) setOtpError(null);
+            }}
+            className={`h-10 rounded-[8px] border bg-[var(--lp-surface)] px-3.5 text-[var(--lp-text-heading)] font-mono text-center tracking-widest text-sm font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none ${
+              otpError
+                ? "border-[#ff6369] focus-visible:border-[#ff6369] focus-visible:ring-[#ff6369]/60"
+                : "border-[var(--lp-border-input)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-[var(--lp-ice)]/60"
+            }`}
           />
+          {/* Inline field error for incomplete 6-digit code */}
+          {otpError && (
+            <p id="otp-error" className="mt-1 text-xs leading-[1.3] text-[#ff8589] font-normal">
+              {otpError}
+            </p>
+          )}
         </div>
       </div>
-
-      {/* Inline error notice: 12px above, 8px 12px padding */}
-      {error && (
-        <div
-          ref={errorRef}
-          tabIndex={-1}
-          role="alert"
-          className="mt-3 px-3 py-2 rounded-[8px] bg-[#ff6369]/10 text-[#ff8589] text-sm border border-[#ff6369]/30 outline-none font-normal"
-        >
-          {error}
-        </div>
-      )}
 
       {/* Verification submission button: 16px below last field */}
       <Button
         type="submit"
-        disabled={isPending || otp.trim().length < 6}
+        disabled={isPending}
         className="mt-4 w-full h-10 rounded-[8px] bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] transition-colors !font-normal text-sm flex items-center justify-center gap-2"
       >
         {isPending ? (
@@ -244,4 +233,3 @@ export function VerifyOtpClient({ email }: VerifyOtpClientProps) {
     </form>
   );
 }
-

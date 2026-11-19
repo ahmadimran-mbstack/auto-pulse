@@ -1,9 +1,10 @@
 "use client";
 
-import { Suspense, useState, useRef, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { authClient } from "@/lib/auth/client";
+import { authToast } from "@/lib/auth-toast";
 import {
   checkPasswordCriteria,
   isPasswordValid,
@@ -15,77 +16,97 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, Check, Circle, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Check, Circle, Eye, EyeOff, Loader2 } from "lucide-react";
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Inner registration form with interactive password criteria and validation
 function SignUpForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const errorRef = useRef<HTMLDivElement>(null);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isPending, setIsPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [copiedNotice, setCopiedNotice] = useState(false);
-  const [existingAccountEmail, setExistingAccountEmail] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{
+    name?: string;
+    email?: string;
+    password?: string;
+  }>({});
 
   const urlError = searchParams.get("error");
   const criteria = checkPasswordCriteria(password);
-  const passwordIsValid = isPasswordValid(password);
-  const canSubmit = !isPending && name.trim() && email.trim() && passwordIsValid;
 
-  // Moves focus to error container when an error occurs
+  // Shows URL-based OAuth errors as a toast on mount
   useEffect(() => {
-    if (error && errorRef.current) {
-      errorRef.current.focus();
+    if (urlError) {
+      authToast.error(
+        `Authentication error (${urlError}). Please register with your email address below.`,
+        { id: "sign-up-url-error" }
+      );
     }
-  }, [error]);
+  }, [urlError]);
 
-  // Generates a strong random password adhering to all security criteria
+  // Generates a strong random password and shows a copy confirmation toast
   const handleGeneratePassword = async () => {
     const generated = generateSecurePassword(16);
     setPassword(generated);
     setShowPassword(true);
-    setError(null);
+    setFieldErrors((prev) => ({ ...prev, password: undefined }));
 
     if (typeof navigator !== "undefined" && navigator.clipboard) {
       try {
         await navigator.clipboard.writeText(generated);
-        setCopiedNotice(true);
-        setTimeout(() => setCopiedNotice(false), 2500);
+        authToast.success("Generated password copied to clipboard.", {
+          id: "sign-up-password-copied",
+        });
       } catch {
         // Clipboard write failed
       }
     }
   };
 
+  // Validates name, email, and password fields inline before submitting
+  const validateFields = (
+    cleanName: string,
+    cleanEmail: string,
+    rawPassword: string
+  ) => {
+    const nextErrors: { name?: string; email?: string; password?: string } = {};
+    if (!cleanName) {
+      nextErrors.name = "Please enter your full name.";
+    }
+    if (!cleanEmail) {
+      nextErrors.email = "Please enter your email address.";
+    } else if (!EMAIL_PATTERN.test(cleanEmail)) {
+      nextErrors.email = "Please enter a valid email address.";
+    }
+    if (!isPasswordValid(rawPassword)) {
+      nextErrors.password =
+        "Please ensure your password fulfills all required security conditions.";
+    }
+    setFieldErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
   // Submits the new account details and triggers verification OTP dispatch
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setError(null);
-    setExistingAccountEmail(null);
+    authToast.dismiss();
 
     const cleanEmail = email.trim();
     const cleanName = name.trim();
 
-    if (!cleanName || !cleanEmail) {
-      setError("Please fill in your name and email address.");
-      return;
-    }
-
-    if (!isPasswordValid(password)) {
-      setError("Please ensure your password fulfills all required security conditions.");
+    if (!validateFields(cleanName, cleanEmail, password)) {
       return;
     }
 
     setIsPending(true);
 
     try {
-      // 1. Create account in Neon Auth
+      // Create account in Neon Auth
       const result = await authClient.signUp.email({
         email: cleanEmail,
         name: cleanName,
@@ -101,14 +122,36 @@ function SignUpForm() {
           errorMsg.toLowerCase().includes("user already") ||
           errorMsg.toLowerCase().includes("already registered");
 
+        // Show neutral existing-account toast with a Sign in action button
         if (isUserExists) {
-          setExistingAccountEmail(cleanEmail);
-          setError(null);
+          authToast.info("Account already exists", {
+            id: "sign-up-account-exists",
+            description: `An account with ${cleanEmail} is already registered. Please sign in instead.`,
+            action: {
+              label: "Sign in",
+              onClick: () =>
+                router.push(`/auth/sign-in?email=${encodeURIComponent(cleanEmail)}`),
+            },
+          });
           setIsPending(false);
           return;
         }
 
-        setError(result.error.message || "Failed to create account. Please try again.");
+        // Show rate limit wait time when sign-up is throttled
+        const status = (result.error as { status?: number }).status;
+        if (status === 429 || result.error.code === "TOO_MANY_REQUESTS") {
+          authToast.warning("Too many attempts", {
+            id: "sign-up-rate-limit",
+            description: "Please wait 60 seconds before trying again.",
+          });
+          setIsPending(false);
+          return;
+        }
+
+        authToast.error(
+          result.error.message || "Failed to create account. Please try again.",
+          { id: "sign-up-error" }
+        );
         setIsPending(false);
         return;
       }
@@ -123,47 +166,13 @@ function SignUpForm() {
         err instanceof Error
           ? err.message
           : "An unexpected error occurred during sign up. Please try again.";
-      setError(message);
+      authToast.error(message, { id: "sign-up-error" });
       setIsPending(false);
     }
   };
 
   return (
     <div className="w-full font-normal">
-      {/* Existing account conflict alert */}
-      {existingAccountEmail && (
-        <Alert className="mb-3 border-signal-line bg-signal-soft text-foreground text-left font-normal">
-          <AlertCircle className="size-4 text-primary shrink-0" aria-hidden="true" />
-          <AlertTitle className="font-normal">Account already exists</AlertTitle>
-          <AlertDescription className="text-caption mt-1 font-normal">
-            An account with {existingAccountEmail} is already registered. Please sign in instead.
-          </AlertDescription>
-          <div className="mt-3">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              asChild
-              className="text-xs font-normal"
-            >
-              <Link href={`/auth/sign-in?email=${encodeURIComponent(existingAccountEmail)}`}>
-                Sign in with this email
-              </Link>
-            </Button>
-          </div>
-        </Alert>
-      )}
-
-      {/* URL parameter error */}
-      {urlError && (
-        <Alert variant="destructive" className="mb-3 text-left font-normal">
-          <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
-          <AlertDescription className="text-meta font-normal">
-            Authentication error ({urlError}). Please register with your email address below.
-          </AlertDescription>
-        </Alert>
-      )}
-
       {/* Google Social Sign In */}
       <div className="w-full">
         <GoogleSignInButton text="Sign up with Google" />
@@ -179,7 +188,7 @@ function SignUpForm() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="text-left">
+      <form noValidate onSubmit={handleSubmit} className="text-left">
         <div className="flex flex-col gap-3">
           {/* Full Name input */}
           <div className="flex flex-col gap-1.5">
@@ -190,13 +199,29 @@ function SignUpForm() {
               id="name"
               name="name"
               type="text"
-              required
               autoComplete="name"
               placeholder="Jane Doe"
               value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="h-10 rounded-[8px] border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
+              aria-invalid={Boolean(fieldErrors.name)}
+              aria-describedby={fieldErrors.name ? "name-error" : undefined}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (fieldErrors.name) {
+                  setFieldErrors((prev) => ({ ...prev, name: undefined }));
+                }
+              }}
+              className={`h-10 rounded-[8px] border bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none ${
+                fieldErrors.name
+                  ? "border-[#ff6369] focus-visible:border-[#ff6369] focus-visible:ring-[#ff6369]/60"
+                  : "border-[var(--lp-border-input)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-[var(--lp-ice)]/60"
+              }`}
             />
+            {/* Inline field error for full name */}
+            {fieldErrors.name && (
+              <p id="name-error" className="mt-1 text-xs leading-[1.3] text-[#ff8589] font-normal">
+                {fieldErrors.name}
+              </p>
+            )}
           </div>
 
           {/* Email input */}
@@ -208,13 +233,29 @@ function SignUpForm() {
               id="email"
               name="email"
               type="email"
-              required
               autoComplete="email"
               placeholder="name@company.com"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="h-10 rounded-[8px] border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
+              aria-invalid={Boolean(fieldErrors.email)}
+              aria-describedby={fieldErrors.email ? "email-error" : undefined}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (fieldErrors.email) {
+                  setFieldErrors((prev) => ({ ...prev, email: undefined }));
+                }
+              }}
+              className={`h-10 rounded-[8px] border bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none ${
+                fieldErrors.email
+                  ? "border-[#ff6369] focus-visible:border-[#ff6369] focus-visible:ring-[#ff6369]/60"
+                  : "border-[var(--lp-border-input)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-[var(--lp-ice)]/60"
+              }`}
             />
+            {/* Inline field error for email */}
+            {fieldErrors.email && (
+              <p id="email-error" className="mt-1 text-xs leading-[1.3] text-[#ff8589] font-normal">
+                {fieldErrors.email}
+              </p>
+            )}
           </div>
 
           {/* Password input with generator helper and eye toggle */}
@@ -236,35 +277,44 @@ function SignUpForm() {
                 id="password"
                 name="password"
                 type={showPassword ? "text" : "password"}
-                required
                 autoComplete="new-password"
                 placeholder="Create a strong password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="h-10 rounded-[8px] border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 pr-10 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
+                aria-invalid={Boolean(fieldErrors.password)}
+                aria-describedby={fieldErrors.password ? "password-error" : undefined}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (fieldErrors.password) {
+                    setFieldErrors((prev) => ({ ...prev, password: undefined }));
+                  }
+                }}
+                className={`h-10 rounded-[8px] border bg-[var(--lp-surface)] px-3.5 pr-10 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none ${
+                  fieldErrors.password
+                    ? "border-[#ff6369] focus-visible:border-[#ff6369] focus-visible:ring-[#ff6369]/60"
+                    : "border-[var(--lp-border-input)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-[var(--lp-ice)]/60"
+                }`}
               />
-            <button
-              type="button"
-              onClick={() => setShowPassword((prev) => !prev)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--lp-text-muted)] hover:text-[var(--lp-text-heading)] cursor-pointer focus:outline-none transition-colors"
-              aria-label={showPassword ? "Hide password" : "Show password"}
-            >
-              {showPassword ? (
-                <EyeOff className="size-4 shrink-0" aria-hidden="true" />
-              ) : (
-                <Eye className="size-4 shrink-0" aria-hidden="true" />
-              )}
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--lp-text-muted)] hover:text-[var(--lp-text-heading)] cursor-pointer focus:outline-none transition-colors"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? (
+                  <EyeOff className="size-4 shrink-0" aria-hidden="true" />
+                ) : (
+                  <Eye className="size-4 shrink-0" aria-hidden="true" />
+                )}
+              </button>
+            </div>
+            {/* Inline field error for password */}
+            {fieldErrors.password && (
+              <p id="password-error" className="mt-1 text-xs leading-[1.3] text-[#ff8589] font-normal">
+                {fieldErrors.password}
+              </p>
+            )}
           </div>
         </div>
-
-        {/* Notice after generating and copying password */}
-        {copiedNotice && (
-          <p className="mt-1 text-xs leading-[1.3] text-[var(--lp-ice)] font-normal">
-            Generated password copied to clipboard.
-          </p>
-        )}
 
         {/* Password security condition checklist */}
         {password.length > 0 && (
@@ -317,22 +367,10 @@ function SignUpForm() {
           </div>
         )}
 
-        {/* Error notification display: 12px above, 8px 12px padding */}
-        {error && (
-          <div
-            ref={errorRef}
-            tabIndex={-1}
-            role="alert"
-            className="mt-3 px-3 py-2 rounded-[8px] bg-[#ff6369]/10 text-[#ff8589] text-sm border border-[#ff6369]/30 outline-none font-normal"
-          >
-            {error}
-          </div>
-        )}
-
         {/* Primary submission button: 16px below last field */}
         <Button
           type="submit"
-          disabled={!canSubmit}
+          disabled={isPending}
           className="mt-4 w-full h-10 rounded-[8px] bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] transition-colors !font-normal text-sm flex items-center justify-center gap-2"
         >
           {isPending ? (

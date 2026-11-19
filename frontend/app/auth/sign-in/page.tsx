@@ -1,54 +1,93 @@
 "use client";
 
-import { Suspense, useState, useRef, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AuthShell } from "../components/AuthShell";
 import { GoogleSignInButton } from "../components/GoogleSignInButton";
+import { authToast } from "@/lib/auth-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertCircle, CheckCircle2, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Inner form handling user authentication inputs and submissions
 function SignInForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const errorRef = useRef<HTMLDivElement>(null);
 
   const [email, setEmail] = useState(searchParams.get("email") || "");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isPending, setIsPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{
+    email?: string;
+    password?: string;
+  }>({});
 
   const urlError = searchParams.get("error");
   const urlMessage = searchParams.get("message");
 
-  // Moves focus to the error banner for accessibility when an error occurs
+  // Shows URL-based OAuth errors or password reset success notices as toasts
   useEffect(() => {
-    if (error && errorRef.current) {
-      errorRef.current.focus();
+    if (urlError === "account_not_linked") {
+      authToast.warning("Account already exists", {
+        id: "sign-in-account-not-linked",
+        description:
+          "An account with this email was previously registered using email and password. Please sign in with your password below. Once signed in, you can link your Google account in Settings.",
+      });
+    } else if (urlError === "access_denied") {
+      authToast.error(
+        "Google sign in was cancelled or access was denied. Please try again.",
+        { id: "sign-in-access-denied" }
+      );
+    } else if (urlError) {
+      authToast.error(
+        `Authentication error (${urlError}). Please sign in with your email and password.`,
+        { id: "sign-in-url-error" }
+      );
     }
-  }, [error]);
 
-  // Authenticates the user with email and password, then proceeds to OTP verification
+    if (urlMessage === "password_reset_success") {
+      authToast.success(
+        "Your password has been successfully reset. Please sign in with your new password.",
+        { id: "sign-in-reset-success" }
+      );
+    }
+  }, [urlError, urlMessage]);
+
+  // Checks required and email format rules before calling the sign-in endpoint
+  const validateFields = (cleanEmail: string, rawPassword: string) => {
+    const nextErrors: { email?: string; password?: string } = {};
+    if (!cleanEmail) {
+      nextErrors.email = "Please enter your email address.";
+    } else if (!EMAIL_PATTERN.test(cleanEmail)) {
+      nextErrors.email = "Please enter a valid email address.";
+    }
+    if (!rawPassword) {
+      nextErrors.password = "Please enter your password.";
+    }
+    setFieldErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  // Authenticates the user with email and password, then opens verify or app
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setError(null);
+    authToast.dismiss();
 
     const cleanEmail = email.trim();
-    if (!cleanEmail || !password) {
-      setError("Please enter your email and password.");
+    if (!validateFields(cleanEmail, password)) {
       return;
     }
 
     setIsPending(true);
 
     try {
-      // 1. Authenticate user credentials directly through the Next.js auth proxy
+      // Authenticate user credentials directly through the Next.js auth proxy
       const res = await fetch("/api/auth/sign-in/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -84,8 +123,32 @@ function SignInForm() {
           return;
         }
 
+        // Show rate limit wait time when too many sign-in attempts occur
+        if (res.status === 429) {
+          const waitSeconds = Number(
+            data?.retry_after || res.headers.get("Retry-After") || 60
+          );
+          authToast.warning("Too many attempts", {
+            id: "sign-in-rate-limit",
+            description: `Please wait ${waitSeconds} seconds before trying again.`,
+          });
+          setIsPending(false);
+          return;
+        }
+
+        // Show a server error toast for 5xx responses
+        if (res.status >= 500) {
+          authToast.error("Something went wrong on our end. Please try again.", {
+            id: "sign-in-server-error",
+          });
+          setIsPending(false);
+          return;
+        }
+
         // Wrong password and unknown email show the exact same message and send nothing
-        setError("Incorrect email or password.");
+        authToast.error("Incorrect email or password.", {
+          id: "sign-in-invalid-credentials",
+        });
         setIsPending(false);
         return;
       }
@@ -96,48 +159,16 @@ function SignInForm() {
       // Verified users with the right password go straight to the app
       router.replace("/app");
     } catch {
-      setError("Incorrect email or password.");
+      authToast.error(
+        "Network error. Please check your connection and try again.",
+        { id: "sign-in-network-error" }
+      );
       setIsPending(false);
     }
   };
 
   return (
     <div className="w-full font-normal">
-      {/* Account linking error notification */}
-      {urlError === "account_not_linked" ? (
-        <Alert variant="destructive" className="mb-3 font-normal">
-          <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
-          <AlertTitle className="font-normal">Account already exists</AlertTitle>
-          <AlertDescription className="text-caption leading-relaxed font-normal">
-            An account with this email was previously registered using email and password. Please sign in with your password below. Once signed in, you can link your Google account in Settings.
-          </AlertDescription>
-        </Alert>
-      ) : urlError === "access_denied" ? (
-        <Alert variant="destructive" className="mb-3 font-normal">
-          <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
-          <AlertDescription className="text-meta font-normal">
-            Google sign in was cancelled or access was denied. Please try again.
-          </AlertDescription>
-        </Alert>
-      ) : urlError ? (
-        <Alert variant="destructive" className="mb-3 font-normal">
-          <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
-          <AlertDescription className="text-meta font-normal">
-            Authentication error ({urlError}). Please sign in with your email and password.
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      {/* Password reset success notification */}
-      {urlMessage === "password_reset_success" && (
-        <Alert className="mb-3 border-signal-line bg-signal-soft text-foreground font-normal">
-          <CheckCircle2 className="size-4 text-primary shrink-0" aria-hidden="true" />
-          <AlertDescription className="text-meta font-normal">
-            Your password has been successfully reset. Please sign in with your new password.
-          </AlertDescription>
-        </Alert>
-      )}
-
       {/* Google Social Sign In */}
       <div className="w-full">
         <GoogleSignInButton text="Continue with Google" />
@@ -154,7 +185,7 @@ function SignInForm() {
       </div>
 
       {/* Email and Password Form */}
-      <form onSubmit={handleSubmit}>
+      <form noValidate onSubmit={handleSubmit}>
         <div className="flex flex-col gap-3">
           {/* Email field */}
           <div className="flex flex-col gap-1.5 text-left">
@@ -165,13 +196,29 @@ function SignInForm() {
               id="email"
               name="email"
               type="email"
-              required
               autoComplete="email"
               placeholder="name@company.com"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="h-10 rounded-[8px] border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
+              aria-invalid={Boolean(fieldErrors.email)}
+              aria-describedby={fieldErrors.email ? "email-error" : undefined}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (fieldErrors.email) {
+                  setFieldErrors((prev) => ({ ...prev, email: undefined }));
+                }
+              }}
+              className={`h-10 rounded-[8px] border bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none ${
+                fieldErrors.email
+                  ? "border-[#ff6369] focus-visible:border-[#ff6369] focus-visible:ring-[#ff6369]/60"
+                  : "border-[var(--lp-border-input)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-[var(--lp-ice)]/60"
+              }`}
             />
+            {/* Inline field error for email validation */}
+            {fieldErrors.email && (
+              <p id="email-error" className="mt-1 text-xs leading-[1.3] text-[#ff8589] font-normal">
+                {fieldErrors.email}
+              </p>
+            )}
           </div>
 
           {/* Password field with eye toggle and forgot password link */}
@@ -192,12 +239,22 @@ function SignInForm() {
                 id="password"
                 name="password"
                 type={showPassword ? "text" : "password"}
-                required
                 autoComplete="current-password"
                 placeholder="Enter your password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="h-10 rounded-[8px] border border-[var(--lp-border-input)] bg-[var(--lp-surface)] px-3.5 pr-10 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-2 focus-visible:ring-[var(--lp-ice)]/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none"
+                aria-invalid={Boolean(fieldErrors.password)}
+                aria-describedby={fieldErrors.password ? "password-error" : undefined}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (fieldErrors.password) {
+                    setFieldErrors((prev) => ({ ...prev, password: undefined }));
+                  }
+                }}
+                className={`h-10 rounded-[8px] border bg-[var(--lp-surface)] px-3.5 pr-10 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none ${
+                  fieldErrors.password
+                    ? "border-[#ff6369] focus-visible:border-[#ff6369] focus-visible:ring-[#ff6369]/60"
+                    : "border-[var(--lp-border-input)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-[var(--lp-ice)]/60"
+                }`}
               />
               <button
                 type="button"
@@ -212,25 +269,19 @@ function SignInForm() {
                 )}
               </button>
             </div>
+            {/* Inline field error for missing password */}
+            {fieldErrors.password && (
+              <p id="password-error" className="mt-1 text-xs leading-[1.3] text-[#ff8589] font-normal">
+                {fieldErrors.password}
+              </p>
+            )}
           </div>
         </div>
-
-        {/* Inline error notice: 12px above, 8px 12px padding */}
-        {error && (
-          <div
-            ref={errorRef}
-            tabIndex={-1}
-            role="alert"
-            className="mt-3 px-3 py-2 rounded-[8px] bg-[#ff6369]/10 text-[#ff8589] text-sm border border-[#ff6369]/30 outline-none text-left font-normal"
-          >
-            {error}
-          </div>
-        )}
 
         {/* Primary submit button: 16px below last field */}
         <Button
           type="submit"
-          disabled={isPending || !email.trim() || !password}
+          disabled={isPending}
           className="mt-4 w-full h-10 rounded-[8px] bg-[var(--lp-text-heading)] text-[var(--lp-bg)] hover:bg-[var(--lp-ice)] transition-colors !font-normal text-sm flex items-center justify-center gap-2"
         >
           {isPending ? (
