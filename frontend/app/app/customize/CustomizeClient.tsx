@@ -30,8 +30,9 @@ import {
   reprocessCustomizationDocument,
   triggerCustomizationCompile,
   updateCustomizationSettings,
-  uploadCustomizationDocument,
+  uploadCustomizationDocumentWithProgress,
 } from "@/lib/customization";
+import type { ActiveUploadItem } from "@/components/app/FileDropzone";
 import type { DocumentKind, DocumentSummary } from "@/types/customization";
 import { LearnedProfilePanel } from "./components/LearnedProfilePanel";
 import { PlaybooksSection } from "./components/PlaybooksSection";
@@ -62,6 +63,13 @@ export function CustomizeClient() {
 
   const [inspectDocId, setInspectDocId] = React.useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = React.useState(false);
+  const [activeUploadsByKind, setActiveUploadsByKind] = React.useState<
+    Record<DocumentKind, ActiveUploadItem[]>
+  >({
+    playbook: [],
+    business: [],
+    previous_posts: [],
+  });
 
   const is404Error = (err: unknown): boolean =>
     typeof err === "object" && err !== null && "status" in err && (err as { status?: number }).status === 404;
@@ -93,11 +101,30 @@ export function CustomizeClient() {
   const uploadMutation = useMutation({
     mutationFn: async ({ files, kind }: { files: File[]; kind: DocumentKind }) => {
       for (const file of files) {
-        const res = await uploadCustomizationDocument(file, kind);
-        if (res.duplicate) {
-          toast.info(`${file.name} was already uploaded.`);
-        } else {
-          toast.success(`Uploaded ${file.name}. Reading & learning...`);
+        const uploadId = `${file.name}-${Date.now()}-${Math.random()}`;
+        setActiveUploadsByKind((prev) => ({
+          ...prev,
+          [kind]: [...prev[kind], { id: uploadId, name: file.name, progress: 0 }],
+        }));
+        try {
+          const res = await uploadCustomizationDocumentWithProgress(file, kind, (pct) => {
+            setActiveUploadsByKind((prev) => ({
+              ...prev,
+              [kind]: prev[kind].map((item) =>
+                item.id === uploadId ? { ...item, progress: pct } : item
+              ),
+            }));
+          });
+          if (res.duplicate) {
+            toast.info(`${file.name} was already uploaded.`);
+          } else {
+            toast.success(`Uploaded ${file.name}. Reading & learning...`);
+          }
+        } finally {
+          setActiveUploadsByKind((prev) => ({
+            ...prev,
+            [kind]: prev[kind].filter((item) => item.id !== uploadId),
+          }));
         }
       }
     },
@@ -279,6 +306,7 @@ export function CustomizeClient() {
             onReprocess={(doc) => reprocessMutation.mutate(doc.id)}
             onDelete={(doc) => deleteMutation.mutate(doc.id)}
             isUploading={uploadMutation.isPending}
+            activeUploads={activeUploadsByKind.playbook}
           />
         </TabsContent>
 
@@ -300,6 +328,7 @@ export function CustomizeClient() {
             onReprocess={(doc) => reprocessMutation.mutate(doc.id)}
             onDelete={(doc) => deleteMutation.mutate(doc.id)}
             isUploading={uploadMutation.isPending}
+            activeUploads={activeUploadsByKind.business}
           />
         </TabsContent>
 
@@ -322,6 +351,7 @@ export function CustomizeClient() {
             onReprocess={(doc) => reprocessMutation.mutate(doc.id)}
             onDelete={(doc) => deleteMutation.mutate(doc.id)}
             isUploading={uploadMutation.isPending}
+            activeUploads={activeUploadsByKind.previous_posts}
           />
         </TabsContent>
 

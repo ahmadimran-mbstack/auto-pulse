@@ -46,7 +46,7 @@ export function clearCachedToken(): void {
 
 // Retrieves a fresh token using tokenCache manager
 // Reuses token until 60 seconds before expiration; shares in-flight requests
-async function getFreshToken(forceRefresh: boolean = false): Promise<string | null> {
+export async function getFreshToken(forceRefresh: boolean = false): Promise<string | null> {
   return tokenCache.getToken(async () => {
     // Method 1: authClient.token() as recommended in Neon Auth JWT guide
     try {

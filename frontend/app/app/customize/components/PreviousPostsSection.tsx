@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { FileDropzone } from "@/components/app/FileDropzone";
+import { FileDropzone, type ActiveUploadItem } from "@/components/app/FileDropzone";
 import { Section } from "@/components/app/Section";
 import { pastePostsSchema, type PastePostsValues } from "@/lib/customization-schemas";
 import { DocumentRow } from "./DocumentRow";
@@ -37,6 +37,7 @@ interface PreviousPostsSectionProps {
   onReprocess: (doc: DocumentSummary) => void;
   onDelete: (doc: DocumentSummary) => void;
   isUploading: boolean;
+  activeUploads?: ActiveUploadItem[];
 }
 
 export function PreviousPostsSection({
@@ -51,6 +52,7 @@ export function PreviousPostsSection({
   onReprocess,
   onDelete,
   isUploading,
+  activeUploads,
 }: PreviousPostsSectionProps) {
   const [pasteOpen, setPasteOpen] = React.useState(false);
   const form = useForm<PastePostsValues>({
@@ -142,6 +144,7 @@ export function PreviousPostsSection({
           <FileDropzone
             onFilesSelected={onUpload}
             disabled={isUploading}
+            activeUploads={activeUploads}
             label="Drop a file of your previous posts or click to upload"
             hint="PDF, DOCX, MD, or TXT · Max 10 MB · Click any uploaded item to pin or exclude individual posts"
           />

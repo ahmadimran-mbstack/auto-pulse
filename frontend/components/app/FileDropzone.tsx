@@ -1,15 +1,24 @@
 "use client";
 
 import * as React from "react";
-import { UploadCloudIcon } from "lucide-react";
+import { Loader2Icon, UploadCloudIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { validateCustomizationFile } from "@/lib/customization-schemas";
+import { Progress } from "@/components/ui/progress";
+import { BorderBeam } from "@/components/ui/border-beam";
+
+export interface ActiveUploadItem {
+  id: string;
+  name: string;
+  progress: number;
+}
 
 interface FileDropzoneProps {
   onFilesSelected: (files: File[]) => void;
   accept?: string;
   multiple?: boolean;
   disabled?: boolean;
+  activeUploads?: ActiveUploadItem[];
   label?: string;
   hint?: string;
   className?: string;
@@ -20,6 +29,7 @@ export function FileDropzone({
   accept = ".pdf,.docx,.md,.markdown,.txt",
   multiple = true,
   disabled = false,
+  activeUploads = [],
   label = "Drop files here or click to browse",
   hint = "PDF, DOCX, Markdown, or TXT · Max 10 MB per file",
   className,
@@ -62,13 +72,16 @@ export function FileDropzone({
           handleFiles(e.dataTransfer.files);
         }}
         className={cn(
-          "flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-6 py-8 text-center transition-colors cursor-pointer",
+          "relative overflow-hidden flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-6 py-8 text-center transition-colors cursor-pointer",
           dragging
             ? "border-primary bg-signal-soft/50"
             : "border-input bg-card hover:border-primary/60 hover:bg-muted/30",
-          disabled && "opacity-60 cursor-not-allowed pointer-events-none"
+          disabled && "opacity-75 cursor-not-allowed pointer-events-none"
         )}
       >
+        {(dragging || activeUploads.length > 0) && (
+          <BorderBeam size={140} duration={6} />
+        )}
         <input
           ref={inputRef}
           type="file"
@@ -79,13 +92,34 @@ export function FileDropzone({
           onChange={(e) => handleFiles(e.target.files)}
         />
         <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-foreground">
-          <UploadCloudIcon className="size-5 text-primary" />
+          {activeUploads.length > 0 ? (
+            <Loader2Icon className="size-5 text-primary animate-spin" />
+          ) : (
+            <UploadCloudIcon className="size-5 text-primary" />
+          )}
         </div>
         <div className="space-y-1">
           <p className="text-sm font-medium text-foreground">{label}</p>
           <p className="text-xs text-muted-foreground">{hint}</p>
         </div>
       </label>
+
+      {activeUploads.length > 0 && (
+        <div className="space-y-2 rounded-lg border border-border bg-card p-3">
+          {activeUploads.map((item) => (
+            <div key={item.id} className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="truncate font-medium text-foreground">{item.name}</span>
+                <span className="text-muted-foreground tabular-nums">
+                  {item.progress < 100 ? `Uploading ${item.progress}%` : "Uploaded · Starting analysis..."}
+                </span>
+              </div>
+              <Progress value={item.progress} />
+            </div>
+          ))}
+        </div>
+      )}
+
       {clientError && (
         <p className="text-xs text-status-danger-fg" role="alert">
           {clientError}

@@ -1,4 +1,5 @@
-import { apiCall } from "@/lib/api";
+import { apiCall, getFreshToken } from "@/lib/api";
+import { env } from "@/lib/env";
 import type {
   CompiledContextView,
   CustomizationOverview,
@@ -72,6 +73,55 @@ export async function uploadCustomizationDocument(
   return apiCall<DocumentSummary>("/customization/documents", {
     method: "POST",
     body: form,
+  });
+}
+
+export async function uploadCustomizationDocumentWithProgress(
+  file: File,
+  kind: DocumentKind,
+  onProgress: (percent: number) => void,
+  title?: string
+): Promise<DocumentSummary> {
+  const token = await getFreshToken();
+  if (!token) {
+    throw new Error("Your session is no longer valid. Please sign in again.");
+  }
+  const baseApiUrl = env.apiUrl.replace(/\/+$/, "");
+  const url = `${baseApiUrl}/customization/documents`;
+  const form = new FormData();
+  form.append("file", file);
+  form.append("kind", kind);
+  if (title) form.append("title", title);
+
+  return new Promise<DocumentSummary>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && e.total > 0) {
+        onProgress(Math.min(100, Math.round((e.loaded / e.total) * 100)));
+      }
+    };
+
+    xhr.onload = () => {
+      try {
+        const parsed = xhr.responseText ? JSON.parse(xhr.responseText) : {};
+        if (xhr.status >= 200 && xhr.status < 300) {
+          onProgress(100);
+          resolve(parsed as DocumentSummary);
+        } else {
+          const msg =
+            parsed?.detail?.message || parsed?.message || `Upload failed (HTTP ${xhr.status})`;
+          reject(new Error(msg));
+        }
+      } catch {
+        reject(new Error(`Upload failed (HTTP ${xhr.status})`));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error("Network error while uploading file."));
+    xhr.send(form);
   });
 }
 

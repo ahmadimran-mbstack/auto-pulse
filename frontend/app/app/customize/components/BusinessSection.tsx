@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileDropzone } from "@/components/app/FileDropzone";
+import { FileDropzone, type ActiveUploadItem } from "@/components/app/FileDropzone";
 import { Section } from "@/components/app/Section";
 import { urlAddSchema, type UrlAddValues } from "@/lib/customization-schemas";
 import { DocumentRow } from "./DocumentRow";
@@ -31,6 +31,7 @@ interface BusinessSectionProps {
   onReprocess: (doc: DocumentSummary) => void;
   onDelete: (doc: DocumentSummary) => void;
   isUploading: boolean;
+  activeUploads?: ActiveUploadItem[];
 }
 
 export function BusinessSection({
@@ -44,6 +45,7 @@ export function BusinessSection({
   onReprocess,
   onDelete,
   isUploading,
+  activeUploads,
 }: BusinessSectionProps) {
   const form = useForm<UrlAddValues>({
     resolver: zodResolver(urlAddSchema),
@@ -116,6 +118,7 @@ export function BusinessSection({
           <FileDropzone
             onFilesSelected={onUpload}
             disabled={isUploading}
+            activeUploads={activeUploads}
             label="Drop business documents here or click to upload"
             hint="PDF, DOCX, MD, or TXT · Max 10 MB · Up to 20 documents"
           />
