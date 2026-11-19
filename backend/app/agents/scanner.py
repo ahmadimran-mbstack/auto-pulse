@@ -134,10 +134,15 @@ def _get_word_pattern(clean_w: str) -> str:
         )
 
 
-def scan(text: str) -> ScanResult:
+def scan(
+    text: str,
+    whitelist_words: Optional[List[str]] = None,
+    extra_banned_phrases: Optional[List[str]] = None,
+) -> ScanResult:
     config = load_patterns_config()
     weights: Dict[str, int] = config.get("weights", {})
     caps: Dict[str, int] = config.get("caps", {})
+    whitelist_set = {w.strip().lower() for w in (whitelist_words or []) if w and w.strip()}
 
     banned_words_cap = caps.get("banned_words_total", 36)
     banned_phrases_cap = caps.get("banned_phrases_total", 40)
@@ -177,7 +182,7 @@ def scan(text: str) -> ScanResult:
     # Strong tier words (6 points each)
     for w in strong_words:
         clean_w = w.strip()
-        if not clean_w:
+        if not clean_w or clean_w.lower() in whitelist_set:
             continue
         pat = _get_word_pattern(clean_w)
         for m in re.finditer(pat, text):
@@ -197,7 +202,7 @@ def scan(text: str) -> ScanResult:
     weak_matches_by_word: Dict[str, List[re.Match]] = {}
     for w in weak_words:
         clean_w = w.strip()
-        if not clean_w:
+        if not clean_w or clean_w.lower() in whitelist_set:
             continue
         pat = _get_word_pattern(clean_w)
         m_list = list(re.finditer(pat, text))

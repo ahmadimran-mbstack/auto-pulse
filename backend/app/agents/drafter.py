@@ -190,27 +190,33 @@ DRAFTER_REWRITE_PROMPT = ChatPromptTemplate.from_messages(
 )
 
 
-def _clean_post_text(text: str) -> str:
-    """Strips Markdown bold/italics, arrow symbols, and abnormal spaces."""
+def _clean_post_text(text: str, policy: Optional[Any] = None) -> str:
+    """Strips Markdown bold/italics, arrow symbols (unless allowed), and abnormal spaces."""
+    from app.services.customization.policy import get_effective_policy
+
+    p = get_effective_policy(policy)
     cleaned = text.strip()
     cleaned = re.sub(r"\*\*([^*]+)\*\*", r"\1", cleaned)
     cleaned = re.sub(r"__([^_]+)__", r"\1", cleaned)
     cleaned = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"\1", cleaned)
     cleaned = re.sub(r"^#+\s*", "", cleaned, flags=re.MULTILINE)
-    cleaned = re.sub(r"[→➡➔►]", "-", cleaned)
+    if not p.allow_markdown_bullets:
+        cleaned = re.sub(r"[→➡➔►]", "-", cleaned)
     cleaned = re.sub(r"\s*—\s*", " - ", cleaned)
     return cleaned.strip()
 
 
-def _clean_hashtags(hashtags: List[str]) -> List[str]:
-    """Cleans hashtags to alphanumeric strings, max 3."""
+def _clean_hashtags(hashtags: List[str], max_tags: int = 3) -> List[str]:
+    """Cleans hashtags to alphanumeric strings, up to max_tags."""
+    if max_tags <= 0:
+        return []
     cleaned_tags = []
     for tag in hashtags:
         cleaned = tag.lstrip("#").strip()
         cleaned = re.sub(r"[^A-Za-z0-9]", "", cleaned)
         if cleaned and cleaned not in cleaned_tags:
             cleaned_tags.append(cleaned)
-    return cleaned_tags[:3]
+    return cleaned_tags[:max_tags]
 
 
 def _clean_image_headline(headline: str) -> str:
@@ -291,6 +297,21 @@ def get_drafter_model() -> BaseChatModel:
     return create_chat_model(settings.LLM_MODEL_DRAFTER, temperature=0.7)
 
 
+def _policy_length_bounds(policy: Optional[Any] = None) -> tuple[int, int]:
+    from app.services.customization.policy import get_effective_policy
+
+    if policy is None:
+        return 700, 1800
+    p = get_effective_policy(policy)
+    has_custom = (
+        p.provenance.get("length_min", "default") != "default"
+        or p.provenance.get("length_max", "default") != "default"
+    )
+    if not has_custom:
+        return 700, 1800
+    return p.length_min, p.length_max
+
+
 def draft_initial_post(
     gtm_brief: Union[GTMBriefOutput, Dict[str, Any]],
     sources: Optional[List[Any]] = None,
@@ -300,10 +321,17 @@ def draft_initial_post(
     angle: Optional[str] = None,
     key_facts: Optional[List[Any]] = None,
     hook_text: Optional[str] = None,
+    policy: Optional[Any] = None,
+    customization_block: str = "",
 ) -> DrafterOutput:
     """Generates the initial draft post from GTM brief, profile, and grounded key facts."""
+    from app.services.customization.policy import get_effective_policy
+
     if model is None:
         model = get_drafter_model()
+
+    p = get_effective_policy(policy)
+    min_len, max_len = _policy_length_bounds(policy)
 
     profile_dict = profile or {}
     sources_text = _format_sources_block(sources)
@@ -349,7 +377,7 @@ def draft_initial_post(
         "tone": profile_dict.get("tone") or "direct, insightful, practitioner-first",
         "voice_notes": profile_dict.get("voice_notes") or "",
         "sources_text": sources_text,
-        "feedback_block": "",
+        "feedback_block": f"{customization_block}\n".strip() if customization_block else "",
     }
 
     structured_model = model.with_structured_output(DrafterOutput, include_raw=True)
@@ -367,16 +395,16 @@ def draft_initial_post(
             if parsed_output is None and res.get("parsing_error"):
                 last_error = str(res.get("parsing_error"))
                 prompt_input["feedback_block"] = (
-                    f"\nValidation Error on attempt {attempts}: {last_error}\n"
-                    "Ensure post_text is 700 to 1800 characters, hashtags is a list of 0-3 strings, and image_headline <= 70 chars."
+                    f"{customization_block}\nValidation Error on attempt {attempts}: {last_error}\n"
+                    f"Ensure post_text is {min_len} to {max_len} characters, hashtags is a list of {p.hashtags_min}-{p.hashtags_max} strings, and image_headline <= 70 chars."
                 )
             elif parsed_output is not None:
-                cleaned_text = _clean_post_text(parsed_output.post_text)
-                if len(cleaned_text) < 700 or len(cleaned_text) > 1800:
+                cleaned_text = _clean_post_text(parsed_output.post_text, policy=p)
+                if len(cleaned_text) < min_len or len(cleaned_text) > max_len:
                     if attempts == 1:
                         prompt_input["feedback_block"] = (
-                            f"\nLength Violation: Draft length was {len(cleaned_text)} characters. "
-                            "It MUST be strictly between 700 and 1,800 characters. Please expand or tighten accordingly."
+                            f"{customization_block}\nLength Violation: Draft length was {len(cleaned_text)} characters. "
+                            f"It MUST be strictly between {min_len} and {max_len} characters. Please expand or tighten accordingly."
                         )
                         parsed_output = None
                         continue
@@ -386,8 +414,8 @@ def draft_initial_post(
     if parsed_output is None:
         raise RuntimeError(f"Drafter initial post generation failed after {attempts} attempts: {last_error}")
 
-    parsed_output.post_text = _clean_post_text(parsed_output.post_text)
-    parsed_output.hashtags = _clean_hashtags(parsed_output.hashtags)
+    parsed_output.post_text = _clean_post_text(parsed_output.post_text, policy=p)
+    parsed_output.hashtags = _clean_hashtags(parsed_output.hashtags, max_tags=p.hashtags_max)
     parsed_output.image_headline = _clean_image_headline(parsed_output.image_headline)
     return parsed_output
 
@@ -404,10 +432,17 @@ def rewrite_post_spans(
     angle: Optional[str] = None,
     key_facts: Optional[List[Any]] = None,
     hook_text: Optional[str] = None,
+    policy: Optional[Any] = None,
+    customization_block: str = "",
 ) -> DrafterOutput:
     """Performs a targeted, surgical rewrite of flagged spans in the previous draft."""
+    from app.services.customization.policy import get_effective_policy
+
     if model is None:
         model = get_drafter_model()
+
+    p = get_effective_policy(policy)
+    min_len, max_len = _policy_length_bounds(policy)
 
     if isinstance(previous_draft, DrafterOutput):
         prev_text = previous_draft.post_text
@@ -457,7 +492,7 @@ def rewrite_post_spans(
         "failures_text": failures_text,
         "sources_text": sources_text,
         "ending_strategy": ending_strategy,
-        "feedback_block": "",
+        "feedback_block": f"{customization_block}\n".strip() if customization_block else "",
     }
 
     structured_model = model.with_structured_output(DrafterOutput, include_raw=True)
@@ -474,14 +509,14 @@ def rewrite_post_spans(
             parsed_output = res.get("parsed")
             if parsed_output is None and res.get("parsing_error"):
                 last_error = str(res.get("parsing_error"))
-                prompt_input["feedback_block"] = f"\nValidation Error on attempt {attempts}: {last_error}"
+                prompt_input["feedback_block"] = f"{customization_block}\nValidation Error on attempt {attempts}: {last_error}"
             elif parsed_output is not None:
-                cleaned_text = _clean_post_text(parsed_output.post_text)
-                if len(cleaned_text) < 700 or len(cleaned_text) > 1800:
+                cleaned_text = _clean_post_text(parsed_output.post_text, policy=p)
+                if len(cleaned_text) < min_len or len(cleaned_text) > max_len:
                     if attempts == 1:
                         prompt_input["feedback_block"] = (
-                            f"\nLength Violation: Revised draft was {len(cleaned_text)} characters. "
-                            "It MUST be strictly between 700 and 1,800 characters."
+                            f"{customization_block}\nLength Violation: Revised draft was {len(cleaned_text)} characters. "
+                            f"It MUST be strictly between {min_len} and {max_len} characters."
                         )
                         parsed_output = None
                         continue
@@ -491,7 +526,7 @@ def rewrite_post_spans(
     if parsed_output is None:
         raise RuntimeError(f"Drafter rewrite failed after {attempts} attempts: {last_error}")
 
-    parsed_output.post_text = _clean_post_text(parsed_output.post_text)
-    parsed_output.hashtags = _clean_hashtags(parsed_output.hashtags or prev_hashtags)
+    parsed_output.post_text = _clean_post_text(parsed_output.post_text, policy=p)
+    parsed_output.hashtags = _clean_hashtags(parsed_output.hashtags or prev_hashtags, max_tags=p.hashtags_max)
     parsed_output.image_headline = _clean_image_headline(parsed_output.image_headline or prev_headline)
     return parsed_output

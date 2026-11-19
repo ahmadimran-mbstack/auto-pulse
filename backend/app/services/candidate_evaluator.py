@@ -142,12 +142,23 @@ def _similarity_ratio(a: str, b: str) -> float:
     return max(seq, jaccard)
 
 
-def check_hard_length(post_text: str) -> Optional[str]:
-    """Check that the post is non-empty and within 400 to 3000 characters."""
+def check_hard_length(post_text: str, policy: Optional[Any] = None) -> Optional[str]:
+    """Check that the post is non-empty and within allowed character bounds."""
+    from app.services.customization.policy import get_effective_policy
+
     clean = (post_text or "").strip()
-    if len(clean) < MIN_POST_CHARS:
+    if policy is None:
+        min_chars, max_chars = MIN_POST_CHARS, MAX_POST_CHARS
+    else:
+        p = get_effective_policy(policy)
+        has_custom_min = p.provenance.get("length_min", "default") != "default"
+        has_custom_max = p.provenance.get("length_max", "default") != "default"
+        min_chars = p.length_min if has_custom_min else MIN_POST_CHARS
+        max_chars = p.length_max if has_custom_max else MAX_POST_CHARS
+
+    if len(clean) < min_chars:
         return "too_short"
-    if len(clean) > MAX_POST_CHARS:
+    if len(clean) > max_chars:
         return "too_long"
     return None
 
@@ -189,8 +200,9 @@ def _build_allowed_number_corpus(
     sources: Optional[List[Any]],
     profile: Optional[Dict[str, Any]],
     topic_title: Optional[str] = None,
+    extra_allowed_numbers: Optional[List[str]] = None,
 ) -> str:
-    """Combine finder facts, sources, and user profile text into one grounding string."""
+    """Combine finder facts, sources, user profile text, and business fact numbers into one grounding string."""
     parts: List[str] = []
     if topic_title:
         parts.append(str(topic_title))
@@ -213,6 +225,9 @@ def _build_allowed_number_corpus(
             if val:
                 parts.append(str(val))
 
+    if extra_allowed_numbers:
+        parts.extend(str(n) for n in extra_allowed_numbers if n)
+
     combined = " ".join(parts)
     # Remove commas inside numbers (e.g. 1,200 -> 1200) for reliable matching
     return re.sub(r",(\d)", r"\1", combined).lower()
@@ -224,12 +239,15 @@ def find_unsupported_claim_numbers(
     sources: Optional[List[Any]] = None,
     profile: Optional[Dict[str, Any]] = None,
     topic_title: Optional[str] = None,
+    extra_allowed_numbers: Optional[List[str]] = None,
 ) -> List[str]:
     """Find claim-like numbers (%, $, multiples like 3x, counts > 10, and years)
     that do not appear in the finder's facts/sources or user's profile.
     Plain list counts 1 to 10 (such as '3 things') are allowed.
     """
-    grounding = _build_allowed_number_corpus(key_facts, sources, profile, topic_title)
+    grounding = _build_allowed_number_corpus(
+        key_facts, sources, profile, topic_title, extra_allowed_numbers=extra_allowed_numbers
+    )
     grounding_compact = grounding.replace(" ", "")
     bad: List[str] = []
 
@@ -293,16 +311,31 @@ def check_hard_profile_settings(post_text: str, profile: Optional[Dict[str, Any]
     return False
 
 
-def check_hard_similarity(post_text: str, recent_captions: Optional[List[str]]) -> bool:
-    """Return True if the first line or full text is too close to any recent post."""
-    if not recent_captions:
+def _has_12_word_shingle_match(a: str, b: str) -> bool:
+    """Return True if texts share any exact 12-word sequence."""
+    wa = _normalize_text(a).split()
+    wb = _normalize_text(b).split()
+    if len(wa) < 12 or len(wb) < 12:
         return False
+    shingles_a = {" ".join(wa[i : i + 12]) for i in range(len(wa) - 11)}
+    for i in range(len(wb) - 11):
+        if " ".join(wb[i : i + 12]) in shingles_a:
+            return True
+    return False
+
+
+def check_hard_similarity(
+    post_text: str,
+    recent_captions: Optional[List[str]],
+    sample_texts: Optional[List[str]] = None,
+) -> bool:
+    """Return True if the first line or full text is too close to any recent post or user sample."""
     clean = (post_text or "").strip()
     if not clean:
         return False
     first_line = clean.split("\n")[0].strip()
 
-    for prev in recent_captions[:15]:
+    for prev in (recent_captions or [])[:15]:
         prev_clean = (prev or "").strip()
         if not prev_clean:
             continue
@@ -311,6 +344,16 @@ def check_hard_similarity(post_text: str, recent_captions: Optional[List[str]]) 
             return True
         if _similarity_ratio(clean, prev_clean) >= FULL_TEXT_SIMILARITY_THRESHOLD:
             return True
+
+    for sample in sample_texts or []:
+        s_clean = (sample or "").strip()
+        if not s_clean:
+            continue
+        if _has_12_word_shingle_match(clean, s_clean):
+            return True
+        if _similarity_ratio(clean, s_clean) >= FULL_TEXT_SIMILARITY_THRESHOLD:
+            return True
+
     return False
 
 
@@ -414,11 +457,15 @@ def evaluate_candidate(
     ]
     slop_score = int(context.get("ai_slop_score", 0) or 0)
 
+    policy = context.get("policy")
+    extra_allowed_numbers = context.get("extra_allowed_numbers")
+    sample_texts = context.get("sample_texts")
+
     issue_codes: List[str] = []
     hard_failures: List[str] = []
 
-    # 1. Length check (400 to 3000 chars)
-    len_code = check_hard_length(post_text)
+    # 1. Length check
+    len_code = check_hard_length(post_text, policy=policy)
     if len_code:
         issue_codes.append(len_code)
         hard_failures.append(f"length:{len_code}")
@@ -440,6 +487,7 @@ def evaluate_candidate(
         sources=sources,
         profile=profile,
         topic_title=topic_title,
+        extra_allowed_numbers=extra_allowed_numbers,
     )
     if bad_nums:
         issue_codes.append("unsupported_number")
@@ -450,8 +498,8 @@ def evaluate_candidate(
         issue_codes.append("profile_mismatch")
         hard_failures.append("profile_mismatch")
 
-    # 6. Too similar to recent posts
-    if check_hard_similarity(post_text, recent_captions):
+    # 6. Too similar to recent posts or user samples
+    if check_hard_similarity(post_text, recent_captions, sample_texts=sample_texts):
         issue_codes.append("too_similar_to_recent")
         hard_failures.append("too_similar_to_recent")
 

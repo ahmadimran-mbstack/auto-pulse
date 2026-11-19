@@ -224,16 +224,19 @@ def validate_fact_set(facts: List[Any], page_text: str) -> Tuple[List[Fact], Opt
 # DRAFT BODY CODE CHECKS (STEP 6)
 # =====================================================================
 
-def check_length_and_hook(caption: str) -> Optional[str]:
-    """Check post length (850 to 1200 characters) and first line length (<= 140 chars)."""
+def check_length_and_hook(caption: str, policy: Optional[Any] = None) -> Optional[str]:
+    """Check post length and first line length against EffectivePolicy bounds."""
+    from app.services.customization.policy import get_effective_policy
+
+    p = get_effective_policy(policy)
     clean = caption.strip()
     length = len(clean)
-    if length < 850 or length > 1200:
-        return f"Post length {length} is out of bounds (must be between 850 and 1200 characters)"
+    if length < p.length_min or length > p.length_max:
+        return f"Post length {length} is out of bounds (must be between {p.length_min} and {p.length_max} characters)"
 
     first_line = clean.split("\n")[0].strip()
-    if len(first_line) > 140:
-        return f"First line length is {len(first_line)} characters, which exceeds the 140-character maximum"
+    if len(first_line) > p.first_line_max:
+        return f"First line length is {len(first_line)} characters, which exceeds the {p.first_line_max}-character maximum"
 
     return None
 
@@ -357,6 +360,7 @@ def check_numbers_grounding(
     source_text: str = "",
     key_facts: Optional[List[Any]] = None,
     topic_title: str = "",
+    extra_allowed_numbers: Optional[List[str]] = None,
 ) -> Optional[str]:
     """Check that percentages, decimals, and numbers with units appear in verified key_facts or source.
     Years 2020-2030 and small structural counts (1-10) are allowed.
@@ -372,6 +376,8 @@ def check_numbers_grounding(
                 facts_parts.append(getattr(kf, "fact", ""))
             else:
                 facts_parts.append(str(kf))
+    if extra_allowed_numbers:
+        facts_parts.append(" ".join(str(x) for x in extra_allowed_numbers if x))
 
     combined_grounding = f"{topic_title} {source_text} {' '.join(facts_parts)}"
     normalized_source = re.sub(r",(\d)", r"\1", combined_grounding).lower()
@@ -444,9 +450,10 @@ def check_banned_phrases(caption: str) -> Optional[str]:
 def check_banned_experience_phrases(
     caption: str,
     profile: Optional[Dict[str, Any]] = None,
+    documented_experiences: Optional[List[Any]] = None,
 ) -> Optional[str]:
     """Detects banned invented-experience phrases ('we audited', 'our customer', 'last week we', etc.).
-    Allows them only if the user's content profile explicitly documents that experience.
+    Allows them only if the user's content profile or retrieved documented experiences document that experience.
     """
     profile_text = ""
     if profile:
@@ -457,12 +464,29 @@ def check_banned_experience_phrases(
             str(profile.get("bio") or ""),
         ]).lower()
 
+    exp_tokens_list: List[set] = []
+    if documented_experiences:
+        for exp in documented_experiences:
+            exp_txt = exp.get("text") or exp.get("fact") or "" if isinstance(exp, dict) else str(exp)
+            toks = {t for t in re.findall(r"[a-z0-9]{3,}", exp_txt.lower())}
+            if toks:
+                exp_tokens_list.append(toks)
+
     for pattern in BANNED_EXPERIENCE_REGEXES:
         match = pattern.search(caption)
         if match:
             phrase = match.group()
             if phrase.lower() in profile_text:
                 continue
+            # Check if the surrounding sentence overlaps with a retrieved documented experience
+            if exp_tokens_list:
+                sent_start = max(0, caption.rfind("\n", 0, match.start()))
+                sent_end = caption.find("\n", match.end())
+                if sent_end == -1:
+                    sent_end = len(caption)
+                sent_toks = {t for t in re.findall(r"[a-z0-9]{3,}", caption[sent_start:sent_end].lower())}
+                if any(len(sent_toks & et) >= 3 for et in exp_tokens_list):
+                    continue
             return f"Banned invented-experience phrase detected: '{phrase}' (not found in creator profile)"
 
     return None
@@ -550,27 +574,109 @@ def check_image_headline(
     return None
 
 
-def check_hashtags(hashtags: List[str]) -> Optional[str]:
-    """Validates hashtags:
-    - Exactly 1 to 3 hashtags.
-    - CamelCase (e.g. #PostgreSQL #CloudArchitecture).
-    - Length >= 4 characters (excluding '#').
-    - None that are stopwords or fragments (#Why, #The, #How, #New).
-    """
-    if not hashtags or len(hashtags) < 1:
-        return "At least 1 hashtag is required"
-    if len(hashtags) > 3:
-        return f"Too many hashtags ({len(hashtags)}); maximum allowed is 3"
+def check_hashtags(hashtags: List[str], policy: Optional[Any] = None) -> Optional[str]:
+    """Validates hashtags against EffectivePolicy (count, min length, stopwords, casing)."""
+    from app.services.customization.policy import get_effective_policy
 
-    for tag in hashtags:
+    p = get_effective_policy(policy)
+    tags = hashtags or []
+    if len(tags) < p.hashtags_min:
+        return f"At least {p.hashtags_min} hashtag{'s' if p.hashtags_min != 1 else ''} required"
+    if len(tags) > p.hashtags_max:
+        return f"Too many hashtags ({len(tags)}); maximum allowed is {p.hashtags_max}"
+    if not tags:
+        return None
+
+    for tag in tags:
         cleaned = tag.lstrip("#")
         if len(cleaned) < 4:
             return f"Hashtag '{tag}' is too short (must be at least 4 characters)"
         if cleaned.lower() in STOPWORD_TAGS:
             return f"Hashtag '{tag}' is a banned stopword fragment"
-        if not re.match(r"^[A-Z][a-zA-Z0-9]+$", cleaned):
+        if p.hashtag_case == "camel" and not re.match(r"^[A-Z][a-zA-Z0-9]+$", cleaned):
             return f"Hashtag '{tag}' must be in CamelCase (e.g. #SystemDesign)"
+        elif p.hashtag_case == "lower" and not re.match(r"^[a-z][a-z0-9]+$", cleaned):
+            return f"Hashtag '{tag}' must be lowercase (e.g. #systemdesign)"
+        elif p.hashtag_case == "any" and not re.match(r"^[a-zA-Z0-9]+$", cleaned):
+            return f"Hashtag '{tag}' must be alphanumeric"
 
+    return None
+
+
+_EMOJI_RE = re.compile(
+    "[\U0001F300-\U0001F9FF\U0001FA00-\U0001FAFF\u2600-\u27BF]+",
+    flags=re.UNICODE,
+)
+
+
+def check_emoji_policy(caption: str, policy: Optional[Any] = None) -> Optional[str]:
+    """Enforce emoji_policy (none, sparse <= 3, allowed)."""
+    from app.services.customization.policy import get_effective_policy
+
+    p = get_effective_policy(policy)
+    matches = _EMOJI_RE.findall(caption or "")
+    count = sum(len(m) for m in matches)
+    if p.emoji_policy == "none" and count > 0:
+        return f"Emojis are not allowed by your policy (found {count})"
+    if p.emoji_policy == "sparse" and count > 3:
+        return f"Too many emojis ({count}); sparse emoji policy allows at most 3"
+    return None
+
+
+def check_banned_phrases_extra(caption: str, policy: Optional[Any] = None) -> Optional[str]:
+    """Check user-configured banned phrases from EffectivePolicy."""
+    from app.services.customization.policy import get_effective_policy
+
+    p = get_effective_policy(policy)
+    if not p.banned_phrases_extra:
+        return None
+    lower = (caption or "").lower()
+    for phrase in p.banned_phrases_extra:
+        clean_p = phrase.strip().lower()
+        if clean_p and clean_p in lower:
+            return f"Post contains user-banned phrase: '{phrase}'"
+    return None
+
+
+def check_required_end_phrase(caption: str, policy: Optional[Any] = None) -> Optional[str]:
+    """Check required sign-off / ending phrase if configured."""
+    from app.services.customization.policy import get_effective_policy
+
+    p = get_effective_policy(policy)
+    if not p.required_end_phrase:
+        return None
+    clean = (caption or "").strip()
+    if p.required_end_phrase.lower() not in clean[-300:].lower():
+        return f"Post must end with required sign-off: '{p.required_end_phrase}'"
+    return None
+
+
+def check_question_ending(caption: str, policy: Optional[Any] = None) -> Optional[str]:
+    """Check question_ending policy (allowed, required, forbidden)."""
+    from app.services.customization.policy import get_effective_policy
+
+    p = get_effective_policy(policy)
+    if p.question_ending == "allowed":
+        return None
+    lines = [ln.strip() for ln in (caption or "").strip().splitlines() if ln.strip()]
+    last_line = lines[-1] if lines else ""
+    ends_with_q = last_line.endswith("?")
+    if p.question_ending == "required" and not ends_with_q:
+        return "Post must end with a question per your policy"
+    if p.question_ending == "forbidden" and ends_with_q:
+        return "Post must not end with a question per your policy"
+    return None
+
+
+def check_claims_to_avoid(caption: str, claims_to_avoid: Optional[List[str]] = None) -> Optional[str]:
+    """Check that no prohibited business/regulatory claim appears in the caption."""
+    if not claims_to_avoid:
+        return None
+    lower = (caption or "").lower()
+    for claim in claims_to_avoid:
+        c = (claim or "").strip().lower()
+        if len(c) >= 6 and c in lower:
+            return f"Post violates prohibited claim: '{claim}'"
     return None
 
 
@@ -762,6 +868,10 @@ def run_all_checks(
     profile: Optional[Dict[str, Any]] = None,
     relevance_model: Optional[BaseChatModel] = None,
     angle: Optional[str] = None,
+    policy: Optional[Any] = None,
+    extra_allowed_numbers: Optional[List[str]] = None,
+    documented_experiences: Optional[List[Any]] = None,
+    claims_to_avoid: Optional[List[str]] = None,
 ) -> List[str]:
     """Runs all deterministic checks plus the LLM judge check.
     Returns list of failure messages.
@@ -769,13 +879,29 @@ def run_all_checks(
     failures: List[str] = []
 
     # 1. Structural checks
-    res = check_length_and_hook(caption)
+    res = check_length_and_hook(caption, policy=policy)
     if res:
         failures.append(res)
 
-    res = check_hashtags(hashtags)
+    res = check_hashtags(hashtags, policy=policy)
     if res:
         failures.append(res)
+
+    if policy is not None:
+        for fn in (
+            check_emoji_policy,
+            check_banned_phrases_extra,
+            check_required_end_phrase,
+            check_question_ending,
+        ):
+            r = fn(caption, policy=policy)
+            if r:
+                failures.append(r)
+
+    if claims_to_avoid:
+        r = check_claims_to_avoid(caption, claims_to_avoid)
+        if r:
+            failures.append(r)
 
     res = check_banned_phrases(caption)
     if res:
@@ -809,7 +935,13 @@ def run_all_checks(
     if res:
         failures.append(res)
 
-    res = check_numbers_grounding(caption, source_text=source_text, key_facts=key_facts, topic_title=topic_title or "")
+    res = check_numbers_grounding(
+        caption,
+        source_text=source_text,
+        key_facts=key_facts,
+        topic_title=topic_title or "",
+        extra_allowed_numbers=extra_allowed_numbers,
+    )
     if res:
         failures.append(res)
 
@@ -819,7 +951,11 @@ def run_all_checks(
         failures.append(res)
 
     # 6. Invented experience phrase detection
-    res = check_banned_experience_phrases(caption, profile=profile)
+    res = check_banned_experience_phrases(
+        caption,
+        profile=profile,
+        documented_experiences=documented_experiences,
+    )
     if res:
         failures.append(res)
 

@@ -37,6 +37,45 @@ def load_playbook_content() -> str:
     return _PLAYBOOK_CONTENT
 
 
+_COMPILED_DEFAULT_PLAYBOOK: Optional[str] = None
+
+
+def compile_default_playbook_rules() -> str:
+    """Extracts concise rule lines from linkedin_playbook.md (~2.5k tokens instead of ~35 KB)."""
+    global _COMPILED_DEFAULT_PLAYBOOK
+    if _COMPILED_DEFAULT_PLAYBOOK is not None:
+        return _COMPILED_DEFAULT_PLAYBOOK
+
+    raw = load_playbook_content()
+    if not raw or raw == "LinkedIn Content Playbook not found.":
+        return raw
+
+    lines: List[str] = []
+    for ln in raw.splitlines():
+        s = ln.strip()
+        if s.startswith("## ") or s.startswith("### "):
+            lines.append(s)
+        elif "[" in s and "]" in s and any(tag in s for tag in ("[HOOK-", "[BODY-", "[END-", "[FMT-", "[STRAT-")):
+            lines.append(s)
+        elif s.startswith("- **") or s.startswith("1.") or s.startswith("2.") or s.startswith("3."):
+            if len(s) <= 220:
+                lines.append(s)
+
+    compiled = "\n".join(lines).strip()
+    _COMPILED_DEFAULT_PLAYBOOK = compiled if len(compiled) >= 400 else raw
+    return _COMPILED_DEFAULT_PLAYBOOK
+
+
+def resolve_playbook_rules(customization: Optional[Dict[str, Any]] = None) -> str:
+    """Return merged user + default playbook rules when customization is active, else compiled defaults."""
+    if customization and not customization.get("is_empty", True):
+        guidance = customization.get("guidance") or {}
+        rules_text = (guidance.get("playbook_rules_text") or "").strip()
+        if rules_text:
+            return rules_text
+    return compile_default_playbook_rules()
+
+
 class GTMBriefOutput(BaseModel):
     hook_style: str = Field(
         default="observation",
@@ -307,6 +346,7 @@ def run_gtm_brief(
     key_facts: Optional[List[Any]] = None,
     recent_hooks: Optional[List[str]] = None,
     feedback_block: str = "",
+    playbook_rules_override: Optional[str] = None,
 ) -> GTMBriefOutput:
     """Generates the GTM Content Brief before drafting begins.
     Retries once on parsing/schema error. Never raises on hook quality checks.
@@ -315,7 +355,7 @@ def run_gtm_brief(
         model = get_gtm_model()
 
     profile_dict = profile or {}
-    playbook_text = load_playbook_content()
+    playbook_text = playbook_rules_override or compile_default_playbook_rules()
     sources_text = _format_sources_block(sources)
 
     # Resolve clean topic label: never cut mid-word, never raw full title in hook
@@ -433,6 +473,7 @@ def run_gtm_review(
     brief: Union[GTMBriefOutput, Dict[str, Any]],
     sources: Optional[List[Any]] = None,
     model: Optional[BaseChatModel] = None,
+    playbook_rules_override: Optional[str] = None,
 ) -> GTMReviewOutput:
     """Evaluates the final draft post against the GTM brief and playbook rules.
     Retries once on parsing/schema error.
@@ -458,7 +499,7 @@ def run_gtm_review(
         brief_notes = ""
 
     structure_text = "\n".join(f"- {line}" for line in structure_lines) if structure_lines else "None provided."
-    playbook_text = load_playbook_content()
+    playbook_text = playbook_rules_override or compile_default_playbook_rules()
     sources_text = _format_sources_block(sources)
 
     prompt_input = {

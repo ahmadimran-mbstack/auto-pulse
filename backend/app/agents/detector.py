@@ -166,6 +166,8 @@ def evaluate_post(
     sources: Optional[List[Dict[str, Any]]] = None,
     model: Optional[BaseChatModel] = None,
     threshold: Optional[int] = None,
+    whitelist_words: Optional[List[str]] = None,
+    extra_banned_phrases: Optional[List[str]] = None,
 ) -> DetectionResult:
     """Evaluates post text through both deterministic code scanner and LLM judge.
     Final score = max(deterministic_score, llm_score).
@@ -174,7 +176,11 @@ def evaluate_post(
     score_threshold = threshold if threshold is not None else settings.AI_SCORE_THRESHOLD
 
     # 1. Deterministic Rule Scanner
-    scan_result = scan(post_text)
+    scan_result = scan(
+        post_text,
+        whitelist_words=whitelist_words,
+        extra_banned_phrases=extra_banned_phrases,
+    )
     deterministic_score = scan_result.deterministic_score
 
     all_verified_findings: List[VerifiedFinding] = []
