@@ -4,6 +4,14 @@ from app.models.post import Post, GenerationRun, PlaygroundRun
 from app.models.approval import Approval
 from app.models.publication import PostPublication
 from app.models.slack import SlackIntegration, SlackApprovalMessage
+from app.models.customization import (
+    CustomizationDocument,
+    CustomizationFact,
+    CustomizationJob,
+    CustomizationPostSample,
+    CustomizationSettings,
+    CustomizationVersion,
+)
 
 __all__ = [
     "Profile",
@@ -16,4 +24,10 @@ __all__ = [
     "PostPublication",
     "SlackIntegration",
     "SlackApprovalMessage",
+    "CustomizationDocument",
+    "CustomizationFact",
+    "CustomizationJob",
+    "CustomizationPostSample",
+    "CustomizationSettings",
+    "CustomizationVersion",
 ]

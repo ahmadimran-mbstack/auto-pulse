@@ -1,6 +1,7 @@
 import datetime
 from typing import Any, Dict, List, Optional
 import uuid
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
@@ -17,6 +18,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
+from app.core.config import settings
 from app.db.session import Base
 
 
@@ -101,6 +103,15 @@ class Post(Base):
     decided_at: Mapped[Optional[datetime.datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+    # Customization version + caption embedding for semantic repeat-avoidance
+    customization_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    caption_embedding: Mapped[Optional[List[float]]] = mapped_column(
+        Vector(settings.EMBEDDING_DIM), nullable=True
+    )
+    caption_embedding_model: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         CheckConstraint(
@@ -274,6 +285,9 @@ class PlaygroundRun(Base):
     # Cancel flag checked between agent steps
     cancel_requested: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
+    )
+    customization_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), nullable=True
     )
 
     # Lifecycle timestamps
