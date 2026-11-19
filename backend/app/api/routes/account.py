@@ -77,6 +77,7 @@ def _clear_user_redis_keys(user_id: str) -> None:
             f"playground:{user_id}",
             f"manual_run_lock:{user_id}",
             f"content_profile:{user_id}",
+            f"customization_ctx:{user_id}",
         ]
         # Remove any analytics range keys for this user
         for key in client.scan_iter(match=f"analytics:{user_id}:*"):
@@ -151,6 +152,21 @@ def delete_my_account(
         db.query(PlaygroundRun).filter(PlaygroundRun.user_id == uid).delete(synchronize_session=False)
         db.query(GenerationRun).filter(GenerationRun.user_id == uid).delete(synchronize_session=False)
         db.query(Post).filter(Post.user_id == uid).delete(synchronize_session=False)
+        from app.models.customization import (
+            CustomizationDocument,
+            CustomizationFact,
+            CustomizationJob,
+            CustomizationPostSample,
+            CustomizationSettings,
+            CustomizationVersion,
+        )
+
+        db.query(CustomizationJob).filter(CustomizationJob.user_id == uid).delete(synchronize_session=False)
+        db.query(CustomizationFact).filter(CustomizationFact.user_id == uid).delete(synchronize_session=False)
+        db.query(CustomizationPostSample).filter(CustomizationPostSample.user_id == uid).delete(synchronize_session=False)
+        db.query(CustomizationSettings).filter(CustomizationSettings.user_id == uid).delete(synchronize_session=False)
+        db.query(CustomizationVersion).filter(CustomizationVersion.user_id == uid).delete(synchronize_session=False)
+        db.query(CustomizationDocument).filter(CustomizationDocument.user_id == uid).delete(synchronize_session=False)
         db.query(Profile).filter(Profile.user_id == uid).delete(synchronize_session=False)
         db.commit()
     except Exception as exc:
@@ -164,8 +180,20 @@ def delete_my_account(
             },
         )
 
-    # 4. Clear Redis keys and in-memory caches
+    # 4. Clear Redis keys, in-memory caches, and customization object storage
     _clear_user_redis_keys(uid)
+    try:
+        from app.services.customization.context import invalidate_customization_context_cache
+
+        invalidate_customization_context_cache(uid)
+    except Exception:
+        pass
+    try:
+        from app.services.storage import get_storage_backend
+
+        get_storage_backend().delete_prefix(f"customization/{uid}/")
+    except Exception as exc:
+        logger.warning(f"Best-effort customization storage cleanup failed for {uid}: {exc}")
 
     # 5. Delete the Neon Auth user, sessions, accounts, and verification records
     try:

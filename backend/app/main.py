@@ -22,6 +22,7 @@ from app.api.routes.public import posts_public_router, router as public_router
 from app.api.routes.dashboard import router as dashboard_router
 from app.api.routes.analytics import router as analytics_router
 from app.api.routes.linkedin import router as linkedin_router
+from app.api.routes.customization import router as customization_router
 from app.api.routes.slack import (
     integrations_router as slack_integrations_router,
     router as slack_router,
@@ -227,6 +228,7 @@ app.include_router(posts_public_router)
 app.include_router(dashboard_router)
 app.include_router(analytics_router)
 app.include_router(linkedin_router)
+app.include_router(customization_router)
 app.include_router(slack_router)
 app.include_router(slack_integrations_router)
 app.include_router(slack_api_router)
@@ -285,8 +287,13 @@ async def _background_reaper_loop():
 def _run_reaper_cycle():
     from app.db.session import SessionLocal
     from app.services.run_reaper import reap_stalled_runs
+    from app.jobs.customization_worker import reap_stale_customization_jobs
     with SessionLocal() as db:
         reap_stalled_runs(db, stall_threshold_seconds=settings.STALLED_PROGRESS_TIMEOUT_SECONDS)
+        try:
+            reap_stale_customization_jobs(db)
+        except Exception as exc:
+            logger.debug(f"Customization reaper warning: {exc}")
 
 
 @app.on_event("startup")
@@ -339,5 +346,7 @@ def start_automated_scheduler():
         logger.info("Skipping background scheduler in test environment")
         return
     asyncio.create_task(_background_scheduler_loop())
+    from app.jobs.customization_worker import start_customization_worker
+    start_customization_worker()
 
 

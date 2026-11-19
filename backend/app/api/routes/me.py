@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 from app.core.auth import User, current_user
+from app.core.config import settings
 
 router = APIRouter(tags=["auth"])
 
@@ -11,4 +12,5 @@ def get_me(user: User = Depends(current_user)):
         "id": user.id,
         "email": user.email,
         "name": user.name,
+        "customization_enabled": settings.is_customization_enabled_for(user.id),
     }
