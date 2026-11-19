@@ -429,7 +429,13 @@ def run_finder_agent(
         "language": profile.get("language") or "English",
         "history_text": history_text,
         "candidates_text": candidates_text,
-        "feedback_block": f"\nPRIORITY CREATOR TOPIC HINT: Focus strictly on this angle/topic: '{topic_hint}'" if topic_hint else "",
+        "feedback_block": (
+            f"\nMANDATORY CREATOR TOPIC OVERRIDE: The creator explicitly requested a post about '{topic_hint}'. "
+            f"You MUST select the candidate most relevant to '{topic_hint}' and set topic_label and angle directly about '{topic_hint}'. "
+            "Do NOT drift to an unrelated topic."
+            if topic_hint
+            else ""
+        ),
     }
 
     structured_model = model.with_structured_output(FinderOutput, include_raw=True)

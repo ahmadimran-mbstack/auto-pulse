@@ -322,14 +322,13 @@ def build_graph(
         topic_hint = (state.get("topic_hint") or "").strip()
         if topic_hint:
             queries = [
-                f"{topic_hint} architecture benchmarks 2026",
-                f"{topic_hint} engineering tradeoffs production",
-                f"{topic_hint} practical lessons 2026",
-                f"{topic_hint} real world case study 2026",
+                topic_hint,
+                f"{topic_hint} insights case study",
+                f"{topic_hint} practical lessons",
             ]
             seconds["plan"] = round(time.perf_counter() - start_t, 3)
             return {
-                "queries": queries[:4],
+                "queries": queries,
                 "counters": counters,
                 "seconds_per_node": seconds,
             }
@@ -421,8 +420,10 @@ def build_graph(
                     "counters": counters,
                     "seconds_per_node": seconds,
                 }
-            # Search specifically for topic hint
-            queries.insert(0, topic_hint)
+            # Widen lookback for explicit topic hints so evergreen/specific topics find relevant sources
+            lookback_days = max(lookback_days, 30)
+            if topic_hint not in queries:
+                queries.insert(0, topic_hint)
 
         all_candidates: List[Candidate] = []
         try:
@@ -998,6 +999,8 @@ def build_graph(
         whitelist_words = (cust.get("guidance") or {}).get("vocabulary_preferred") if not cust.get("is_empty", True) else None
         extra_banned = policy.get("banned_phrases_extra") if policy else None
 
+        allow_emojis = bool(policy and policy.get("emoji_policy", "none") != "none")
+
         counters["llm_calls"] = counters.get("llm_calls", 0) + 1
         counters["tokens_in"] = counters.get("tokens_in", 0) + 650
         counters["tokens_out"] = counters.get("tokens_out", 0) + 280
@@ -1009,6 +1012,7 @@ def build_graph(
                 threshold=settings.AI_SCORE_THRESHOLD,
                 whitelist_words=whitelist_words,
                 extra_banned_phrases=extra_banned,
+                allow_emojis=allow_emojis,
             )
         except Exception as exc:
             seconds[f"detector_r{current_round}"] = round(time.perf_counter() - start_t, 3)

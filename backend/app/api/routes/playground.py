@@ -215,10 +215,21 @@ def run_playground_pipeline_task(run_id: uuid.UUID, user_id: str, topic_hint: Op
             err_code = final_state.get("error_code")
             state_status = final_state.get("status")
             internal_trace_val = final_state.get("internal_trace")
+            cust_ver_raw = (final_state.get("customization") or {}).get("version_id")
+            cust_ver_uuid = None
+            if cust_ver_raw:
+                try:
+                    cust_ver_uuid = uuid.UUID(str(cust_ver_raw))
+                except ValueError:
+                    cust_ver_uuid = None
             finished_now = datetime.datetime.now(datetime.timezone.utc)
 
             gen_run = db.query(GenerationRun).filter(GenerationRun.id == run_id).first()
             p_run = db.query(PlaygroundRun).filter(PlaygroundRun.id == run_id).first()
+            if gen_run and cust_ver_uuid:
+                gen_run.customization_version_id = cust_ver_uuid
+            if p_run and cust_ver_uuid:
+                p_run.customization_version_id = cust_ver_uuid
 
             # Cancelled by user
             if state_status == "cancelled" or final_state.get("cancelled") or (p_run and p_run.cancel_requested):

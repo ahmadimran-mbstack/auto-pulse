@@ -168,6 +168,7 @@ def evaluate_post(
     threshold: Optional[int] = None,
     whitelist_words: Optional[List[str]] = None,
     extra_banned_phrases: Optional[List[str]] = None,
+    allow_emojis: bool = False,
 ) -> DetectionResult:
     """Evaluates post text through both deterministic code scanner and LLM judge.
     Final score = max(deterministic_score, llm_score).
@@ -180,6 +181,7 @@ def evaluate_post(
         post_text,
         whitelist_words=whitelist_words,
         extra_banned_phrases=extra_banned_phrases,
+        allow_emojis=allow_emojis,
     )
     deterministic_score = scan_result.deterministic_score
 

@@ -138,6 +138,7 @@ def scan(
     text: str,
     whitelist_words: Optional[List[str]] = None,
     extra_banned_phrases: Optional[List[str]] = None,
+    allow_emojis: bool = False,
 ) -> ScanResult:
     config = load_patterns_config()
     weights: Dict[str, int] = config.get("weights", {})
@@ -321,18 +322,19 @@ def scan(
     emoji_regex = re.compile(
         r"(?m)^\s*([\U00010000-\U0010ffff]|\u2600-\u27bf|\ud83c[\udf00-\udfff]|\ud83d[\udc00-\ude4f]|\ud83e[\udd00-\udeff])"
     )
-    for m in emoji_regex.finditer(text):
-        raw_findings.append(
-            Finding(
-                rule_id="PUNCT_EMOJI_LINE_START",
-                category="punctuation",
-                message="Emoji at line start",
-                start=m.start(1),
-                end=m.end(1),
-                quote=m.group(1),
-                points=emoji_line_weight,
+    if not allow_emojis:
+        for m in emoji_regex.finditer(text):
+            raw_findings.append(
+                Finding(
+                    rule_id="PUNCT_EMOJI_LINE_START",
+                    category="punctuation",
+                    message="Emoji at line start",
+                    start=m.start(1),
+                    end=m.end(1),
+                    quote=m.group(1),
+                    points=emoji_line_weight,
+                )
             )
-        )
 
     md_weight = weights.get("markdown_formatting", 6)
     for m in re.finditer(r"(\*\*[^*\n]+\*\*|__[^_\n]+__)", text):
