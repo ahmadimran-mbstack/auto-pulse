@@ -3,7 +3,7 @@ import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { Manrope } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Toaster } from "@/components/ui/sonner";
+import { RootToaster } from "@/components/root-toaster";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 
@@ -52,7 +52,7 @@ export default function RootLayout({
         >
           <TooltipProvider>
             {children}
-            <Toaster />
+            <RootToaster />
           </TooltipProvider>
         </ThemeProvider>
       </body>

@@ -960,3 +960,10 @@ input:-webkit-autofill:active {
     display: none !important;
   }
 }
+
+/* Fade auth toasts without sliding when the user prefers reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .auth-toaster [data-sonner-toast] {
+    transition: opacity 150ms ease !important;
+  }
+}

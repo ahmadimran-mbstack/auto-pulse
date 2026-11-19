@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { auth } from "@/lib/auth/server";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { AuthToaster } from "./components/AuthToaster";
 
 // Set mobile browser theme color and dark color scheme on the server
 export const viewport: Viewport = {
@@ -38,6 +39,7 @@ export default async function AuthLayout({ children }: AuthLayoutProps) {
   if (isSignedOut) {
     return (
       <div className="dark force-dark min-h-svh bg-[var(--lp-bg)] text-[var(--lp-text-body)] antialiased">
+        <AuthToaster />
         {children}
       </div>
     );
@@ -60,6 +62,7 @@ export default async function AuthLayout({ children }: AuthLayoutProps) {
   // Wrap all auth routes in forced-dark container on the server so there is no light flash
   return (
     <div className="dark force-dark min-h-svh bg-[var(--lp-bg)] text-[var(--lp-text-body)] antialiased">
+      <AuthToaster />
       {children}
     </div>
   );
