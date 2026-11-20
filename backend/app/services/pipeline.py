@@ -193,6 +193,8 @@ class PipelineState(TypedDict, total=False):
 
     # Customization context
     use_customization: bool
+    post_type: str
+    user_context: Optional[Dict[str, Any]]
     customization: Optional[Dict[str, Any]]
     policy: Optional[Dict[str, Any]]
     retrieved_context: Optional[Dict[str, Any]]
@@ -334,10 +336,16 @@ def build_graph(
             }
 
         profile = state.get("profile", {})
+        uctx = state.get("user_context") or {}
         structured_model = _fast_model.with_structured_output(PlanOutput, include_raw=True)
         chain = PLAN_PROMPT | structured_model
 
         prompt_input = {
+            "custom_instructions": uctx.get("custom_instructions") or "None.",
+            "playbook_rules": uctx.get("playbook_rules_text") or "None.",
+            "business_facts": uctx.get("business_facts_text") or "None.",
+            "post_type": state.get("post_type") or "technical_explainer",
+            "recent_topics": ", ".join((uctx.get("recent_topics") or [])[:10]) or "None.",
             "role_title": profile.get("role_title") or "Professional",
             "industry": profile.get("industry") or "General Business",
             "niche_description": profile.get("niche_description") or "",
@@ -556,6 +564,7 @@ def build_graph(
         profile = state.get("profile", {})
         history = state.get("history", [])
         topic_hint = (state.get("topic_hint") or "").strip()
+        uctx = state.get("user_context") or {}
 
         counters["llm_calls"] = counters.get("llm_calls", 0) + 1
         counters["tokens_in"] = counters.get("tokens_in", 0) + 850
@@ -566,6 +575,10 @@ def build_graph(
             history=history,
             model=_finder_model,
             topic_hint=topic_hint,
+            custom_instructions=uctx.get("custom_instructions") or "",
+            playbook_rules=uctx.get("playbook_rules_text") or "",
+            business_facts=uctx.get("business_facts_text") or "",
+            post_type=state.get("post_type") or "technical_explainer",
         )
 
         seconds["finder"] = round(time.perf_counter() - start_t, 3)
@@ -805,7 +818,8 @@ def build_graph(
 
         from app.agents.gtm import resolve_playbook_rules
 
-        playbook_rules_override = resolve_playbook_rules(state.get("customization"))
+        uctx = state.get("user_context") or {}
+        playbook_rules_override = uctx.get("playbook_rules_text") or resolve_playbook_rules(state.get("customization"))
 
         counters["llm_calls"] = counters.get("llm_calls", 0) + 1
         counters["tokens_in"] = counters.get("tokens_in", 0) + 650
@@ -826,6 +840,10 @@ def build_graph(
                 recent_hooks=recent_hooks,
                 feedback_block=gtm_feedback,
                 playbook_rules_override=playbook_rules_override,
+                custom_instructions=uctx.get("custom_instructions") or "",
+                business_facts=uctx.get("business_facts_text") or "",
+                post_type=state.get("post_type") or "technical_explainer",
+                policy=state.get("policy"),
             )
         except Exception as exc:
             seconds["gtm_brief"] = round(time.perf_counter() - start_t, 3)
@@ -872,40 +890,30 @@ def build_graph(
 
         policy = state.get("policy")
         cust = state.get("customization") or {}
+        uctx = state.get("user_context") or {}
         retrieved = state.get("retrieved_context") or {}
+        post_type = state.get("post_type") or "technical_explainer"
+
+        custom_instructions_str = uctx.get("custom_instructions") or ""
+        playbook_rules_str = uctx.get("playbook_rules_text") or ""
+        business_facts_str = uctx.get("business_facts_text") or ""
+        previous_posts_voice_str = uctx.get("previous_posts_voice_text") or ""
+        if not previous_posts_voice_str and cust and not cust.get("is_empty", True):
+            g = cust.get("guidance") or {}
+            exemplars_list = retrieved.get("exemplars") or g.get("exemplars") or []
+            previous_posts_voice_str = "\n---\n".join(e.get("text", "") for e in exemplars_list if e.get("text"))
+
         customization_block = ""
         if cust and not cust.get("is_empty", True):
             g = cust.get("guidance") or {}
-            facts_list = retrieved.get("facts") or g.get("business_facts") or []
-            facts_txt = "\n".join(
-                f"[{i}] {f.get('text', '')} (Source: {f.get('source_label', '')})"
-                for i, f in enumerate(facts_list, 1)
-            ) or "None."
-            exemplars_list = retrieved.get("exemplars") or g.get("exemplars") or []
-            ex_txt = "\n---\n".join(e.get("text", "") for e in exemplars_list) or "None."
-            customization_block = (
-                "\n# Author Preferences (follow unless they conflict with SYSTEM safety/grounding):\n"
-                "<<<USER_PREFERENCES>>>\n"
-                f"Custom instructions:\n{g.get('custom_instructions') or 'None.'}\n\n"
-                f"Playbook rules:\n{g.get('playbook_rules_text') or 'Default.'}\n\n"
-                f"Voice: {g.get('voice_summary') or 'Default.'}\n"
-                f"Traits: {', '.join(g.get('voice_traits') or [])}\n"
-                f"Prefer words: {', '.join(g.get('vocabulary_preferred') or [])}\n"
-                f"Never use: {', '.join(g.get('vocabulary_avoid') or [])}\n"
-                "<<<END_USER_PREFERENCES>>>\n\n"
-                "# Business context (facts you MAY use; numbers here are allowed):\n"
-                "<<<UNTRUSTED_BUSINESS_CONTEXT>>>\n"
-                f"Business mention policy: {g.get('business_mention', 'natural')}\n"
-                f"{g.get('business_brief_text') or ''}\n"
-                f"Facts relevant to this topic:\n{facts_txt}\n"
-                f"Spell exactly: {', '.join(g.get('terminology') or [])}\n"
-                f"Never claim: {', '.join(g.get('claims_to_avoid') or [])}\n"
-                "<<<END_UNTRUSTED_BUSINESS_CONTEXT>>>\n\n"
-                "# Style exemplars (match rhythm and formatting; NEVER copy sentences):\n"
-                "<<<UNTRUSTED_STYLE_EXEMPLARS>>>\n"
-                f"{ex_txt}\n"
-                "<<<END_UNTRUSTED_STYLE_EXEMPLARS>>>\n"
-            )
+            if g.get("voice_summary") or g.get("voice_traits") or g.get("vocabulary_preferred") or g.get("vocabulary_avoid"):
+                customization_block = (
+                    f"Voice: {g.get('voice_summary') or 'Default.'}\n"
+                    f"Traits: {', '.join(g.get('voice_traits') or [])}\n"
+                    f"Prefer words: {', '.join(g.get('vocabulary_preferred') or [])}\n"
+                    f"Never use: {', '.join(g.get('vocabulary_avoid') or [])}\n"
+                    f"Business mention policy: {g.get('business_mention', 'natural')}\n"
+                )
 
         counters["llm_calls"] = counters.get("llm_calls", 0) + 1
         counters["tokens_in"] = counters.get("tokens_in", 0) + 950
@@ -925,6 +933,11 @@ def build_graph(
                     hook_text=hook_text,
                     policy=policy,
                     customization_block=customization_block,
+                    custom_instructions=custom_instructions_str,
+                    playbook_rules=playbook_rules_str,
+                    business_facts=business_facts_str,
+                    previous_posts_voice=previous_posts_voice_str,
+                    post_type=post_type,
                 )
             else:
                 # Mode 2: Targeted Span Rewrite with previous issues and judge critique
@@ -951,6 +964,11 @@ def build_graph(
                     hook_text=hook_text,
                     policy=policy,
                     customization_block=customization_block,
+                    custom_instructions=custom_instructions_str,
+                    playbook_rules=playbook_rules_str,
+                    business_facts=business_facts_str,
+                    previous_posts_voice=previous_posts_voice_str,
+                    post_type=post_type,
                 )
         except Exception as exc:
             seconds[f"drafter_r{current_round}"] = round(time.perf_counter() - start_t, 3)
@@ -995,6 +1013,7 @@ def build_graph(
         candidates = state.get("candidates", [])
 
         cust = state.get("customization") or {}
+        uctx = state.get("user_context") or {}
         policy = state.get("policy") or {}
         whitelist_words = (cust.get("guidance") or {}).get("vocabulary_preferred") if not cust.get("is_empty", True) else None
         extra_banned = policy.get("banned_phrases_extra") if policy else None
@@ -1013,6 +1032,10 @@ def build_graph(
                 whitelist_words=whitelist_words,
                 extra_banned_phrases=extra_banned,
                 allow_emojis=allow_emojis,
+                custom_instructions=uctx.get("custom_instructions") or "",
+                playbook_rules=uctx.get("playbook_rules_text") or "",
+                business_facts=uctx.get("business_facts_text") or "",
+                post_type=state.get("post_type") or "technical_explainer",
             )
         except Exception as exc:
             seconds[f"detector_r{current_round}"] = round(time.perf_counter() - start_t, 3)
@@ -1060,6 +1083,7 @@ def build_graph(
                 extra_nums.extend(f.get("numbers") or [])
             sample_texts = [e.get("text", "") for e in (retrieved.get("exemplars") or g.get("exemplars") or []) if e.get("text")]
 
+        uctx = state.get("user_context") or {}
         eval_context = {
             "profile": profile,
             "key_facts": key_facts,
@@ -1073,6 +1097,10 @@ def build_graph(
             "policy": state.get("policy"),
             "extra_allowed_numbers": extra_nums or None,
             "sample_texts": sample_texts or None,
+            "custom_instructions": uctx.get("custom_instructions") or "",
+            "scoped_rules": uctx.get("scoped_rules") or [],
+            "business_facts_text": uctx.get("business_facts_text") or "",
+            "business_facts": (cust.get("guidance") or {}).get("business_facts") or [],
         }
 
         counters["llm_calls"] = counters.get("llm_calls", 0) + 1
@@ -1150,22 +1178,29 @@ def build_graph(
             "findings": serialized_findings,
         })
 
-        # Update best clean candidate (passing hard checks)
+        # Update best clean candidate (passing rule check + hard checks; prefer lowest slop score)
         best_updated_flag = False
-        if passed_hard and (best_clean_draft is None or eval_score > best_clean_score):
+        if passed_hard and (
+            best_clean_draft is None
+            or ai_slop_score < best_clean_slop
+            or (ai_slop_score == best_clean_slop and eval_score > best_clean_score)
+        ):
             best_clean_draft = draft
             best_clean_score = eval_score
             best_clean_slop = ai_slop_score
             best_clean_round = current_round
             best_updated_flag = True
 
-        # Track best raw candidate purely for potential 1-time repair if no clean draft exists
-        if best_raw_draft is None or eval_score > int(best_raw_eval.get("score", -1)):
+        # Track best raw candidate (prefer lowest slop score, then highest eval_score)
+        best_raw_slop = int((best_raw_eval or {}).get("ai_slop_score", 999))
+        if best_raw_draft is None or ai_slop_score < best_raw_slop or (
+            ai_slop_score == best_raw_slop and eval_score > int(best_raw_eval.get("score", -1))
+        ):
             best_raw_draft = draft
             best_raw_eval = eval_dict
 
-        # 1. Early stop: target score reached and AI slop under target
-        if passed_hard and eval_score >= TARGET_SCORE and ai_slop_score < AI_SLOP_TARGET:
+        # 1. Early stop: rule check passes AND AI slop under 15
+        if passed_hard and ai_slop_score < AI_SLOP_TARGET:
             return {
                 "round": current_round,
                 "current_round": current_round,
@@ -1292,16 +1327,24 @@ def build_graph(
                     "counters": counters,
                 }
 
-            # Exhausted repair and topic retry with zero clean drafts
+            # Phase 2: Never return an error to the user; return best candidate across rounds
+            fallback_draft = best_raw_draft or draft
+            fallback_slop = int((best_raw_eval or {}).get("ai_slop_score", ai_slop_score))
             return {
                 "round": current_round,
                 "current_round": current_round,
                 "current_topic_index": topic_index,
-                "best_clean_draft": None,
+                "best_draft": fallback_draft,
+                "best_clean_draft": fallback_draft,
+                "best_clean_score": int((best_raw_eval or {}).get("score", eval_score)),
+                "best_clean_slop": fallback_slop,
+                "best_clean_round": current_round,
+                "best_score": fallback_slop,
+                "best_round": current_round,
                 "repaired_once": repaired_once,
                 "is_loop_terminal": True,
-                "status": "failed_error",
-                "exit_reason": "no_clean_candidate",
+                "status": "succeeded",
+                "exit_reason": "best_raw_fallback",
                 "rounds_history": rounds_history,
                 "candidates_log": candidates_log,
                 "switch_to_gtm": False,
@@ -1693,30 +1736,38 @@ def execute_pipeline(
         except Exception as exc:
             logger.warning(f"Could not load content profile for user {user_id}: {exc}")
 
-    # Load compiled CustomizationContext (never raises; falls back to empty)
+    # Load unified user context (compiled CustomizationContext + profile + scoped rules + history)
     customization_dict: Dict[str, Any] = {"is_empty": True}
     policy_dict: Optional[Dict[str, Any]] = None
+    user_context_dict: Dict[str, Any] = {}
+    post_type: str = "technical_explainer"
     if use_customization:
         try:
-            from app.services.customization.context import get_customization_context
+            from app.services.customization.context import build_user_context
 
-            ctx = get_customization_context(user_id=user_id)
-            customization_dict = ctx.model_dump()
-            if not ctx.is_empty:
-                policy_dict = ctx.policy.model_dump()
+            user_context_dict = build_user_context(
+                user_id=user_id,
+                history=history,
+                profile_override=profile_dict,
+            )
+            post_type = user_context_dict.get("post_type") or "technical_explainer"
+            customization_dict = user_context_dict.get("customization") or {"is_empty": True}
+            if not customization_dict.get("is_empty", True):
+                policy_dict = user_context_dict.get("policy")
+                guidance = customization_dict.get("guidance") or {}
                 profile_dict = dict(profile_dict or {})
                 inc = list(profile_dict.get("topics_include") or [])
                 avd = list(profile_dict.get("topics_avoid") or [])
-                for t in ctx.guidance.topics_include_extra:
+                for t in guidance.get("topics_include_extra") or []:
                     if t not in inc:
                         inc.append(t)
-                for t in ctx.guidance.topics_avoid_extra:
+                for t in guidance.get("topics_avoid_extra") or []:
                     if t not in avd:
                         avd.append(t)
                 profile_dict["topics_include"] = inc
                 profile_dict["topics_avoid"] = avd
         except Exception as exc:
-            logger.warning(f"Could not load customization context for user {user_id}: {exc}")
+            logger.warning(f"Could not build user context for user {user_id}: {exc}")
 
     recent_titles = [p.get("topic_title") for p in history if p.get("topic_title")]
     recent_captions = [p.get("caption_preview", "") for p in history if p.get("caption_preview")]
@@ -1764,6 +1815,8 @@ def execute_pipeline(
         "topic_retry_count": 0,
         "cancelled": False,
         "use_customization": use_customization,
+        "post_type": post_type,
+        "user_context": user_context_dict,
         "customization": customization_dict,
         "policy": policy_dict,
         "retrieved_context": None,

@@ -123,6 +123,7 @@ def send_approval_email(
     raw_token: str,
     idempotency_key: Optional[str] = None,
     needs_review: bool = False,
+    first_comment: Optional[str] = None,
 ) -> None:
     # Subject line matching specification
     subject = f"Approve your LinkedIn post for {weekday} {time_str}"
@@ -142,12 +143,23 @@ def send_approval_email(
         else ""
     )
 
+    first_comment_plain = (
+        f"\n\nSuggested First Comment (paste after publishing):\n{first_comment.strip()}"
+        if first_comment and first_comment.strip()
+        else ""
+    )
+    first_comment_html = (
+        f"""<div style="background-color: #0f172a; border: 1px dashed #334155; border-radius: 8px; padding: 12px; margin-bottom: 20px;"><div style="font-weight: 600; color: #94a3b8; font-size: 12px; margin-bottom: 6px;">Suggested First Comment (paste after publishing):</div><div style="color: #e2e8f0; font-size: 13px; line-height: 1.5;">{html.escape(first_comment.strip()).replace(chr(10), '<br />')}</div></div>"""
+        if first_comment and first_comment.strip()
+        else ""
+    )
+
     # Plain text version (contains exactly one link: the decision link)
     plain_text = (
         f"Hi {display_name},\n\n"
         f"Your automated LinkedIn post draft is ready for review.{review_notice_plain}\n\n"
         f"Topic: {topic_title}\n\n"
-        f"Caption:\n{caption}\n\n"
+        f"Caption:\n{caption}{first_comment_plain}\n\n"
         f"Decide before {local_deadline}. After that this draft is skipped.\n\n"
         f"Review and decide:\n{approve_url}\n\n"
         f"---\n"
@@ -176,6 +188,7 @@ def send_approval_email(
       <div style="font-weight: 600; color: #38bdf8; font-size: 14px; margin-bottom: 8px;">Topic: {escaped_topic}</div>
       <div style="color: #e2e8f0; font-size: 14px; line-height: 1.6;">{escaped_caption}</div>
     </div>
+    {first_comment_html}
 
     <div style="margin-bottom: 24px; text-align: center;">
       <img src="{image_url}" alt="Post graphic preview" style="max-width: 100%; height: auto; border-radius: 8px; border: 1px solid #334155;" />

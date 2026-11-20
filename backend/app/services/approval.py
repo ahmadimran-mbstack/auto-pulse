@@ -153,6 +153,7 @@ def request_approval(
                 raw_token=raw_token,
                 idempotency_key=idempotency_key,
                 needs_review=getattr(post, "needs_review", False),
+                first_comment=(getattr(post, "image_spec", None) or {}).get("first_comment"),
             )
             email_dispatched = True
             logger.info(f"Approval email dispatched for post {post.id} to {to_email}")

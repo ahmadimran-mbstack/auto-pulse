@@ -436,6 +436,148 @@ def _run_single_judge_call(
     )
 
 
+_EMOJI_CHECK_RE = re.compile(
+    "[\U0001F300-\U0001F9FF\U0001FA00-\U0001FAFF\u2600-\u27BF]+",
+    flags=re.UNICODE,
+)
+
+
+def check_customization_rules(
+    post_text: str,
+    hashtags: Optional[List[str]],
+    policy: Optional[Dict[str, Any]],
+    custom_instructions: str = "",
+    scoped_rules: Optional[List[Dict[str, Any]]] = None,
+) -> List[str]:
+    """Check post_text and hashtags against user's scoped playbook rules, custom instructions, and policy.
+    Returns a list of exact rule failure descriptions.
+    """
+    failures: List[str] = []
+    text = (post_text or "").strip()
+    if not text:
+        return ["rule_violation: Post text is empty."]
+
+    p = policy if isinstance(policy, dict) else {}
+    has_policy = bool(p)
+    ci_lower = (custom_instructions or "").lower()
+    rules_text_lower = " ".join(str(r.get("rule", "")) for r in (scoped_rules or [])).lower()
+    combined_lower = f"{ci_lower} {rules_text_lower}"
+
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    first_line = lines[0] if lines else ""
+    last_line = lines[-1] if lines else ""
+
+    # 1. No question hooks
+    if p.get("no_question_hooks") or ("never start" in combined_lower and "question" in combined_lower) or ("never use questions as hook" in combined_lower):
+        if first_line.endswith("?"):
+            failures.append("rule_violation: Playbook/instructions forbid starting a post with a question.")
+
+    # 2. Always start with a number
+    if p.get("require_number_hook") or ("always start" in combined_lower and "number" in combined_lower):
+        if not re.search(r"\d", first_line):
+            failures.append("rule_violation: Playbook/instructions require starting the post with a number.")
+
+    # 3. Hashtags in body forbidden (only when policy/customization is active and forbids body hashtags)
+    if (has_policy and not p.get("hashtags_in_body", True)) or p.get("hashtags_max") == 0 or ("no hashtags" in ci_lower):
+        body_tags = re.findall(r"#\w+", text)
+        if body_tags or (hashtags and len(hashtags) > 0):
+            failures.append("rule_violation: Hashtags are not allowed in the post body (put them in first_comment or omit if 0 hashtags).")
+
+    # 4. External links in body forbidden
+    if "external link" in rules_text_lower or "outbound link" in rules_text_lower:
+        if re.search(r"https?://\S+", text, re.IGNORECASE):
+            failures.append("rule_violation: Never put external links in the post body.")
+
+    # 5. Banned words / phrases (from policy.banned_phrases_extra + custom instructions)
+    for bp in p.get("banned_phrases_extra") or []:
+        clean_bp = str(bp).strip()
+        if clean_bp and re.search(r"\b" + re.escape(clean_bp) + r"\b", text, re.IGNORECASE):
+            failures.append(f"rule_violation: Contains banned word/phrase '{clean_bp}'.")
+
+    # 6. Emoji policy
+    emoji_matches = _EMOJI_CHECK_RE.findall(text)
+    emoji_count = sum(len(e) for e in emoji_matches)
+    if p.get("emoji_policy") == "many" and emoji_count < 3:
+        failures.append(f"rule_violation: Custom instructions require many emojis (found {emoji_count}, need at least 3).")
+    elif p.get("emoji_policy") == "none" and emoji_count > 0 and "emoji" in ci_lower and "no emoji" in ci_lower:
+        failures.append("rule_violation: Custom instructions forbid emojis.")
+
+    # 7. Question ending
+    q_end = p.get("question_ending", "allowed")
+    if q_end == "required" and not last_line.endswith("?"):
+        failures.append("rule_violation: Technical explainer posts must end with a question.")
+    elif q_end == "forbidden" and last_line.endswith("?"):
+        failures.append("rule_violation: Ending with a question is forbidden.")
+
+    # 8. Short closing line rule (e.g., "End every post with one short line")
+    if "end every post with one short line" in ci_lower or "one short line" in ci_lower:
+        paragraphs = [para.strip() for para in re.split(r"\n\s*\n", text) if para.strip()]
+        if paragraphs:
+            last_para = paragraphs[-1]
+            if "\n" in last_para or len(last_para) > 95:
+                failures.append("rule_violation: Custom instructions require ending with one short single-line closing.")
+
+    # 9. Required end phrase
+    req_end = p.get("required_end_phrase")
+    if req_end and req_end.lower() not in last_line.lower():
+        failures.append(f"rule_violation: Post must end with '{req_end}'.")
+
+    # 10. Max 3-line paragraphs
+    if "1-3 lines" in rules_text_lower or "3-line paragraph" in rules_text_lower:
+        paragraphs = [para.strip() for para in re.split(r"\n\s*\n", text) if para.strip()]
+        for idx, para in enumerate(paragraphs, 1):
+            wrapped_lines = max(len(para.splitlines()), (len(para) + 84) // 85)
+            if wrapped_lines > 4:
+                failures.append(f"rule_violation: Paragraph {idx} is too long (~{wrapped_lines} lines; max 3 lines per paragraph).")
+                break
+
+    return failures
+
+
+def check_business_specificity(
+    post_text: str,
+    business_facts_text: str = "",
+    business_facts: Optional[List[Dict[str, Any]]] = None,
+) -> Optional[str]:
+    """Ensure the post contains at least one concrete detail (product/company name, number, or specific term)
+    from the user's business details when business details exist.
+    """
+    if not business_facts_text and not business_facts:
+        return None
+
+    corpus_parts = [business_facts_text or ""]
+    for f in business_facts or []:
+        corpus_parts.append(str(f.get("text", "")))
+    corpus = " ".join(corpus_parts)
+
+    # Extract distinctive proper nouns / product names / capitalized words >= 4 chars (excluding common words)
+    stopwords = {
+        "Company", "Offering", "Agent", "Agents", "Multi", "Currently", "Building",
+        "Automated", "Autonomous", "Systems", "Engineer", "Architect", "Tool", "Tools",
+        "None", "Source", "Sources", "Documented", "Experiences", "Spell", "Never",
+    }
+    entities = {
+        w for w in re.findall(r"\b[A-Z][A-Za-z0-9]{3,}\b", corpus)
+        if w not in stopwords
+    }
+    # Also include distinctive lowercase keywords from business_facts (> 5 chars)
+    lower_post = (post_text or "").lower()
+    for ent in entities:
+        if ent.lower() in lower_post:
+            return None
+
+    # Fallback: check significant domain terms from business facts
+    domain_terms = [
+        w.lower()
+        for w in re.findall(r"\b[a-zA-Z]{5,}\b", corpus)
+        if w.lower() not in {"company", "offering", "building", "currently", "without", "manual", "review", "writes", "reports", "source", "agent", "agents", "system", "systems"}
+    ]
+    if any(term in lower_post for term in domain_terms[:25]):
+        return None
+
+    return "specificity_missing: Post is generic and does not mention any concrete product, company, or detail from your business facts."
+
+
 def evaluate_candidate(
     post: Any,
     context: Dict[str, Any],
@@ -502,6 +644,29 @@ def evaluate_candidate(
     if check_hard_similarity(post_text, recent_captions, sample_texts=sample_texts):
         issue_codes.append("too_similar_to_recent")
         hard_failures.append("too_similar_to_recent")
+
+    # 7. User customization rule check (scoped to post_type)
+    post_hashtags = post.get("hashtags", []) if isinstance(post, dict) else []
+    rule_failures = check_customization_rules(
+        post_text=post_text,
+        hashtags=post_hashtags,
+        policy=policy,
+        custom_instructions=context.get("custom_instructions") or "",
+        scoped_rules=context.get("scoped_rules") or [],
+    )
+    if rule_failures:
+        issue_codes.append("rule_violation")
+        hard_failures.extend(rule_failures)
+
+    # 8. Business specificity check (must include >= 1 concrete detail when business facts exist)
+    spec_err = check_business_specificity(
+        post_text=post_text,
+        business_facts_text=context.get("business_facts_text") or "",
+        business_facts=context.get("business_facts") or [],
+    )
+    if spec_err:
+        issue_codes.append("specificity_missing")
+        hard_failures.append(spec_err)
 
     passed_hard_checks = len(hard_failures) == 0
 

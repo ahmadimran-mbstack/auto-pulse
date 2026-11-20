@@ -247,6 +247,7 @@ def build_approval_blocks(
     image_file_id: Optional[str] = None,
     signed_image_url: Optional[str] = None,
     needs_review: bool = False,
+    first_comment: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Builds the Block Kit message layout:
@@ -289,6 +290,15 @@ def build_approval_blocks(
             "text": display_caption,
         },
     })
+
+    if first_comment and first_comment.strip():
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*Suggested First Comment:*\n{first_comment.strip()[:1000]}",
+            },
+        })
 
     if is_truncated:
         blocks.append({
@@ -361,6 +371,7 @@ def post_approval_message(
     image_file_id: Optional[str] = None,
     signed_image_url: Optional[str] = None,
     needs_review: bool = False,
+    first_comment: Optional[str] = None,
 ) -> Tuple[str, str, str]:
     """
     Posts the approval message to Slack with retries and graceful image fallbacks.
@@ -393,6 +404,7 @@ def post_approval_message(
             image_file_id=f_id,
             signed_image_url=s_url,
             needs_review=needs_review,
+            first_comment=first_comment,
         )
         payload = {
             "channel": channel_id,
@@ -596,6 +608,7 @@ def notify_slack_approval(db: Any, post: Any) -> Optional[str]:
                 image_file_id=image_file_id,
                 signed_image_url=signed_image_url,
                 needs_review=getattr(post, "needs_review", False),
+                first_comment=(getattr(post, "image_spec", None) or {}).get("first_comment"),
             )
             db.execute(
                 text(

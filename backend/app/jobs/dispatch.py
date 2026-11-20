@@ -210,6 +210,7 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
                 "brand_primary_hex": profile.brand_primary_hex or "#0F172A",
                 "brand_accent_hex": profile.brand_accent_hex or "#38BDF8",
                 "template_version": "v1",
+                "first_comment": draft.get("first_comment", ""),
             }
             publish_at = compute_publish_at(run_date, profile.post_time, profile.timezone)
 
@@ -289,6 +290,7 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
             "brand_primary_hex": profile.brand_primary_hex or "#0F172A",
             "brand_accent_hex": profile.brand_accent_hex or "#38BDF8",
             "template_version": "v1",
+            "first_comment": draft.get("first_comment", ""),
         }
 
         publish_at = compute_publish_at(run_date, profile.post_time, profile.timezone)
