@@ -1,19 +1,28 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  BookOpenIcon,
-  Building2Icon,
-  FileTextIcon,
-  SlidersHorizontalIcon,
-  SparklesIcon,
+  BookOpen,
+  Brain,
+  Building2,
+  FileText,
+  FlaskConical,
+  History,
+  RefreshCw,
+  SlidersHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { AppTabsList, AppTabsTrigger } from "@/components/app/AppTabs";
+import { PageContainer } from "@/components/app/PageContainer";
+import { PageHeader } from "@/components/app/PageHeader";
+import { StatusBadge } from "@/components/app/StatusBadge";
+import { Button } from "@/components/ui/button";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   activateCustomizationVersion,
   addBusinessUrl,
@@ -34,6 +43,7 @@ import {
 } from "@/lib/customization";
 import type { ActiveUploadItem } from "@/components/app/FileDropzone";
 import type { DocumentKind, DocumentSummary } from "@/types/customization";
+import { cn } from "@/lib/utils";
 import { LearnedProfilePanel } from "./components/LearnedProfilePanel";
 import { PlaybooksSection } from "./components/PlaybooksSection";
 import { BusinessSection } from "./components/BusinessSection";
@@ -45,12 +55,19 @@ import { VersionHistorySheet } from "./components/VersionHistorySheet";
 type CustomizeTab = "learned" | "playbooks" | "business" | "posts" | "instructions";
 
 const TABS: { id: CustomizeTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: "learned", label: "Learned", icon: SparklesIcon },
-  { id: "playbooks", label: "Playbooks", icon: BookOpenIcon },
-  { id: "business", label: "Business", icon: Building2Icon },
-  { id: "posts", label: "Previous posts", icon: FileTextIcon },
-  { id: "instructions", label: "Instructions", icon: SlidersHorizontalIcon },
+  { id: "learned", label: "Learned", icon: Brain },
+  { id: "playbooks", label: "Playbooks", icon: BookOpen },
+  { id: "business", label: "Business", icon: Building2 },
+  { id: "posts", label: "Previous posts", icon: FileText },
+  { id: "instructions", label: "Instructions", icon: SlidersHorizontal },
 ];
+
+function formatUpdatedTime(iso?: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 
 export function CustomizeClient() {
   const router = useRouter();
@@ -187,7 +204,7 @@ export function CustomizeClient() {
   const overridesMutation = useMutation({
     mutationFn: patchContextOverrides,
     onSuccess: () => {
-      toast.success("Updated learned profile. Recompiling...");
+      toast.success("Updated learned profile. Rebuilding...");
       invalidateAll();
     },
     onError: (err: Error) => toast.error(err.message || "Failed to update overrides."),
@@ -196,7 +213,7 @@ export function CustomizeClient() {
   const compileMutation = useMutation({
     mutationFn: triggerCustomizationCompile,
     onSuccess: () => {
-      toast.success("Rebuild queued.");
+      toast.success("Rebuild checked.");
       invalidateAll();
     },
     onError: (err: Error) => toast.error(err.message || "Rebuild failed."),
@@ -226,16 +243,16 @@ export function CustomizeClient() {
 
   if (overviewQuery.isError && is404Error(overviewQuery.error)) {
     return (
-      <div className="mx-auto max-w-4xl py-8 px-4 sm:px-6">
-        <Card>
-          <CardHeader>
+      <PageContainer>
+        <Card className="border border-border bg-card shadow-none rounded-lg">
+          <CardHeader className="p-4 sm:p-5">
             <CardTitle>Customization is not enabled</CardTitle>
             <CardDescription>
               Enable <code className="text-xs bg-muted px-1 py-0.5 rounded">CUSTOMIZATION_ENABLED=true</code> in the backend environment to use playbooks, business context, and voice learning.
             </CardDescription>
           </CardHeader>
         </Card>
-      </div>
+      </PageContainer>
     );
   }
 
@@ -245,51 +262,103 @@ export function CustomizeClient() {
   const prevPostsDocs = docs.filter((d) => d.kind === "previous_posts");
   const overview = overviewQuery.data;
   const settings = overview?.settings;
+  const ctxData = contextQuery.data;
+  const activeSourcesCount = ctxData?.compiled?.sources?.length ?? 0;
+  const isRebuilding = Boolean(compileMutation.isPending || ctxData?.compile_pending);
 
   const handleTabChange = (val: string) => {
     router.replace(`/app/customize?tab=${val}`, { scroll: false });
   };
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6">
-      <div className="space-y-1">
-        <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
-          Customize your agent
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Upload your LinkedIn playbooks, business details, previous posts, and instructions. Every generated post uses them.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Customize"
+        description="Upload your LinkedIn playbooks, business details, previous posts, and instructions. Every generated post uses them."
+        meta={
+          ctxData ? (
+            <>
+              <span className="inline-flex items-center rounded-full border border-status-neutral-border bg-status-neutral-bg px-2.5 py-0.5 text-xs font-medium text-status-neutral-fg tabular-nums">
+                v{ctxData.version}
+              </span>
+              <span className="tabular-nums">
+                {activeSourcesCount} active {activeSourcesCount === 1 ? "source" : "sources"}
+              </span>
+              {ctxData.updated_at && (
+                <span className="tabular-nums">
+                  · Updated {formatUpdatedTime(ctxData.updated_at)}
+                </span>
+              )}
+              <StatusBadge status={isRebuilding ? "rebuilding" : "up_to_date"} />
+            </>
+          ) : undefined
+        }
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setHistoryOpen(true)}
+              className="gap-1.5"
+            >
+              <History className="size-4 stroke-[1.75]" />
+              <span>Version history</span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => compileMutation.mutate()}
+              disabled={isRebuilding}
+              className="gap-1.5"
+            >
+              <RefreshCw
+                className={cn(
+                  "size-4 stroke-[1.75]",
+                  isRebuilding && "animate-spin motion-reduce:animate-none"
+                )}
+              />
+              <span>Rebuild</span>
+            </Button>
+            <Button asChild size="sm" className="gap-1.5">
+              <Link href="/app/playground">
+                <FlaskConical className="size-4 stroke-[1.75]" />
+                <span>Test in Playground</span>
+              </Link>
+            </Button>
+          </>
+        }
+      />
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
-        <TabsList className="flex flex-wrap h-auto gap-1">
+        <AppTabsList>
           {TABS.map((tab) => {
             const Icon = tab.icon;
             return (
-              <TabsTrigger key={tab.id} value={tab.id} className="gap-1.5">
-                <Icon className="size-4" />
+              <AppTabsTrigger key={tab.id} value={tab.id}>
+                <Icon className="size-4 stroke-[1.75]" />
                 <span>{tab.label}</span>
-              </TabsTrigger>
+              </AppTabsTrigger>
             );
           })}
-        </TabsList>
+        </AppTabsList>
 
         <TabsContent value="learned">
           <LearnedProfilePanel
-            context={contextQuery.data}
+            context={ctxData}
+            samplesCount={overview?.quota.samples_used ?? 0}
             isLoading={contextQuery.isLoading}
             onSaveVoiceOverride={(summary) =>
               overridesMutation.mutate({ voice_summary_override: summary })
             }
             onRemoveFact={(factId) => {
-              const current = contextQuery.data?.compiled?.guidance?.business_facts ?? [];
+              const current = ctxData?.compiled?.guidance?.business_facts ?? [];
               const remaining = current.filter((f) => f.id !== factId);
               overridesMutation.mutate({ removed_fact_ids: [factId] });
               if (remaining.length === 0) toast.info("Fact removed.");
             }}
-            onRebuild={() => compileMutation.mutate()}
-            onOpenHistory={() => setHistoryOpen(true)}
-            isRebuilding={compileMutation.isPending}
+            onGoToPreviousPosts={() => handleTabChange("posts")}
           />
         </TabsContent>
 
@@ -358,6 +427,8 @@ export function CustomizeClient() {
         <TabsContent value="instructions">
           <InstructionsSection
             initialInstructions={settings?.custom_instructions ?? ""}
+            mode={settings?.default_playbook_mode ?? "merge"}
+            onModeChange={(mode) => settingsMutation.mutate({ default_playbook_mode: mode })}
             detectedConstraints={settings?.detected_constraints ?? []}
             onSave={async (instructions) => {
               await settingsMutation.mutateAsync({ custom_instructions: instructions });
@@ -383,6 +454,6 @@ export function CustomizeClient() {
         onOpenChange={setHistoryOpen}
         onActivateVersion={(id) => activateVersionMutation.mutate(id)}
       />
-    </div>
+    </PageContainer>
   );
 }
