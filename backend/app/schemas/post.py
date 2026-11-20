@@ -80,6 +80,7 @@ class PlaygroundRunCreateResponse(BaseModel):
 class RunEventPublic(BaseModel):
     seq: int
     time: str
+    elapsed_ms: Optional[int] = None
     type: str
     agent: Optional[str] = None
     status: Optional[str] = None

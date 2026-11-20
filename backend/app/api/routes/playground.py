@@ -671,10 +671,16 @@ def get_playground_run_events(
         .all()
     )
 
+    base_ts = run.started_at or run.created_at
     events = [
         RunEventPublic(
             seq=r.seq,
             time=r.created_at.isoformat() if r.created_at else "",
+            elapsed_ms=(
+                max(0, int((r.created_at - base_ts).total_seconds() * 1000))
+                if r.created_at and base_ts
+                else None
+            ),
             type=r.type,
             agent=r.agent,
             status=r.status,

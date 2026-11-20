@@ -214,7 +214,65 @@ def find_duplicate_by_url(
     )
 
 
-def to_document_summary(doc: CustomizationDocument, duplicate: bool = False) -> DocumentSummary:
+_ERROR_CODE_FRIENDLY: Dict[str, str] = {
+    "distill_failed": "We could not extract rules or voice from this file. Try retrying or uploading a cleaner copy.",
+    "unsupported_type": "This file type is not supported. Upload a PDF, DOCX, Markdown, or TXT file.",
+    "encrypted_pdf": "This PDF is password-protected. Please export an unlocked copy and try again.",
+    "no_text_layer": "This PDF looks like a scanned image without selectable text.",
+    "empty_document": "No readable text was found in this document.",
+    "too_many_pages": "This PDF exceeds the maximum allowed page count.",
+    "zip_bomb": "This file could not be safely unpacked.",
+    "macro_document": "Documents with macros are blocked for safety.",
+    "decode_failed": "Could not decode text in this file. Save as UTF-8 and try again.",
+    "url_blocked": "That URL could not be accessed for security reasons.",
+    "url_robots_disallowed": "That website does not allow automated reading.",
+    "url_unreachable": "Could not reach that URL. Check the link and try again.",
+    "url_unsupported_content": "That URL does not point to a readable web page or PDF.",
+}
+
+
+def _compute_stage_info(
+    doc: CustomizationDocument, latest_job: Optional[CustomizationJob] = None
+) -> Dict[str, Any]:
+    st = doc.status
+    if st == "uploaded":
+        return {"stage_name": "Queued", "stage_index": 1, "friendly_status": "Queued", "friendly_error": None}
+    if st == "extracting":
+        return {"stage_name": "Reading file", "stage_index": 2, "friendly_status": "Reading file", "friendly_error": None}
+    if st == "distilling":
+        return {"stage_name": "Learning from it", "stage_index": 3, "friendly_status": "Learning from it", "friendly_error": None}
+    if st == "embedding":
+        return {"stage_name": "Applying", "stage_index": 4, "friendly_status": "Applying", "friendly_error": None}
+    if st == "ready":
+        return {"stage_name": "Active", "stage_index": 4, "friendly_status": "Active", "friendly_error": None}
+    if st == "disabled":
+        return {"stage_name": "Paused", "stage_index": 4, "friendly_status": "Paused", "friendly_error": None}
+    if st == "failed":
+        idx = 1
+        if doc.extracted_text:
+            idx = 3 if doc.distilled is None else 4
+        elif latest_job and latest_job.job_type == "extract_distill":
+            idx = 2
+        code = doc.error_code or ""
+        friendly_err = _ERROR_CODE_FRIENDLY.get(
+            code,
+            "Processing failed. Try retrying or uploading a different version.",
+        )
+        return {
+            "stage_name": "Failed",
+            "stage_index": idx,
+            "friendly_status": "Failed",
+            "friendly_error": friendly_err,
+        }
+    return {"stage_name": st, "stage_index": 1, "friendly_status": st, "friendly_error": None}
+
+
+def to_document_summary(
+    doc: CustomizationDocument,
+    duplicate: bool = False,
+    latest_job: Optional[CustomizationJob] = None,
+) -> DocumentSummary:
+    stage = _compute_stage_info(doc, latest_job=latest_job)
     return DocumentSummary(
         id=str(doc.id),
         kind=doc.kind,  # type: ignore[arg-type]
@@ -225,8 +283,13 @@ def to_document_summary(doc: CustomizationDocument, duplicate: bool = False) -> 
         size_bytes=doc.size_bytes,
         source_url=doc.source_url,
         status=doc.status,  # type: ignore[arg-type]
+        stage_name=stage["stage_name"],
+        stage_index=stage["stage_index"],
+        stage_total=4,
+        friendly_status=stage["friendly_status"],
+        friendly_error=stage["friendly_error"],
         error_code=doc.error_code,
-        error_detail=doc.error_detail,
+        error_detail=doc.error_detail or (latest_job.last_error if latest_job and doc.status == "failed" else None),
         needs_embedding=doc.needs_embedding,
         page_count=doc.page_count,
         char_count=doc.char_count,

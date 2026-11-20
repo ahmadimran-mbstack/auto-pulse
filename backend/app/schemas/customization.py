@@ -21,6 +21,11 @@ class DocumentSummary(BaseModel):
     size_bytes: Optional[int] = None
     source_url: Optional[str] = None
     status: DocumentStatus
+    stage_name: Optional[str] = None
+    stage_index: Optional[int] = None
+    stage_total: int = 4
+    friendly_status: Optional[str] = None
+    friendly_error: Optional[str] = None
     error_code: Optional[str] = None
     error_detail: Optional[str] = None
     needs_embedding: bool = False

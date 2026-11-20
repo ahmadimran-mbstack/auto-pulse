@@ -16,6 +16,7 @@ from app.db.session import get_db, get_readonly_db
 from app.models.customization import (
     CustomizationDocument,
     CustomizationFact,
+    CustomizationJob,
     CustomizationPostSample,
     CustomizationVersion,
 )
@@ -88,7 +89,22 @@ def list_customization_documents(
     db: Session = Depends(get_readonly_db),
 ) -> List[DocumentSummary]:
     docs = custom_repo.list_documents(db, user.id, kind=kind)
-    return [custom_repo.to_document_summary(d) for d in docs]
+    doc_ids = [d.id for d in docs]
+    latest_jobs: Dict[uuid.UUID, CustomizationJob] = {}
+    if doc_ids:
+        jobs = (
+            db.query(CustomizationJob)
+            .filter(
+                CustomizationJob.user_id == user.id,
+                CustomizationJob.document_id.in_(doc_ids),
+            )
+            .order_by(CustomizationJob.created_at.desc())
+            .all()
+        )
+        for j in jobs:
+            if j.document_id and j.document_id not in latest_jobs:
+                latest_jobs[j.document_id] = j
+    return [custom_repo.to_document_summary(d, latest_job=latest_jobs.get(d.id)) for d in docs]
 
 
 @router.post("/documents", response_model=DocumentSummary, status_code=status.HTTP_202_ACCEPTED)
@@ -489,6 +505,99 @@ def update_customization_settings(
     )
 
 
+def _build_policy_items(
+    db: Session,
+    user_id: str,
+    compiled: Dict[str, Any],
+    post_type: str = "all",
+) -> List[Dict[str, Any]]:
+    policy = compiled.get("policy") or EffectivePolicy().model_dump()
+    provenance = policy.get("provenance") or {}
+    sources_map = {s.get("id"): s.get("title") for s in (compiled.get("sources") or []) if s.get("id")}
+    docs = custom_repo.list_documents(db, user_id, kind="playbook")
+    doc_by_prefix = {str(d.id).replace("-", "")[:3].upper(): d.title for d in docs}
+    playbook_facts = (
+        db.query(CustomizationFact)
+        .filter(
+            CustomizationFact.user_id == user_id,
+            CustomizationFact.kind == "playbook_rule",
+            CustomizationFact.removed.is_(False),
+        )
+        .all()
+    )
+
+    def _source_meta(prov_key: str, keyword_hints: List[str]) -> Dict[str, Any]:
+        raw = str(provenance.get(prov_key) or "default")
+        if raw in ("custom_instructions", "instructions", "override"):
+            return {"source_type": "custom_instructions", "document_name": "Your instructions", "evidence_quote": None}
+        if raw.startswith("playbook:"):
+            parts = raw.split(":", 1)[1].split("-")
+            prefix = parts[0][1:] if parts and parts[0].startswith("U") else ""
+            doc_name = doc_by_prefix.get(prefix) or next(iter(sources_map.values()), "Playbook")
+            quote = None
+            for f in playbook_facts:
+                txt = (f.text or "").lower()
+                if any(k in txt for k in keyword_hints):
+                    quote = f.evidence_quote
+                    doc_name = f.source_label or doc_name
+                    break
+            return {"source_type": "playbook", "document_name": doc_name, "evidence_quote": quote}
+        return {"source_type": "default", "document_name": "Default", "evidence_quote": None}
+
+    # Resolve length for selected post_type
+    lmin = policy.get("length_min", 850)
+    lmax = policy.get("length_max", 1200)
+    length_prov = "length_max"
+    if post_type == "hot_take" and isinstance(policy.get("length_by_post_type"), dict) and "hot_take" in policy["length_by_post_type"]:
+        ht = policy["length_by_post_type"]["hot_take"]
+        lmin = ht.get("min", lmin)
+        lmax = ht.get("max", lmax)
+        length_prov = "length_by_post_type"
+
+    # Hashtags
+    if not policy.get("hashtags_in_body", True):
+        fc_max = policy.get("first_comment_hashtags_max", 3)
+        hashtag_val = f"First comment only, max {fc_max}" if fc_max > 0 else "None"
+    elif policy.get("hashtags_max", 3) == 0:
+        hashtag_val = "None"
+    else:
+        hashtag_val = f"{policy.get('hashtags_min', 1)} to {policy.get('hashtags_max', 3)} in body"
+
+    # Emojis
+    emoji_map = {
+        "none": "None",
+        "sparse": "Sparse (up to 3)",
+        "allowed": "Allowed",
+        "many": "Frequent",
+    }
+    emoji_val = emoji_map.get(str(policy.get("emoji_policy", "none")), "None")
+
+    # Question ending
+    q_end = policy.get("question_ending", "allowed")
+    if post_type == "technical_explainer" and provenance.get("question_ending") != "custom_instructions":
+        q_end = "required"
+    q_end_map = {"required": "Required", "forbidden": "Not allowed", "allowed": "Optional"}
+
+    # Hook style
+    if policy.get("require_number_hook"):
+        hook_val = "Must start with a number"
+    elif policy.get("no_question_hooks"):
+        hook_val = "No question hooks"
+    else:
+        hook_val = "Varied (no repeats)"
+
+    items = [
+        {"key": "length", "label": "Post length", "value": f"{lmin}–{lmax} characters", **_source_meta(length_prov, ["length", "character", "200 words"])},
+        {"key": "hashtags", "label": "Hashtags", "value": hashtag_val, **_source_meta("hashtags_in_body", ["hashtag"])},
+        {"key": "emojis", "label": "Emojis", "value": emoji_val, **_source_meta("emoji_policy", ["emoji"])},
+        {"key": "hook_style", "label": "Opening hook", "value": hook_val, **_source_meta("no_question_hooks" if policy.get("no_question_hooks") else "require_number_hook", ["hook", "first line", "question"])},
+        {"key": "question_ending", "label": "Ending question", "value": q_end_map.get(q_end, "Optional"), **_source_meta("question_ending", ["question"])},
+        {"key": "first_line_max", "label": "First line max", "value": f"{policy.get('first_line_max', 140)} characters", **_source_meta("first_line_max", ["first line"])},
+        {"key": "paragraphs", "label": "Paragraphs", "value": f"{policy.get('paragraphs_min', 3)} to {policy.get('paragraphs_max', 6)} paragraphs", **_source_meta("paragraphs_max", ["paragraph"])},
+    ]
+    return items
+
+
 def _build_context_view(db: Session, user_id: str) -> Dict[str, Any]:
     settings_row = custom_repo.get_or_create_settings(db, user_id)
     compile_pending = custom_repo.has_pending_compile(db, user_id)
@@ -502,29 +611,42 @@ def _build_context_view(db: Session, user_id: str) -> Dict[str, Any]:
             .first()
         )
         if ver:
+            compiled = ver.compiled or {}
+            policy_by_type = {
+                pt: _build_policy_items(db, user_id, compiled, post_type=pt)
+                for pt in ("all", "build_in_public", "technical_explainer", "hot_take")
+            }
             return {
                 "version_id": str(ver.id),
                 "version": ver.version,
                 "compile_pending": compile_pending,
+                "updated_at": ver.created_at.isoformat() if ver.created_at else None,
                 "warnings": list(ver.warnings or []),
                 "token_counts": ver.token_counts or {},
-                "compiled": ver.compiled,
+                "compiled": compiled,
+                "policy_items": policy_by_type["all"],
+                "policy_items_by_post_type": policy_by_type,
             }
+    empty_compiled = {
+        "version_id": "",
+        "version": 0,
+        "is_empty": True,
+        "policy": EffectivePolicy().model_dump(),
+        "guidance": {},
+        "sources": [],
+        "warnings": [],
+    }
+    empty_items = _build_policy_items(db, user_id, empty_compiled, post_type="all")
     return {
         "version_id": None,
         "version": 0,
         "compile_pending": compile_pending,
+        "updated_at": None,
         "warnings": [],
         "token_counts": {},
-        "compiled": {
-            "version_id": "",
-            "version": 0,
-            "is_empty": True,
-            "policy": EffectivePolicy().model_dump(),
-            "guidance": {},
-            "sources": [],
-            "warnings": [],
-        },
+        "compiled": empty_compiled,
+        "policy_items": empty_items,
+        "policy_items_by_post_type": {"all": empty_items},
     }
 
 
