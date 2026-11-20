@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Search, LayoutDashboard, FileText, Share2, Settings, ArrowRight, PenSquare, BarChart3, Sparkles } from "lucide-react";
+import { Search, LayoutDashboard, FileText, Share2, Settings, ArrowRight, PenSquare, BarChart3, SlidersHorizontal } from "lucide-react";
 import { usePostsQuery } from "@/lib/queries";
 import { useUser } from "@/components/providers/user-provider";
 import { cn } from "@/lib/utils";
@@ -33,7 +33,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     { title: "Analytics", url: "/app/analytics", icon: BarChart3 },
     { title: "Posts", url: "/app/posts", icon: FileText },
     { title: "Playground", url: "/app/playground", icon: PenSquare },
-    { title: "Customize", url: "/app/customize", icon: Sparkles },
+    { title: "Customize", url: "/app/customize", icon: SlidersHorizontal },
     { title: "Connections", url: "/app/connections", icon: Share2 },
     { title: "Settings", url: "/app/settings", icon: Settings },
   ];

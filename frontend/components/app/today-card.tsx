@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Sparkles, Loader2, Clock } from "lucide-react";
+import { PenLine, Loader2, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { PostThumbnail } from "@/components/app/PostThumbnail";
@@ -44,7 +44,7 @@ export function TodayCard({ today, schedule, timezone }: TodayCardProps) {
         // Empty state with automated schedule details and instant draft generation trigger
         <div className="py-6 px-4 flex flex-col items-center justify-center text-center">
           <div className="flex size-10 items-center justify-center rounded-lg border border-border bg-card text-primary mb-3">
-            <Sparkles className="size-5" />
+            <PenLine className="size-5 stroke-[1.75]" />
           </div>
           <h4 className="text-sm font-semibold text-foreground mb-1">
             Automated Publishing Active
@@ -68,7 +68,7 @@ export function TodayCard({ today, schedule, timezone }: TodayCardProps) {
               </>
             ) : (
               <>
-                <Sparkles className="size-3.5 text-primary" />
+                <PenLine className="size-3.5 text-primary stroke-[1.75]" />
                 <span>Generate today&apos;s draft now</span>
               </>
             )}

@@ -23,7 +23,7 @@ import {
   ExternalLinkIcon,
   CopyIcon,
   CheckIcon,
-  SparklesIcon,
+  PenLine,
   GlobeIcon,
   CalendarIcon,
   FileTextIcon,
@@ -103,7 +103,7 @@ export function PostQuickView({
           <div className="p-4 rounded-xl border border-border bg-card/60 space-y-3">
             <div className="flex items-center justify-between text-xs">
               <div className="flex items-center gap-2">
-                <SparklesIcon className="size-4 text-primary" />
+                <PenLine className="size-4 text-primary stroke-[1.75]" />
                 <span className="font-semibold text-foreground">
                   Authenticity & Quality Gate
                 </span>
