@@ -180,7 +180,18 @@ STRUCTURED TOPIC REQUIREMENTS:
 7. Grounding: Select 1 to 3 sources that are STRICTLY present in the candidate search results.
 """
 
-FINDER_HUMAN_PROMPT = """Select the best topic from the search candidates for this creator:
+FINDER_HUMAN_PROMPT = """# USER CUSTOM INSTRUCTIONS (highest priority, must follow):
+{custom_instructions}
+
+# PLAYBOOK TOPIC RULES (must follow):
+{playbook_rules}
+
+# BUSINESS FACTS (prefer topics relevant to this business):
+{business_facts}
+
+# POST TYPE FOR THIS RUN: {post_type}
+
+Select the best topic from the search candidates for this creator:
 
 # Untrusted user content profile data
 <<<UNTRUSTED_PROFILE_DATA>>>
@@ -405,6 +416,10 @@ def run_finder_agent(
     history: List[Dict[str, Any]],
     model: BaseChatModel,
     topic_hint: Optional[str] = None,
+    custom_instructions: str = "",
+    playbook_rules: str = "",
+    business_facts: str = "",
+    post_type: str = "technical_explainer",
 ) -> Tuple[Optional[FinderOutput], List[str]]:
     """Runs the Post Finder Agent with up to 3 retries on topic overlap or validation failure.
     Returns (finder_output, warnings).
@@ -417,6 +432,10 @@ def run_finder_agent(
         topics_include_list.insert(0, topic_hint)
 
     prompt_input = {
+        "custom_instructions": custom_instructions or "None.",
+        "playbook_rules": playbook_rules or "None.",
+        "business_facts": business_facts or "None.",
+        "post_type": post_type,
         "role_title": profile.get("role_title") or "Professional",
         "industry": profile.get("industry") or "Technology",
         "niche_description": profile.get("niche_description") or "",

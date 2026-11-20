@@ -168,6 +168,10 @@ def test_gtm_untrusted_data_isolation():
     """Validates that untrusted prompt inputs (profile, source, post_text) are isolated inside delimiters."""
     # Format messages with malicious prompt injection attempts
     brief_messages = GTM_BRIEF_PROMPT.format_messages(
+        custom_instructions="",
+        business_facts="",
+        post_type="technical_explainer",
+        recent_hooks_section="None.",
         topic="Security Audit",
         angle="Zero Trust",
         post_format="observer take",

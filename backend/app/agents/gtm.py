@@ -152,9 +152,10 @@ HOOK CREATION REQUIREMENTS:
 - WRITE the opening line ('hook_text') yourself for this specific topic ('{topic}') and angle ('{angle}').
 - The library patterns and examples are STYLE GUIDANCE ONLY. Do NOT copy the examples.
 - NEVER paste the raw article title or a long cut phrase into the hook. Use only the natural topic label.
-- NUMBER RESTRICTION: The hook may use a number ONLY IF that exact number is explicitly listed in the Key Facts. Otherwise, NO numbers.
+- NUMBER RESTRICTION: The hook may use a number ONLY IF that exact number is explicitly listed in the Key Facts or Business Facts (or a small list count 1-10 if required by user rule). Otherwise, NO numbers.
 - NO invented experiences, fake 2 AM alarms, fictional customer calls, or ungrounded audits.
 - Set chosen_hook equal to hook_text.
+- Priority order on conflict: USER CUSTOM INSTRUCTIONS > PLAYBOOK RULES > BUSINESS FACTS > ONBOARDING PROFILE.
 
 STRUCTURE REQUIREMENTS:
 - Provide 4 to 6 concise lines outlining the sequential section progression of the post.
@@ -165,7 +166,21 @@ ENDING REQUIREMENTS:
 - Strictly ban engagement bait [END-02] like "Thoughts?", "Agree?", "Let that sink in".
 """
 
-GTM_BRIEF_HUMAN_PROMPT = """Generate the GTM Content Brief for this topic:
+GTM_BRIEF_HUMAN_PROMPT = """# USER CUSTOM INSTRUCTIONS (highest priority, must follow):
+{custom_instructions}
+
+# PLAYBOOK RULES (must follow):
+{playbook_rules}
+
+# BUSINESS FACTS:
+{business_facts}
+
+# POST TYPE FOR THIS RUN: {post_type}
+
+# RECENT OPENING HOOKS (DO NOT repeat or closely copy):
+{recent_hooks_section}
+
+Generate the GTM Content Brief for this topic:
 
 # Selected Topic Details:
 - Topic Label: {topic}
@@ -176,7 +191,7 @@ GTM_BRIEF_HUMAN_PROMPT = """Generate the GTM Content Brief for this topic:
 # Allowed Hook Styles:
 {allowed_hook_styles}
 
-# Hook Library Patterns for Allowed Styles:
+# Hook Library Patterns for Allowed Styles (structure only, no examples):
 {hook_patterns_text}
 
 # Untrusted Key Facts Grounding:
@@ -201,9 +216,6 @@ Topics to Avoid: {topics_avoid}
 <<<UNTRUSTED_SOURCES>>>
 {sources_text}
 <<<END_UNTRUSTED_SOURCES>>>
-
-# LinkedIn Content Playbook Rules Reference:
-{playbook_rules}
 
 {feedback_block}
 Provide the structured GTM brief: select one allowed hook_style, pick a hook_id, write hook_text tailored specifically to {topic} and the key facts, outline 4 to 6 structure lines, and specify the ending strategy.
@@ -296,7 +308,6 @@ def _format_hook_patterns_block(allowed_styles: List[str]) -> str:
         for h in hooks:
             lines.append(f"  Pattern ID: {h['id']} | Name: {h['name']}")
             lines.append(f"    Pattern: {h['pattern']}")
-            lines.append(f"    Style Examples: {'; '.join(h.get('examples', []))}")
             lines.append(f"    Avoid: {h.get('avoid', '')}")
     return "\n".join(lines)
 
@@ -347,6 +358,10 @@ def run_gtm_brief(
     recent_hooks: Optional[List[str]] = None,
     feedback_block: str = "",
     playbook_rules_override: Optional[str] = None,
+    custom_instructions: str = "",
+    business_facts: str = "",
+    post_type: str = "technical_explainer",
+    policy: Optional[Dict[str, Any]] = None,
 ) -> GTMBriefOutput:
     """Generates the GTM Content Brief before drafting begins.
     Retries once on parsing/schema error. Never raises on hook quality checks.
@@ -376,27 +391,39 @@ def run_gtm_brief(
         ]
     )
 
-    # If no facts are available, remove number_result so the model does not invent a statistic
-    if not key_facts and "number_result" in allowed_styles and len(allowed_styles) > 1:
+    rules_combined_lower = f"{custom_instructions} {playbook_text}".lower()
+    policy_dict = policy if isinstance(policy, dict) else {}
+    no_q_hooks = bool(policy_dict.get("no_question_hooks")) or (
+        "never start" in rules_combined_lower and "question" in rules_combined_lower
+    ) or ("no question hook" in rules_combined_lower) or ("never use questions as hook" in rules_combined_lower)
+    if no_q_hooks and "question" in allowed_styles and len(allowed_styles) > 1:
+        allowed_styles = [s for s in allowed_styles if s != "question"]
+
+    req_num_hook = bool(policy_dict.get("require_number_hook")) or (
+        "always start" in rules_combined_lower and "number" in rules_combined_lower
+    )
+    if req_num_hook:
+        allowed_styles = ["number_result"]
+    elif not key_facts and not business_facts and "number_result" in allowed_styles and len(allowed_styles) > 1:
+        # If no facts are available, remove number_result so the model does not invent a statistic
         allowed_styles = [s for s in allowed_styles if s != "number_result"]
 
     key_facts_text = _format_key_facts_block(key_facts)
     hook_patterns_text = _format_hook_patterns_block(allowed_styles)
 
-    # Include user's last 10 hooks so GTM avoids repeating opening words or style
-    recent_hooks_note = ""
+    # Own section for user's last 10 hooks so GTM never loses it on retry
+    recent_hooks_section = "None."
     if recent_hooks:
         clean_hooks = [h.strip() for h in recent_hooks[:10] if h and h.strip()]
         if clean_hooks:
-            hook_lines = "\n".join(f"- {h[:140]}" for h in clean_hooks)
-            recent_hooks_note = (
-                "\n# Recent Opening Hooks (DO NOT repeat these opening words or styles):\n"
-                f"{hook_lines}\n"
-            )
-
-    combined_feedback = f"{recent_hooks_note}{feedback_block}".strip()
+            recent_hooks_section = "\n".join(f"- {h[:140]}" for h in clean_hooks)
 
     prompt_input = {
+        "custom_instructions": custom_instructions or "None.",
+        "playbook_rules": playbook_text,
+        "business_facts": business_facts or "None.",
+        "post_type": post_type,
+        "recent_hooks_section": recent_hooks_section,
         "topic": effective_label,
         "angle": angle,
         "post_format": post_format,
@@ -414,8 +441,7 @@ def run_gtm_brief(
         "topics_include": ", ".join(profile_dict.get("topics_include") or []),
         "topics_avoid": ", ".join(profile_dict.get("topics_avoid") or []),
         "sources_text": sources_text,
-        "playbook_rules": playbook_text,
-        "feedback_block": combined_feedback,
+        "feedback_block": feedback_block.strip(),
     }
 
     structured_model = model.with_structured_output(GTMBriefOutput, include_raw=True)

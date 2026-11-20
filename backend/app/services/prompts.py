@@ -56,7 +56,19 @@ QUERY GUIDELINES:
 - Incorporate topics to include and strictly steer clear of topics to avoid.
 """
 
-PLAN_HUMAN_PROMPT = """Generate 3 to 5 search queries for fresh news based on this creator's content profile:
+PLAN_HUMAN_PROMPT = """# USER CUSTOM INSTRUCTIONS (highest priority, must follow):
+{custom_instructions}
+
+# PLAYBOOK RULES (must follow):
+{playbook_rules}
+
+# BUSINESS FACTS (use these to target search queries):
+{business_facts}
+
+# POST TYPE FOR THIS RUN: {post_type}
+# RECENT TOPICS (avoid repeating): {recent_topics}
+
+Generate 3 to 5 search queries for fresh news based on this creator's business, customization, and content profile:
 
 # Untrusted text goes into prompts here
 <<<UNTRUSTED_PROFILE_DATA>>>
