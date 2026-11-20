@@ -20,7 +20,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
@@ -31,7 +30,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { AppTabsList, AppTabsTrigger } from "@/components/app/AppTabs";
+import { PageContainer } from "@/components/app/PageContainer";
+import { PageHeader } from "@/components/app/PageHeader";
+import { StatusBadge } from "@/components/app/StatusBadge";
 import { RichPostEditor } from "./components/RichPostEditor";
 import { AgentPlayground } from "./components/AgentPlayground";
 import { PlatformLabel } from "@/components/app/PlatformLabel";
@@ -377,51 +380,43 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
     isPosting || plainText.trim().length === 0 || plainText.length > 3000;
 
   return (
-    <div className="w-full max-w-4xl mx-auto p-4 sm:p-6 md:p-8 space-y-6">
-      {/* Page Title & Connection Status Pill */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
-            Playground
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Test multi-agent post generation with live trace, or draft and publish directly to LinkedIn.
-          </p>
-        </div>
-
-        {/* Live LinkedIn Connection Status Pill */}
-        <div>
-          {isStatusLoading ? (
-            <Skeleton className="h-6 w-36 rounded-full" />
+    <PageContainer>
+      <PageHeader
+        title="Playground"
+        description="Test multi-agent post generation with live activity, or draft and publish directly to LinkedIn."
+        actions={
+          isStatusLoading ? (
+            <Skeleton className="h-6 w-32 rounded-full" />
           ) : statusData?.connected ? (
-            <Badge
-              variant="outline"
-              className="gap-1.5 px-2.5 py-1 text-xs font-normal border-status-success-fg/30 bg-status-success-bg text-status-success-fg"
-            >
-              <span className="size-1.5 rounded-full bg-status-success-fg shrink-0" />
-              <span>
-                Connected
-                {statusData.account_name ? `: ${statusData.account_name}` : ""}
-              </span>
-            </Badge>
+            <StatusBadge
+              status="connected"
+              label={
+                statusData.account_name
+                  ? `Connected: ${statusData.account_name}`
+                  : "Connected"
+              }
+            />
           ) : (
-            <Badge
-              variant="outline"
+            <button
+              type="button"
               onClick={() => setShowConnectDialog(true)}
-              className="gap-1.5 px-2.5 py-1 text-xs font-normal border-status-warning-fg/30 bg-status-warning-bg text-status-warning-fg cursor-pointer hover:bg-status-warning-bg/80 transition-colors"
+              className="cursor-pointer rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <span className="size-1.5 rounded-full bg-status-warning-fg shrink-0" />
-              <span>Not connected (Click to link)</span>
-            </Badge>
-          )}
-        </div>
-      </div>
+              <StatusBadge status="disconnected" label="Not connected" />
+            </button>
+          )
+        }
+      />
 
-      <Tabs value={activeTab} onValueChange={(val) => handleTabChange(val as "agents" | "composer")} className="w-full flex flex-col gap-4">
-        <TabsList className="grid w-full grid-cols-2 max-w-xs h-9">
-          <TabsTrigger value="agents">Write with Agents</TabsTrigger>
-          <TabsTrigger value="composer">LinkedIn Composer</TabsTrigger>
-        </TabsList>
+      <Tabs
+        value={activeTab}
+        onValueChange={(val) => handleTabChange(val as "agents" | "composer")}
+        className="w-full flex flex-col gap-4"
+      >
+        <AppTabsList>
+          <AppTabsTrigger value="agents">Write with Agents</AppTabsTrigger>
+          <AppTabsTrigger value="composer">LinkedIn Composer</AppTabsTrigger>
+        </AppTabsList>
 
         <TabsContent value="agents" className="mt-4">
           <AgentPlayground userId={user.id} onUseInComposer={handleUseInComposer} />
@@ -782,6 +777,6 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageContainer>
   );
 }

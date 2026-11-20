@@ -5,29 +5,30 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AlertCircle,
-  ArrowRight,
+  ArrowUpRight,
   Check,
   ChevronDown,
   ChevronUp,
+  CircleX,
   Copy,
-  Loader2,
+  LoaderCircle,
+  PenLine,
   RotateCcw,
-  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { LimitMeter } from "@/components/app/ProgressBars";
 import {
   getPlaygroundRunEvents,
   type RunEventItem,
   type RunEventsResponse,
 } from "@/lib/api";
+import { customizationKeys, getCompiledContext } from "@/lib/customization";
 import {
   queryKeys,
   useCancelPlaygroundRunMutation,
@@ -42,7 +43,8 @@ export interface AgentDraftMetadata {
   angle?: string;
   ai_score?: number;
   image_headline?: string;
-  sources?: any[];
+  sources?: unknown[];
+  first_comment?: string;
 }
 
 interface AgentPlaygroundProps {
@@ -50,8 +52,7 @@ interface AgentPlaygroundProps {
   onUseInComposer?: (text: string, metadata?: AgentDraftMetadata) => void;
 }
 
-const PLAIN_FAIL_MESSAGE =
-  "We could not write your post right now. Please try again in a moment.";
+const PLAIN_FAIL_MESSAGE = "We could not finish this draft. Try again.";
 
 const TERMINAL_STATUSES = new Set([
   "done",
@@ -84,12 +85,15 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
 
   // Editor state & confirm-before-replace prompt state
   const [editorText, setEditorText] = React.useState<string>("");
+  const [firstComment, setFirstComment] = React.useState<string>("");
   const [pendingPost, setPendingPost] = React.useState<{
     text: string;
+    firstComment?: string;
     metadata?: AgentDraftMetadata;
   } | null>(null);
   const [appliedRunId, setAppliedRunId] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState(false);
+  const [copiedComment, setCopiedComment] = React.useState(false);
   const [mobilePanelOpen, setMobilePanelOpen] = React.useState(true);
 
   const createMutation = useCreatePlaygroundRunMutation();
@@ -97,10 +101,18 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
   const { data: profile, isLoading: isProfileLoading } = useProfileQuery(userId);
   const hasNiche = Boolean(profile?.niche_description?.trim());
 
+  const contextQuery = useQuery({
+    queryKey: customizationKeys.context(),
+    queryFn: getCompiledContext,
+    retry: false,
+  });
+
+  const policyMin = contextQuery.data?.compiled?.policy?.length_min ?? 800;
+  const policyMax = contextQuery.data?.compiled?.policy?.length_max ?? 1200;
+
   const isTerminal = Boolean(runStatus && TERMINAL_STATUSES.has(runStatus));
   const isRunning = Boolean(runId && !isTerminal);
 
-  // Sync URL ?run=ID using Next.js router so browser history stays intact
   const syncRunIdToUrl = React.useCallback(
     (nextId: string | null) => {
       const params = new URLSearchParams(searchParams.toString());
@@ -115,7 +127,6 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
     [pathname, router, searchParams]
   );
 
-  // Pause polling when the browser tab is hidden
   React.useEffect(() => {
     if (typeof document === "undefined") return;
     const handleVisibility = () => {
@@ -125,7 +136,6 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
 
-  // Reconnect to any active run on mount if URL had no ?run=ID
   React.useEffect(() => {
     if (typeof window === "undefined" || runId) return;
     fetch(`/api/v1/playground/runs/active`, { credentials: "include" })
@@ -140,10 +150,9 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
           }
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [runId, syncRunIdToUrl]);
 
-  // Increment elapsed timer once per second while active
   React.useEffect(() => {
     if (!isRunning) return;
     const timer = setInterval(() => {
@@ -152,7 +161,6 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
     return () => clearInterval(timer);
   }, [isRunning]);
 
-  // Cursor-based React Query polling on /playground/runs/{runId}/events?after_seq=lastSeq
   const eventsQuery = useQuery<RunEventsResponse>({
     queryKey: ["playground-events", userId, runId, lastSeq],
     queryFn: () => getPlaygroundRunEvents(runId!, lastSeq),
@@ -165,18 +173,15 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
     staleTime: 0,
   });
 
-  // Fetch run details once finished (or on reconnect) to hydrate draft & elapsed time
   const { data: runData } = useRunQuery(
     userId,
     runId,
     Boolean(runId && !isTerminal && !isTabHidden) ? 2000 : false
   );
 
-  // Append newly arrived events and advance cursor
   React.useEffect(() => {
     const data = eventsQuery.data;
     if (!data) return;
-
     if (data.status) {
       setRunStatus(data.status);
     }
@@ -191,7 +196,6 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
     }
   }, [eventsQuery.data]);
 
-  // Sync terminal status and elapsed time from runData
   React.useEffect(() => {
     if (!runData) return;
     if (runData.status) {
@@ -202,46 +206,44 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
     }
   }, [runData, elapsedSeconds]);
 
-  // Apply completed draft (or clean best draft after cancel) to the editor
   React.useEffect(() => {
     if (!runId || appliedRunId === runId) return;
 
     const completedEvt = [...events].reverse().find((e) => e.type === "run_completed");
     const draftObj =
-      (completedEvt?.payload?.final_post as Record<string, any> | undefined) ||
+      (completedEvt?.payload?.final_post as Record<string, unknown> | undefined) ||
       (runStatus === "succeeded" || runStatus === "completed"
-        ? (runData?.result as Record<string, any> | undefined) ||
-          (runData?.best_draft as Record<string, any> | undefined)
+        ? (runData?.result as Record<string, unknown> | undefined) ||
+        (runData?.best_draft as Record<string, unknown> | undefined)
         : runStatus === "cancelled"
-        ? (runData?.best_draft as Record<string, any> | undefined)
-        : undefined);
+          ? (runData?.best_draft as Record<string, unknown> | undefined)
+          : undefined);
 
     const postText = draftObj?.post_text || draftObj?.caption;
     if (!postText || typeof postText !== "string") return;
 
+    const fc = typeof draftObj?.first_comment === "string" ? draftObj.first_comment.trim() : "";
+
     const meta: AgentDraftMetadata = {
-      topic_title: (runData?.trace as any)?.topic_title,
-      angle: (runData?.trace as any)?.finder?.angle,
-      ai_score:
-        completedEvt?.payload?.ai_score ?? (runData?.trace as any)?.final_score,
-      image_headline: draftObj?.image_headline,
-      sources: (runData?.trace as any)?.finder?.sources,
+      topic_title: (runData?.trace as Record<string, unknown> | undefined)?.topic_title as string | undefined,
+      angle: ((runData?.trace as Record<string, unknown> | undefined)?.finder as Record<string, unknown> | undefined)?.angle as string | undefined,
+      image_headline: draftObj?.image_headline as string | undefined,
+      first_comment: fc || undefined,
     };
 
     setAppliedRunId(runId);
 
     if (editorText.trim().length > 0) {
-      setPendingPost({ text: postText, metadata: meta });
+      setPendingPost({ text: postText, firstComment: fc, metadata: meta });
     } else {
       setEditorText(postText);
+      setFirstComment(fc);
       toast.success("Post saved to Drafts and ready in editor");
     }
 
-    // Refresh Posts and Dashboard caches so the new draft shows under Drafts right away
     qc.invalidateQueries({ queryKey: queryKeys.all(userId) });
   }, [events, runData, runId, runStatus, appliedRunId, editorText, qc, userId]);
 
-  // Start a new run (double-click safe, requires a filled profile niche)
   const handleStartRun = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (isRunning || createMutation.isPending || !hasNiche) return;
@@ -266,9 +268,9 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
     try {
       const res = await cancelMutation.mutateAsync(runId);
       setRunStatus(res.status || "cancelled");
-      toast.info("Run cancelled");
+      toast.info("Run stopped");
     } catch {
-      toast.error("Could not cancel right now");
+      toast.error("Could not stop right now");
     }
   };
 
@@ -280,6 +282,14 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleCopyComment = async () => {
+    if (!firstComment.trim()) return;
+    await navigator.clipboard.writeText(firstComment);
+    setCopiedComment(true);
+    toast.success("First comment copied");
+    setTimeout(() => setCopiedComment(false), 2000);
+  };
+
   const isFailedError =
     runStatus === "failed_error" ||
     runStatus === "failed" ||
@@ -287,14 +297,18 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
     runStatus === "interrupted" ||
     events.some((e) => e.type === "run_failed");
 
-  const failEvent = [...events].reverse().find((e) => e.type === "run_failed");
-  const failMessage = failEvent?.message || PLAIN_FAIL_MESSAGE;
+  const traceObj = (runData?.trace || {}) as Record<string, unknown>;
+  const failingGates = (runData as unknown as Record<string, unknown> | undefined)?.failing_gates;
+  const needsReview = Boolean(
+    traceObj.needs_review ||
+    (Array.isArray(failingGates) && failingGates.length > 0)
+  );
 
   return (
     <div className="space-y-4">
-      {/* Top prompt bar & Generate button */}
-      <Card className="border border-border bg-card shadow-none">
-        <CardContent className="pt-5">
+      {/* Topic input card */}
+      <Card className="border border-border bg-card shadow-none rounded-lg">
+        <CardContent className="p-4 sm:p-5">
           <form onSubmit={handleStartRun} className="space-y-2">
             <label
               htmlFor="topic-hint"
@@ -316,23 +330,23 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
               <Button
                 type="submit"
                 disabled={isRunning || createMutation.isPending || (!isProfileLoading && !hasNiche)}
-                className="sm:w-auto font-normal text-sm gap-2"
+                className="sm:w-auto font-medium text-sm gap-2"
               >
                 {createMutation.isPending || isRunning ? (
                   <>
-                    <Loader2 className="size-4 animate-spin" />
+                    <LoaderCircle className="size-4 stroke-[1.75] animate-spin motion-reduce:animate-none" />
                     <span>Writing...</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="size-4" />
+                    <PenLine className="size-4 stroke-[1.75]" />
                     <span>Write with agents</span>
                   </>
                 )}
               </Button>
             </div>
             {!isProfileLoading && !hasNiche ? (
-              <p className="text-xs text-destructive">
+              <p className="text-xs text-status-danger-fg">
                 Your niche description is empty.{" "}
                 <Link href="/app/settings?tab=content" className="underline font-medium">
                   Fill it in Settings
@@ -348,21 +362,21 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
         </CardContent>
       </Card>
 
-      {/* Plain error banner only for real run_failed technical failures */}
+      {/* Plain error banner only for real failures */}
       {isFailedError && (
-        <Alert variant="destructive">
-          <AlertCircle className="size-4" />
+        <Alert className="border-status-danger-border bg-status-danger-bg text-status-danger-fg">
+          <CircleX className="size-4 stroke-[1.75]" />
           <AlertTitle className="font-medium">Could not complete run</AlertTitle>
           <AlertDescription className="text-xs mt-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <span>{failMessage}</span>
+            <span>{PLAIN_FAIL_MESSAGE}</span>
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={() => handleStartRun()}
-              className="h-8 text-xs shrink-0 font-normal"
+              className="h-8 text-xs shrink-0 font-medium bg-card text-foreground"
             >
-              <RotateCcw className="size-3.5 mr-1.5" />
+              <RotateCcw className="size-4 stroke-[1.75] mr-1.5" />
               <span>Retry</span>
             </Button>
           </AlertDescription>
@@ -372,16 +386,17 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
       {/* Ask before replacing existing text in editor */}
       {pendingPost && (
         <Alert className="border-border bg-card">
-          <AlertTitle className="text-sm font-medium">
+          <AlertTitle className="text-sm font-medium text-foreground">
             Replace your current draft with the new post?
           </AlertTitle>
           <AlertDescription className="mt-2 flex items-center gap-2">
             <Button
               type="button"
               size="sm"
-              className="h-8 text-xs font-normal"
+              className="h-8 text-xs"
               onClick={() => {
                 setEditorText(pendingPost.text);
+                setFirstComment(pendingPost.firstComment || "");
                 setPendingPost(null);
                 toast.success("Replaced draft with new post");
               }}
@@ -392,7 +407,7 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
               type="button"
               variant="outline"
               size="sm"
-              className="h-8 text-xs font-normal"
+              className="h-8 text-xs"
               onClick={() => setPendingPost(null)}
             >
               Keep mine
@@ -401,9 +416,8 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
         </Alert>
       )}
 
-      {/* Responsive layout: mobile puts collapsible Agent activity above editor; desktop puts editor beside activity */}
+      {/* Responsive layout: Editor + Activity changelog */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-        {/* Mobile collapsible activity wrapper + Desktop right column */}
         {runId && (
           <div className="lg:col-span-5 lg:order-2 space-y-2">
             <div className="lg:hidden">
@@ -412,13 +426,13 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
                 variant="outline"
                 size="sm"
                 onClick={() => setMobilePanelOpen((prev) => !prev)}
-                className="w-full justify-between text-xs font-normal bg-card"
+                className="w-full justify-between text-xs bg-card"
               >
                 <span>Agent activity</span>
                 {mobilePanelOpen ? (
-                  <ChevronUp className="size-4" />
+                  <ChevronUp className="size-4 stroke-[1.75]" />
                 ) : (
-                  <ChevronDown className="size-4" />
+                  <ChevronDown className="size-4 stroke-[1.75]" />
                 )}
               </Button>
             </div>
@@ -428,6 +442,7 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
                 status={runStatus}
                 elapsedSeconds={elapsedSeconds}
                 isRunning={isRunning}
+                needsReview={needsReview}
                 onCancel={handleCancelRun}
                 isCancelling={cancelMutation.isPending}
               />
@@ -435,20 +450,12 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
           </div>
         )}
 
-        {/* Editor panel (full width before a run starts, 7 cols beside activity panel during/after a run) */}
-        <div className={runId ? "lg:col-span-7 lg:order-1" : "lg:col-span-12"}>
-          <Card className="border border-border bg-card shadow-none">
-            <CardHeader className="pb-3 border-b border-border flex flex-row items-center justify-between gap-2 space-y-0">
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-sm font-medium text-foreground">
-                  Post editor
-                </CardTitle>
-                {editorText.length > 0 && (
-                  <Badge variant="outline" className="text-[11px] font-normal">
-                    {editorText.length} chars
-                  </Badge>
-                )}
-              </div>
+        <div className={runId ? "lg:col-span-7 lg:order-1 space-y-4" : "lg:col-span-12 space-y-4"}>
+          <Card className="border border-border bg-card shadow-none rounded-lg">
+            <CardHeader className="p-4 sm:p-5 pb-3 border-b border-border flex flex-row items-center justify-between gap-2 space-y-0">
+              <CardTitle className="text-sm font-medium text-foreground">
+                Post editor
+              </CardTitle>
               <div className="flex items-center gap-2">
                 <Button
                   type="button"
@@ -456,12 +463,12 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
                   size="sm"
                   onClick={handleCopy}
                   disabled={!editorText.trim()}
-                  className="h-8 text-xs font-normal"
+                  className="h-8 text-xs gap-1.5"
                 >
                   {copied ? (
-                    <Check className="size-3.5 mr-1.5" />
+                    <Check className="size-4 stroke-[1.75]" />
                   ) : (
-                    <Copy className="size-3.5 mr-1.5" />
+                    <Copy className="size-4 stroke-[1.75]" />
                   )}
                   <span>{copied ? "Copied" : "Copy"}</span>
                 </Button>
@@ -471,23 +478,62 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
                     size="sm"
                     disabled={!editorText.trim()}
                     onClick={() => onUseInComposer(editorText)}
-                    className="h-8 text-xs font-normal"
+                    className="h-8 text-xs gap-1.5"
                   >
                     <span>Open in Composer</span>
-                    <ArrowRight className="size-3.5 ml-1.5" />
+                    <ArrowUpRight className="size-4 stroke-[1.75]" />
                   </Button>
                 )}
               </div>
             </CardHeader>
-            <CardContent className="pt-4">
+            <CardContent className="p-4 sm:p-5 space-y-4">
               <Textarea
                 value={editorText}
                 onChange={(e) => setEditorText(e.target.value)}
                 placeholder="Your generated LinkedIn post will appear here, or start typing your own draft..."
                 className="min-h-[360px] resize-y text-sm leading-relaxed bg-card border-border focus-visible:ring-1"
               />
+              <LimitMeter
+                current={editorText.length}
+                min={policyMin}
+                max={policyMax}
+              />
             </CardContent>
           </Card>
+
+          {firstComment.trim().length > 0 && (
+            <Card className="border border-border bg-card shadow-none rounded-lg">
+              <CardHeader className="p-4 sm:p-5 pb-3 border-b border-border flex flex-row items-center justify-between gap-2 space-y-0">
+                <div>
+                  <CardTitle className="text-sm font-medium text-foreground">
+                    First comment
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Paste this as your first comment after publishing.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopyComment}
+                  className="h-8 text-xs gap-1.5"
+                >
+                  {copiedComment ? (
+                    <Check className="size-4 stroke-[1.75]" />
+                  ) : (
+                    <Copy className="size-4 stroke-[1.75]" />
+                  )}
+                  <span>{copiedComment ? "Copied" : "Copy"}</span>
+                </Button>
+              </CardHeader>
+              <CardContent className="p-4 sm:p-5">
+                <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                  {firstComment}
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>
