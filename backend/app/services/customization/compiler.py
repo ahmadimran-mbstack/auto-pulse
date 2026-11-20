@@ -9,10 +9,14 @@ from typing import Any, Dict, List, Optional, Tuple
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
+from app.services.customization.distillers import (
+    classify_rule_applies_to,
+    distill_custom_instructions_to_policy,
+)
 from app.services.customization.policy import EffectivePolicy, MachineConstraint, clamp_policy
 from app.services.embeddings import cosine_similarity
 
-COMPILER_VERSION = "compiler-1"
+COMPILER_VERSION = "compiler-2"
 
 
 class Exemplar(BaseModel):
@@ -32,6 +36,7 @@ class SourceRef(BaseModel):
 
 class GuidancePack(BaseModel):
     playbook_rules_text: str = ""
+    playbook_rules: List[Dict[str, Any]] = Field(default_factory=list)
     playbook_rule_ids: List[str] = Field(default_factory=list)
     hook_patterns: List[str] = Field(default_factory=list)
     post_formats: List[str] = Field(default_factory=list)
@@ -63,6 +68,7 @@ class CustomizationContext(BaseModel):
     guidance: GuidancePack = Field(default_factory=GuidancePack)
     sources: List[SourceRef] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
+    coverage_warnings: List[str] = Field(default_factory=list)
 
 
 def _estimate_tokens(text: str) -> int:
@@ -193,6 +199,10 @@ def compile_customization_context(
     # 1. Policy assembly (precedence: default -> voice -> playbooks -> instructions -> overrides -> clamp)
     policy_data = EffectivePolicy().model_dump()
     provenance: Dict[str, str] = {k: "default" for k in policy_data if k != "provenance"}
+    # Amendment C: compiled customization defaults to no hashtags in body (max 3 in first comment)
+    policy_data["hashtags_in_body"] = False
+    policy_data["hashtags_min"] = 0
+    policy_data["first_comment_hashtags_max"] = 3
 
     if use_voice:
         for c in _derive_voice_constraints(samples):
@@ -204,10 +214,12 @@ def compile_customization_context(
         key=lambda d: str(d.get("created_at") or ""),
     )
     user_rule_lines: List[str] = []
+    user_rule_objs: List[Dict[str, Any]] = []
     user_rule_ids: List[str] = []
     hook_patterns: List[str] = []
     post_formats: List[str] = []
     ctas: List[str] = []
+    length_by_post_type: Dict[str, Dict[str, int]] = {}
 
     for pb in playbooks:
         distilled = pb.get("distilled") or {}
@@ -218,14 +230,103 @@ def compile_customization_context(
             if rid in disabled_rules:
                 continue
             strength = str(r.get("strength") or "should").upper()
+            rule_text = str(r.get("rule") or "").strip()
+            ev_quote = str(r.get("evidence_quote") or "").strip()
+            applies_to = classify_rule_applies_to(
+                rule_text, ev_quote, str(r.get("category") or ""), r.get("applies_to")
+            )
             user_rule_ids.append(rid)
-            user_rule_lines.append(f"[{rid}] ({strength}) {r.get('rule', '')}")
-            if r.get("machine"):
+            user_rule_lines.append(f"[{rid}] ({strength} | {applies_to}) {rule_text}")
+            user_rule_objs.append(
+                {
+                    "id": rid,
+                    "category": str(r.get("category") or "other").lower(),
+                    "strength": strength.lower(),
+                    "rule": rule_text,
+                    "applies_to": applies_to,
+                }
+            )
+
+            lower_r = f"{rule_text} {ev_quote}".lower()
+            # Resolve length by post type without overwriting across scopes
+            if applies_to == "hot_take" and ("200 words" in lower_r or "under 200" in lower_r):
+                length_by_post_type["hot_take"] = {"min": 300, "max": 1100}
+
+            # Hook rules from playbook text
+            if "never start" in lower_r and "question" in lower_r:
+                policy_data["no_question_hooks"] = True
+                provenance["no_question_hooks"] = f"playbook:{rid}"
+            if "always start" in lower_r and "number" in lower_r:
+                policy_data["require_number_hook"] = True
+                provenance["require_number_hook"] = f"playbook:{rid}"
+
+            # Hashtags in body vs first comment
+            if "no hashtags in the body" in lower_r or "not put hashtags in the post body" in lower_r:
+                policy_data["hashtags_in_body"] = False
+                policy_data["hashtags_min"] = 0
+                provenance["hashtags_in_body"] = f"playbook:{rid}"
+                provenance["hashtags_min"] = f"playbook:{rid}"
+
+            # Banned phrases for deterministic scanner (Amendment C)
+            if str(r.get("category") or "").lower() == "banned" or strength == "NEVER":
+                bp_list = list(policy_data.get("banned_phrases_extra") or [])
+                if "day n" in lower_r or "ai journey" in lower_r:
+                    for ph in ("my AI journey", "Day 1 of my AI journey"):
+                        if ph not in bp_list:
+                            bp_list.append(ph)
+                if "follow" in lower_r or "like" in lower_r:
+                    for ph in ("follow me for", "like and follow", "drop a like"):
+                        if ph not in bp_list:
+                            bp_list.append(ph)
+                policy_data["banned_phrases_extra"] = bp_list
+                provenance["banned_phrases_extra"] = f"playbook:{rid}"
+
+            if r.get("machine") and applies_to in ("all", "first_comment_action"):
                 mc = MachineConstraint.model_validate(r["machine"])
+                if mc.type == "length_chars" and ((mc.max is not None and mc.max < 100) or (mc.min is not None and mc.min < 50)):
+                    continue
+                if mc.type == "hashtag_count":
+                    # Max 3 hashtags in first comment; keep body hashtags_min=0 when hashtags_in_body=False
+                    if mc.max is not None:
+                        policy_data["first_comment_hashtags_max"] = min(5, max(0, mc.max))
+                        provenance["first_comment_hashtags_max"] = f"playbook:{rid}"
+                    continue
+                if mc.type == "question_ending" and applies_to != "all":
+                    continue
                 _apply_constraint(policy_data, provenance, mc, f"playbook:{rid}", warnings)
         hook_patterns.extend(distilled.get("hook_patterns") or [])
         post_formats.extend(distilled.get("post_formats") or [])
         ctas.extend(distilled.get("ctas") or [])
+
+    if length_by_post_type:
+        policy_data["length_by_post_type"] = length_by_post_type
+
+    # Custom instruction policy extraction (highest user priority - Amendment D)
+    if custom_instructions:
+        ci_policy = distill_custom_instructions_to_policy(custom_instructions)
+        for field_name in (
+            "emoji_policy",
+            "hashtags_in_body",
+            "hashtags_min",
+            "hashtags_max",
+            "required_end_phrase",
+            "question_ending",
+            "length_min",
+            "length_max",
+            "no_question_hooks",
+            "require_number_hook",
+        ):
+            val = getattr(ci_policy, field_name, None)
+            if val is not None:
+                policy_data[field_name] = val
+                provenance[field_name] = "custom_instructions"
+        if ci_policy.banned_words or ci_policy.banned_phrases:
+            bp_list = list(policy_data.get("banned_phrases_extra") or [])
+            for item in ci_policy.banned_words + ci_policy.banned_phrases:
+                if item and item not in bp_list:
+                    bp_list.append(item)
+            policy_data["banned_phrases_extra"] = bp_list
+            provenance["banned_phrases_extra"] = "custom_instructions"
 
     # Custom instruction constraints (highest user priority)
     for raw_c in overrides.get("instruction_constraints") or []:
@@ -241,9 +342,8 @@ def compile_customization_context(
     doc_experiences = [
         f for f in facts if f.get("kind") == "documented_experience" and not f.get("removed")
     ]
-    if doc_experiences:
-        policy_data["allow_first_person_events"] = True
-        provenance["allow_first_person_events"] = "previous_posts"
+    policy_data["allow_first_person_events"] = bool(doc_experiences)
+    provenance["allow_first_person_events"] = "previous_posts" if doc_experiences else "default"
 
     policy_data["provenance"] = provenance
     clamped_policy, clamp_warnings = clamp_policy(EffectivePolicy.model_validate(policy_data))
@@ -369,6 +469,7 @@ def compile_customization_context(
 
     guidance = GuidancePack(
         playbook_rules_text=playbook_rules_text,
+        playbook_rules=user_rule_objs,
         playbook_rule_ids=user_rule_ids,
         hook_patterns=list(dict.fromkeys(hook_patterns))[:15],
         post_formats=list(dict.fromkeys(post_formats))[:10],
@@ -410,12 +511,27 @@ def compile_customization_context(
         for d in active_docs
     ]
 
+    coverage_warnings: List[str] = []
+    if not doc_experiences:
+        coverage_warnings.append(
+            "No documented_experiences found; first-person experience stories are disabled."
+        )
+    if not active_samples:
+        coverage_warnings.append(
+            "No previous_posts samples found; voice matching has no exemplars."
+        )
+    if not any(f.get("numbers") for f in dedup_facts):
+        coverage_warnings.append(
+            "Business facts contain no concrete numbers or metrics."
+        )
+
     ctx = CustomizationContext(
         is_empty=False,
         policy=clamped_policy,
         guidance=guidance,
         sources=sources,
         warnings=list(dict.fromkeys(warnings)),
+        coverage_warnings=coverage_warnings,
     )
 
     token_counts = {

@@ -41,6 +41,46 @@ class ExtractedConstraint(BaseModel):
     value: Optional[str] = None
 
 
+_VALID_APPLIES_TO = {
+    "all",
+    "build_in_public",
+    "technical_explainer",
+    "hot_take",
+    "project_showcase_video",
+    "first_comment_action",
+}
+
+
+def classify_rule_applies_to(
+    rule_text: str,
+    evidence_quote: str = "",
+    category: str = "",
+    raw_applies_to: Optional[str] = None,
+) -> str:
+    """Classify a playbook rule into one of the 6 allowed applies_to scopes."""
+    combined = f"{rule_text} {evidence_quote}".lower()
+    if "loom" in combined or "video" in combined or "showcase" in combined:
+        return "project_showcase_video"
+    if "github link" in combined and "first comment" in combined:
+        return "first_comment_action"
+    if (
+        "build-in-public" in combined
+        or "build in public" in combined
+        or "p1 post" in combined
+        or "p1 build" in combined
+        or "one node" in combined
+        or "code snippet or diagram" in combined
+    ):
+        return "build_in_public"
+    if "technical explainer" in combined or "explainer" in combined:
+        return "technical_explainer"
+    if "hot take" in combined or "controversial claim" in combined:
+        return "hot_take"
+    if raw_applies_to and raw_applies_to.strip().lower() in _VALID_APPLIES_TO:
+        return raw_applies_to.strip().lower()
+    return "all"
+
+
 class PlaybookRule(BaseModel):
     category: str = Field(
         description="One of: hook, body, ending, format, voice, cta, topic, hashtags, length, banned, other"
@@ -48,6 +88,10 @@ class PlaybookRule(BaseModel):
     rule: str = Field(description="Imperative rule, <= 240 chars")
     rationale: Optional[str] = None
     strength: str = Field(description="One of: must, should, avoid, never")
+    applies_to: str = Field(
+        default="all",
+        description="One of: all, build_in_public, technical_explainer, hot_take, project_showcase_video, first_comment_action",
+    )
     example: Optional[str] = None
     evidence_quote: str = Field(description="Exact verbatim quote from the document")
     machine: Optional[ExtractedConstraint] = None
@@ -87,6 +131,12 @@ class DistilledBusiness(BaseModel):
     warnings: List[str] = Field(default_factory=list)
 
 
+class VoiceExperience(BaseModel):
+    fact: str = Field(description="Concrete first-person experience, <= 240 chars")
+    category: str = Field(default="event")
+    evidence_quote: str = Field(description="Exact verbatim quote from the post")
+
+
 class DistilledVoice(BaseModel):
     voice_summary: str = Field(description="Second-person voice summary <= 800 chars")
     traits: List[str] = Field(default_factory=list)
@@ -95,8 +145,25 @@ class DistilledVoice(BaseModel):
     vocabulary_avoid: List[str] = Field(default_factory=list)
     recurring_signoff: Optional[str] = None
     themes: List[str] = Field(default_factory=list)
-    documented_experiences: List[BusinessFact] = Field(default_factory=list)
+    documented_experiences: List[VoiceExperience] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
+
+
+class CustomInstructionPolicy(BaseModel):
+    """Strict schema for policy overrides extracted from user custom_instructions."""
+
+    emoji_policy: Optional[Literal["none", "sparse", "allowed", "many"]] = None
+    hashtags_in_body: Optional[bool] = None
+    hashtags_min: Optional[int] = None
+    hashtags_max: Optional[int] = None
+    banned_words: List[str] = Field(default_factory=list)
+    banned_phrases: List[str] = Field(default_factory=list)
+    required_end_phrase: Optional[str] = None
+    question_ending: Optional[Literal["allowed", "required", "forbidden"]] = None
+    length_min: Optional[int] = None
+    length_max: Optional[int] = None
+    no_question_hooks: Optional[bool] = None
+    require_number_hook: Optional[bool] = None
 
 
 class DistilledInstructions(BaseModel):
@@ -174,6 +241,10 @@ def _normalize_machine(raw: Optional[ExtractedConstraint]) -> Optional[Extracted
         return None
     try:
         mc = MachineConstraint.model_validate(raw.model_dump())
+        # Guard against bullet counts or word counts misclassified as length_chars
+        if mc.type == "length_chars":
+            if (mc.max is not None and mc.max < 100) or (mc.min is not None and mc.min < 50):
+                return None
         return ExtractedConstraint(type=mc.type, min=mc.min, max=mc.max, value=mc.value)
     except Exception:
         return None
@@ -230,6 +301,9 @@ def distill_playbook(raw_text: str, model: Optional[Any] = None) -> DistilledPla
                 if r.example:
                     r.example = r.example.strip()[:280]
                 r.evidence_quote = r.evidence_quote.strip()[:240]
+                r.applies_to = classify_rule_applies_to(
+                    r.rule, r.evidence_quote, r.category, getattr(r, "applies_to", None)
+                )
                 r.machine = _normalize_machine(r.machine)
                 all_rules.append(r)
         hooks.extend(parsed.hook_patterns)
@@ -335,8 +409,14 @@ def distill_voice(samples_texts: List[str], model: Optional[Any] = None) -> Dist
     )
     structured = model.with_structured_output(DistilledVoice, include_raw=True)
     chain = prompt | structured
-    res = chain.invoke({"posts": cleaned[:32000]})
-    parsed: Optional[DistilledVoice] = res.get("parsed")
+    parsed: Optional[DistilledVoice] = None
+    try:
+        res = chain.invoke({"posts": cleaned[:32000]})
+        parsed = res.get("parsed")
+    except Exception as exc:
+        logger.warning(f"Voice distillation LLM call failed, using fallback summary: {exc}")
+        warnings.append("voice_llm_fallback")
+
     if parsed is None:
         return DistilledVoice(voice_summary="Clear, direct practitioner voice.", warnings=warnings)
 
@@ -346,6 +426,116 @@ def distill_voice(samples_texts: List[str], model: Optional[Any] = None) -> Dist
     parsed.documented_experiences = verified_exp[:20]
     parsed.warnings = list(dict.fromkeys(parsed.warnings + warnings))
     return parsed
+
+
+def distill_custom_instructions_to_policy(
+    text: str, model: Optional[Any] = None
+) -> CustomInstructionPolicy:
+    """Parse custom_instructions into a strict CustomInstructionPolicy schema.
+    Deterministic rules run first; optional LLM extraction is validated against the schema.
+    On LLM parse failure, keeps deterministic result and logs a warning.
+    """
+    clean = (text or "").strip()
+    if not clean:
+        return CustomInstructionPolicy()
+
+    lower = clean.lower()
+    policy = CustomInstructionPolicy()
+
+    # Emoji rules
+    if re.search(r"\bno\s+emojis?\b|\bnever\s+use\s+emojis?\b", lower):
+        policy.emoji_policy = "none"
+    elif re.search(r"\b(?:lot\s+of|lots\s+of|many|heavy|plenty\s+of|generous)\s+emojis?\b", lower):
+        policy.emoji_policy = "many"
+    elif re.search(r"\b(?:use|include|add|allow)(?:\s+\w+){0,3}\s+emojis?\b", lower):
+        policy.emoji_policy = "allowed"
+
+    # Hashtag rules
+    if re.search(r"\bno\s+hashtags?\b|\b0\s+hashtags?\b|\bnever\s+use\s+hashtags?\b", lower):
+        policy.hashtags_in_body = False
+        policy.hashtags_min = 0
+        policy.hashtags_max = 0
+
+    # Banned words / phrases
+    for m in re.finditer(
+        r"(?:never\s+use(?:\s+the\s+word)?|avoid(?:\s+the\s+word)?|ban(?:\s+the\s+word)?)\s+['\"]([^'\"]{2,60})['\"]",
+        clean,
+        re.IGNORECASE,
+    ):
+        w = m.group(1).strip()
+        if w and w not in policy.banned_words:
+            policy.banned_words.append(w)
+
+    # Question hook rules
+    if re.search(r"\bnever\s+start(?:\s+\w+){0,3}\s+with\s+a\s+question\b|\bno\s+question\s+hooks?\b", lower):
+        policy.no_question_hooks = True
+    if re.search(r"\balways\s+start(?:\s+\w+){0,3}\s+with\s+a\s+number\b", lower):
+        policy.require_number_hook = True
+
+    # Question ending rules
+    if re.search(r"\balways\s+end\s+with\s+a\s+question\b", lower):
+        policy.question_ending = "required"
+    elif re.search(r"\bnever\s+end\s+with\s+a\s+question\b|\bno\s+question\s+at\s+the\s+end\b", lower):
+        policy.question_ending = "forbidden"
+
+    # Required end phrase
+    m_end = re.search(r"(?:always\s+end\s+with|sign[- ]off\s*:?)\s+[\"']([^\"']{3,100})[\"']", clean, re.IGNORECASE)
+    if m_end:
+        policy.required_end_phrase = m_end.group(1).strip()
+
+    # Length bounds
+    m_under = re.search(r"(?:under|max(?:imum)?|at\s+most|less\s+than)\s+(\d{3,4})\s+char", lower)
+    if m_under:
+        policy.length_max = int(m_under.group(1))
+    m_between = re.search(r"between\s+(\d{3,4})\s+(?:and|to|-)\s+(\d{3,4})\s+char", lower)
+    if m_between:
+        policy.length_min = int(m_between.group(1))
+        policy.length_max = int(m_between.group(2))
+
+    if model is not None:
+        try:
+            from langchain_core.prompts import ChatPromptTemplate
+
+            prompt = ChatPromptTemplate.from_messages(
+                [
+                    (
+                        "system",
+                        "Extract explicit policy overrides from custom_instructions into CustomInstructionPolicy. "
+                        "Only set fields that are explicitly stated in the instructions.",
+                    ),
+                    ("human", "{instructions}"),
+                ]
+            )
+            structured = model.with_structured_output(CustomInstructionPolicy, include_raw=True)
+            res = (prompt | structured).invoke({"instructions": clean[:4000]})
+            parsed = res.get("parsed")
+            if parsed is not None:
+                validated = CustomInstructionPolicy.model_validate(parsed.model_dump())
+                # Deterministic findings take precedence if already matched; fill any missing fields from LLM
+                for field_name in (
+                    "emoji_policy",
+                    "hashtags_in_body",
+                    "hashtags_min",
+                    "hashtags_max",
+                    "required_end_phrase",
+                    "question_ending",
+                    "length_min",
+                    "length_max",
+                    "no_question_hooks",
+                    "require_number_hook",
+                ):
+                    if getattr(policy, field_name) is None and getattr(validated, field_name) is not None:
+                        setattr(policy, field_name, getattr(validated, field_name))
+                for bw in validated.banned_words:
+                    if bw and bw not in policy.banned_words:
+                        policy.banned_words.append(bw)
+                for bp in validated.banned_phrases:
+                    if bp and bp not in policy.banned_phrases:
+                        policy.banned_phrases.append(bp)
+        except Exception as exc:
+            logger.warning(f"Failed parsing custom_instructions with LLM schema; keeping deterministic policy: {exc}")
+
+    return policy
 
 
 def distill_instructions_heuristic(text: str) -> DistilledInstructions:

@@ -41,15 +41,20 @@ class EffectivePolicy(BaseModel):
     first_line_max: int = 140
     paragraphs_min: int = 3
     paragraphs_max: int = 6
+    hashtags_in_body: bool = True
     hashtags_min: int = 1
     hashtags_max: int = 3
+    first_comment_hashtags_max: int = 3
     hashtag_case: Literal["camel", "lower", "any"] = "camel"
-    emoji_policy: Literal["none", "sparse", "allowed"] = "none"
+    emoji_policy: Literal["none", "sparse", "allowed", "many"] = "none"
     allow_markdown_bullets: bool = False
     banned_phrases_extra: List[str] = Field(default_factory=list)
     required_end_phrase: Optional[str] = None
     required_start_phrase: Optional[str] = None
     question_ending: Literal["allowed", "required", "forbidden"] = "allowed"
+    no_question_hooks: bool = False
+    require_number_hook: bool = False
+    length_by_post_type: Dict[str, Dict[str, int]] = Field(default_factory=dict)
     allow_first_person_events: bool = False
     provenance: Dict[str, str] = Field(default_factory=dict)
 
@@ -116,5 +121,8 @@ def clamp_policy(policy: EffectivePolicy) -> tuple[EffectivePolicy, List[str]]:
         data["required_end_phrase"] = str(data["required_end_phrase"]).strip()[:140] or None
     if data.get("required_start_phrase"):
         data["required_start_phrase"] = str(data["required_start_phrase"]).strip()[:140] or None
+
+    fchm = max(0, min(PLATFORM_MAX_HASHTAGS, int(data.get("first_comment_hashtags_max", 3))))
+    data["first_comment_hashtags_max"] = fchm
 
     return EffectivePolicy.model_validate(data), warnings

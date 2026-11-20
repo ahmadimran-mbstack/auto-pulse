@@ -261,6 +261,7 @@ def _handle_extract_distill(db: Session, job: CustomizationJob) -> None:
         doc.distilled = distilled.model_dump()
         doc.distiller_version = DISTILLER_VERSION_VOICE
         for exp in distilled.documented_experiences:
+            exp_nums = list(getattr(exp, "numbers", None) or [])
             db.add(
                 CustomizationFact(
                     user_id=doc.user_id,
@@ -268,7 +269,7 @@ def _handle_extract_distill(db: Session, job: CustomizationJob) -> None:
                     kind="documented_experience",
                     category=exp.category,
                     text=exp.fact[:240],
-                    numbers=list(exp.numbers or []),
+                    numbers=exp_nums,
                     evidence_quote=exp.evidence_quote[:240],
                     source_label=doc.title,
                     is_core=False,
