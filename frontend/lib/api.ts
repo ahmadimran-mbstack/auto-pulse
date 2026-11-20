@@ -565,6 +565,7 @@ export async function createPlaygroundRun(topicHint?: string): Promise<{ run_id:
 export interface RunEventItem {
   seq: number;
   time: string;
+  elapsed_ms?: number | null;
   type: string;
   agent?: string | null;
   status?: string | null;

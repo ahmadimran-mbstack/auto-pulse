@@ -1,11 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Loader2Icon, UploadCloudIcon } from "lucide-react";
+import { LoaderCircle, UploadCloud } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { validateCustomizationFile } from "@/lib/customization-schemas";
-import { Progress } from "@/components/ui/progress";
-import { BorderBeam } from "@/components/ui/border-beam";
+import { StageProgress } from "@/components/app/ProgressBars";
 
 export interface ActiveUploadItem {
   id: string;
@@ -31,7 +30,7 @@ export function FileDropzone({
   disabled = false,
   activeUploads = [],
   label = "Drop files here or click to browse",
-  hint = "PDF, DOCX, Markdown, or TXT · Max 10 MB per file",
+  hint = "Accepted: PDF, DOCX, MD, TXT · Max 10 MB per file",
   className,
 }: FileDropzoneProps) {
   const inputRef = React.useRef<HTMLInputElement | null>(null);
@@ -72,16 +71,13 @@ export function FileDropzone({
           handleFiles(e.dataTransfer.files);
         }}
         className={cn(
-          "relative overflow-hidden flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-6 py-8 text-center transition-colors cursor-pointer",
+          "flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-6 py-8 text-center transition-colors duration-150 motion-reduce:transition-none cursor-pointer",
           dragging
-            ? "border-primary bg-signal-soft/50"
-            : "border-input bg-card hover:border-primary/60 hover:bg-muted/30",
+            ? "border-primary bg-muted/60"
+            : "border-border bg-card hover:border-foreground/30 hover:bg-muted/30",
           disabled && "opacity-75 cursor-not-allowed pointer-events-none"
         )}
       >
-        {(dragging || activeUploads.length > 0) && (
-          <BorderBeam size={140} duration={6} />
-        )}
         <input
           ref={inputRef}
           type="file"
@@ -91,11 +87,11 @@ export function FileDropzone({
           className="sr-only"
           onChange={(e) => handleFiles(e.target.files)}
         />
-        <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-foreground">
+        <div className="flex size-10 items-center justify-center rounded-md bg-muted text-foreground">
           {activeUploads.length > 0 ? (
-            <Loader2Icon className="size-5 text-primary animate-spin" />
+            <LoaderCircle className="size-4 stroke-[1.75] text-status-info-fg animate-spin motion-reduce:animate-none" />
           ) : (
-            <UploadCloudIcon className="size-5 text-primary" />
+            <UploadCloud className="size-4 stroke-[1.75] text-foreground" />
           )}
         </div>
         <div className="space-y-1">
@@ -111,10 +107,10 @@ export function FileDropzone({
               <div className="flex items-center justify-between text-xs">
                 <span className="truncate font-medium text-foreground">{item.name}</span>
                 <span className="text-muted-foreground tabular-nums">
-                  {item.progress < 100 ? `Uploading ${item.progress}%` : "Uploaded · Starting analysis..."}
+                  {item.progress < 100 ? `Uploading ${item.progress}%` : "Starting analysis..."}
                 </span>
               </div>
-              <Progress value={item.progress} />
+              <StageProgress stageIndex={item.progress < 100 ? 1 : 2} />
             </div>
           ))}
         </div>

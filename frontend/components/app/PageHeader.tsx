@@ -4,14 +4,16 @@ import { cn } from "@/lib/utils";
 interface PageHeaderProps {
   title: string;
   description?: React.ReactNode;
+  meta?: React.ReactNode;
   actions?: React.ReactNode;
   className?: string;
 }
 
-// PageHeader displays the single h1 for the page along with an optional description and action buttons
+// PageHeader displays the single h1 for the page along with an optional description, meta line, and action buttons
 export function PageHeader({
   title,
   description,
+  meta,
   actions,
   className,
 }: PageHeaderProps) {
@@ -22,7 +24,7 @@ export function PageHeader({
         className
       )}
     >
-      <div className="space-y-1 min-w-0">
+      <div className="space-y-1.5 min-w-0">
         <h1 className="font-display text-2xl md:text-3xl font-semibold tracking-tight text-foreground">
           {title}
         </h1>
@@ -31,9 +33,14 @@ export function PageHeader({
             {description}
           </p>
         )}
+        {meta && (
+          <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-muted-foreground">
+            {meta}
+          </div>
+        )}
       </div>
       {actions && (
-        <div className="flex items-center gap-2 shrink-0 sm:self-center">
+        <div className="flex flex-wrap items-center gap-2 shrink-0 sm:self-center">
           {actions}
         </div>
       )}

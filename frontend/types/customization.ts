@@ -20,6 +20,11 @@ export interface DocumentSummary {
   size_bytes?: number | null;
   source_url?: string | null;
   status: DocumentStatus;
+  stage_name?: string | null;
+  stage_index?: number | null;
+  stage_total?: number;
+  friendly_status?: string | null;
+  friendly_error?: string | null;
   error_code?: string | null;
   error_detail?: string | null;
   needs_embedding: boolean;
@@ -125,17 +130,36 @@ export interface EffectivePolicy {
   provenance: Record<string, string>;
 }
 
+export interface PolicyItem {
+  key: string;
+  label: string;
+  value: string;
+  source_type: "playbook" | "custom_instructions" | "default";
+  document_name?: string | null;
+  evidence_quote?: string | null;
+}
+
 export interface CompiledContextView {
   version_id?: string | null;
   version: number;
   compile_pending: boolean;
+  updated_at?: string | null;
   warnings: string[];
   token_counts: Record<string, number>;
+  policy_items?: PolicyItem[];
+  policy_items_by_post_type?: Record<string, PolicyItem[]>;
   compiled: {
     version_id: string;
     version: number;
     is_empty: boolean;
-    policy: EffectivePolicy;
+    coverage_warnings?: string[];
+    policy: EffectivePolicy & {
+      hashtags_in_body?: boolean;
+      first_comment_hashtags_max?: number;
+      no_question_hooks?: boolean;
+      require_number_hook?: boolean;
+      length_by_post_type?: Record<string, { min?: number; max?: number }>;
+    };
     guidance: {
       playbook_rules_text?: string;
       playbook_rule_ids?: string[];

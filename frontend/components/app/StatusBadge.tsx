@@ -1,10 +1,24 @@
 import * as React from "react";
-import { CheckIcon, Loader2Icon, ClockIcon, AlertCircleIcon, HelpCircleIcon } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import {
+  CircleCheck,
+  CircleDashed,
+  CirclePause,
+  CircleX,
+  Clock,
+  LoaderCircle,
+  TriangleAlert,
+} from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import type { PostStatus } from "@/types/posts";
 
-export type StatusVariant = "warning" | "success" | "danger" | "info";
+export type StatusVariant =
+  | "warning"
+  | "success"
+  | "danger"
+  | "info"
+  | "neutral"
+  | "processing";
 
 export interface StatusConfig {
   variant: StatusVariant;
@@ -12,91 +26,171 @@ export interface StatusConfig {
   icon?: React.ReactNode;
 }
 
+const VARIANT_CLASSES: Record<StatusVariant, string> = {
+  success: "bg-status-success-bg text-status-success-fg border-status-success-border",
+  warning: "bg-status-warning-bg text-status-warning-fg border-status-warning-border",
+  danger: "bg-status-danger-bg text-status-danger-fg border-status-danger-border",
+  info: "bg-status-info-bg text-status-info-fg border-status-info-border",
+  neutral: "bg-status-neutral-bg text-status-neutral-fg border-status-neutral-border",
+  processing: "bg-status-info-bg text-status-info-fg border-status-info-border",
+};
+
+const ICON_CLS = "size-4 shrink-0 stroke-[1.75]";
+
 export const statusMap: Record<string, StatusConfig> = {
+  // Post statuses
   draft: {
     variant: "warning",
     label: "Draft",
-    icon: <ClockIcon className="size-3 text-status-warning-fg" />,
+    icon: <Clock className={ICON_CLS} aria-hidden="true" />,
   },
   awaiting_approval: {
     variant: "warning",
     label: "Awaiting approval",
-    icon: <ClockIcon className="size-3 text-status-warning-fg" />,
+    icon: <Clock className={ICON_CLS} aria-hidden="true" />,
   },
   approved: {
     variant: "success",
     label: "Approved",
-    icon: <CheckIcon className="size-3 text-status-success-fg" />,
+    icon: <CircleCheck className={ICON_CLS} aria-hidden="true" />,
   },
   scheduled: {
     variant: "info",
     label: "Scheduled",
-    icon: <ClockIcon className="size-3 text-status-info-fg" />,
+    icon: <Clock className={ICON_CLS} aria-hidden="true" />,
   },
   publishing: {
-    variant: "info",
+    variant: "processing",
     label: "Publishing",
-    icon: <Loader2Icon className="size-3 animate-spin text-status-info-fg" />,
+    icon: <LoaderCircle className={cn(ICON_CLS, "animate-spin motion-reduce:animate-none")} aria-hidden="true" />,
   },
   published: {
     variant: "success",
     label: "Published",
-    icon: <CheckIcon className="size-3 text-status-success-fg" />,
+    icon: <CircleCheck className={ICON_CLS} aria-hidden="true" />,
   },
   rejected: {
     variant: "danger",
     label: "Rejected",
-    icon: <AlertCircleIcon className="size-3 text-status-danger-fg" />,
+    icon: <CircleX className={ICON_CLS} aria-hidden="true" />,
   },
   failed: {
     variant: "danger",
     label: "Failed",
-    icon: <AlertCircleIcon className="size-3 text-status-danger-fg" />,
+    icon: <CircleX className={ICON_CLS} aria-hidden="true" />,
   },
   outcome_unknown: {
     variant: "warning",
     label: "Outcome unknown",
-    icon: <HelpCircleIcon className="size-3 text-status-warning-fg" />,
+    icon: <TriangleAlert className={ICON_CLS} aria-hidden="true" />,
   },
   expired: {
     variant: "warning",
     label: "Expired",
-    icon: <ClockIcon className="size-3 text-status-warning-fg" />,
+    icon: <Clock className={ICON_CLS} aria-hidden="true" />,
   },
   pending: {
     variant: "warning",
     label: "Pending",
-    icon: <ClockIcon className="size-3 text-status-warning-fg" />,
+    icon: <Clock className={ICON_CLS} aria-hidden="true" />,
   },
+
+  // Document statuses
   uploaded: {
-    variant: "info",
+    variant: "neutral",
     label: "Queued",
-    icon: <Loader2Icon className="size-3 animate-spin text-status-info-fg" />,
+    icon: <Clock className={ICON_CLS} aria-hidden="true" />,
   },
   extracting: {
-    variant: "info",
-    label: "Reading",
-    icon: <Loader2Icon className="size-3 animate-spin text-status-info-fg" />,
+    variant: "processing",
+    label: "Reading file",
+    icon: <LoaderCircle className={cn(ICON_CLS, "animate-spin motion-reduce:animate-none")} aria-hidden="true" />,
   },
   distilling: {
-    variant: "info",
-    label: "Learning",
-    icon: <Loader2Icon className="size-3 animate-spin text-status-info-fg" />,
+    variant: "processing",
+    label: "Learning from it",
+    icon: <LoaderCircle className={cn(ICON_CLS, "animate-spin motion-reduce:animate-none")} aria-hidden="true" />,
   },
   embedding: {
-    variant: "info",
-    label: "Indexing",
-    icon: <Loader2Icon className="size-3 animate-spin text-status-info-fg" />,
+    variant: "processing",
+    label: "Applying",
+    icon: <LoaderCircle className={cn(ICON_CLS, "animate-spin motion-reduce:animate-none")} aria-hidden="true" />,
   },
   ready: {
     variant: "success",
-    label: "Ready",
-    icon: <CheckIcon className="size-3 text-status-success-fg" />,
+    label: "Active",
+    icon: <CircleCheck className={ICON_CLS} aria-hidden="true" />,
   },
   disabled: {
+    variant: "neutral",
+    label: "Paused",
+    icon: <CirclePause className={ICON_CLS} aria-hidden="true" />,
+  },
+  needs_attention: {
     variant: "warning",
-    label: "Off",
-    icon: <ClockIcon className="size-3 text-status-warning-fg" />,
+    label: "Needs attention",
+    icon: <TriangleAlert className={ICON_CLS} aria-hidden="true" />,
+  },
+
+  // Version statuses
+  up_to_date: {
+    variant: "success",
+    label: "Up to date",
+    icon: <CircleCheck className={ICON_CLS} aria-hidden="true" />,
+  },
+  rebuilding: {
+    variant: "processing",
+    label: "Rebuilding",
+    icon: <LoaderCircle className={cn(ICON_CLS, "animate-spin motion-reduce:animate-none")} aria-hidden="true" />,
+  },
+
+  // Instructions save state
+  saved: {
+    variant: "success",
+    label: "Saved",
+    icon: <CircleCheck className={ICON_CLS} aria-hidden="true" />,
+  },
+  saving: {
+    variant: "processing",
+    label: "Saving",
+    icon: <LoaderCircle className={cn(ICON_CLS, "animate-spin motion-reduce:animate-none")} aria-hidden="true" />,
+  },
+  unsaved: {
+    variant: "warning",
+    label: "Unsaved changes",
+    icon: <TriangleAlert className={ICON_CLS} aria-hidden="true" />,
+  },
+
+  // Playground statuses
+  connected: {
+    variant: "success",
+    label: "Connected",
+    icon: <CircleCheck className={ICON_CLS} aria-hidden="true" />,
+  },
+  disconnected: {
+    variant: "neutral",
+    label: "Not connected",
+    icon: <CircleDashed className={ICON_CLS} aria-hidden="true" />,
+  },
+  ready_to_post: {
+    variant: "success",
+    label: "Ready to post",
+    icon: <CircleCheck className={ICON_CLS} aria-hidden="true" />,
+  },
+  review_suggested: {
+    variant: "warning",
+    label: "Review suggested",
+    icon: <TriangleAlert className={ICON_CLS} aria-hidden="true" />,
+  },
+  run_failed: {
+    variant: "danger",
+    label: "Failed",
+    icon: <CircleX className={ICON_CLS} aria-hidden="true" />,
+  },
+  running: {
+    variant: "processing",
+    label: "Running",
+    icon: <LoaderCircle className={cn(ICON_CLS, "animate-spin motion-reduce:animate-none")} aria-hidden="true" />,
   },
 };
 
@@ -109,11 +203,11 @@ export interface StatusBannerStyle {
   iconClass: string;
 }
 
-export const statusBannerStyles: Record<StatusVariant, StatusBannerStyle> = {
+export const statusBannerStyles: Record<"warning" | "success" | "danger" | "info", StatusBannerStyle> = {
   warning: {
     alertVariant: "warning",
     bgClass: "bg-status-warning-bg",
-    borderClass: "border-status-warning-arc/40",
+    borderClass: "border-status-warning-border",
     textClass: "text-status-warning-fg",
     descClass: "text-status-warning-fg/90",
     iconClass: "text-status-warning-fg",
@@ -121,7 +215,7 @@ export const statusBannerStyles: Record<StatusVariant, StatusBannerStyle> = {
   success: {
     alertVariant: "success",
     bgClass: "bg-status-success-bg",
-    borderClass: "border-status-success-arc/40",
+    borderClass: "border-status-success-border",
     textClass: "text-status-success-fg",
     descClass: "text-status-success-fg/90",
     iconClass: "text-status-success-fg",
@@ -129,7 +223,7 @@ export const statusBannerStyles: Record<StatusVariant, StatusBannerStyle> = {
   danger: {
     alertVariant: "danger",
     bgClass: "bg-status-danger-bg",
-    borderClass: "border-status-danger-arc/40",
+    borderClass: "border-status-danger-border",
     textClass: "text-status-danger-fg",
     descClass: "text-status-danger-fg/90",
     iconClass: "text-status-danger-fg",
@@ -137,7 +231,7 @@ export const statusBannerStyles: Record<StatusVariant, StatusBannerStyle> = {
   info: {
     alertVariant: "info",
     bgClass: "bg-status-info-bg",
-    borderClass: "border-status-info-arc/40",
+    borderClass: "border-status-info-border",
     textClass: "text-status-info-fg",
     descClass: "text-status-info-fg/90",
     iconClass: "text-status-info-fg",
@@ -147,28 +241,38 @@ export const statusBannerStyles: Record<StatusVariant, StatusBannerStyle> = {
 export function getStatusBannerStyle(status: string): StatusBannerStyle {
   const normalized = (status || "").toLowerCase();
   const config = statusMap[normalized];
-  const variant = (config?.variant as StatusVariant) || "info";
-  return statusBannerStyles[variant] || statusBannerStyles.info;
+  const v = config?.variant;
+  if (v === "warning" || v === "success" || v === "danger" || v === "info") {
+    return statusBannerStyles[v];
+  }
+  return statusBannerStyles.info;
 }
 
 interface StatusBadgeProps {
   status: PostStatus | string;
+  label?: string;
+  variant?: StatusVariant;
   className?: string;
 }
 
-// StatusBadge maps post statuses to consistent semantic badge colors, labels, and icons (never grey)
-export function StatusBadge({ status, className }: StatusBadgeProps) {
+export function StatusBadge({ status, label, variant, className }: StatusBadgeProps) {
   const normalized = status.toLowerCase();
-  const config = statusMap[normalized] || {
-    variant: "info",
-    label: status.replace(/_/g, " "),
-  };
+  const mapped = statusMap[normalized];
+  const resolvedVariant: StatusVariant = variant ?? mapped?.variant ?? "neutral";
+  const resolvedLabel = label ?? mapped?.label ?? status.replace(/_/g, " ");
+  const icon = mapped?.icon ?? <CircleDashed className={ICON_CLS} aria-hidden="true" />;
 
   const badge = (
-    <Badge variant={config.variant} className={className}>
-      {config.icon}
-      <span>{config.label}</span>
-    </Badge>
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap transition-colors duration-150",
+        VARIANT_CLASSES[resolvedVariant],
+        className
+      )}
+    >
+      {icon}
+      <span>{resolvedLabel}</span>
+    </span>
   );
 
   if (normalized === "outcome_unknown") {
