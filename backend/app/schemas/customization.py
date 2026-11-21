@@ -34,6 +34,7 @@ class DocumentSummary(BaseModel):
     token_estimate: Optional[int] = None
     enabled: bool = True
     duplicate: bool = False
+    item_count: int = 0
     created_at: datetime.datetime
     updated_at: datetime.datetime
     processed_at: Optional[datetime.datetime] = None
@@ -58,9 +59,16 @@ class FactView(BaseModel):
     category: str
     text: str
     numbers: List[str] = Field(default_factory=list)
+    evidence_quote: str = ""
     source_label: str
+    applies_to: Optional[str] = None
     is_core: bool = False
     removed: bool = False
+
+
+class FactPatchRequest(BaseModel):
+    is_core: Optional[bool] = None
+    removed: Optional[bool] = None
 
 
 class DocumentDetail(DocumentSummary):

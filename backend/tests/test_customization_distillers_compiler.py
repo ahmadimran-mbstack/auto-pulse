@@ -127,3 +127,72 @@ def test_compiler_precedence_clamping_and_dedup():
     assert len(ctx.guidance.business_facts) == 1
     assert "AcmeRunner" in ctx.guidance.terminology
     assert tokens["playbook_rules"] > 0
+
+
+def test_paused_document_facts_and_samples_excluded_from_compile():
+    docs = [
+        {
+            "id": "11111111-1111-1111-1111-111111111111",
+            "kind": "business",
+            "source_type": "url",
+            "title": "active.com",
+            "status": "ready",
+            "enabled": True,
+            "created_at": "2026-11-01T00:00:00Z",
+            "distilled": {"company_name": "ActiveCo", "one_liner": "ActiveCo builds widgets."},
+        },
+        {
+            "id": "22222222-2222-2222-2222-222222222222",
+            "kind": "business",
+            "source_type": "url",
+            "title": "paused.com",
+            "status": "disabled",
+            "enabled": False,
+            "created_at": "2026-11-02T00:00:00Z",
+            "distilled": {"company_name": "PausedCo", "one_liner": "PausedCo should not appear."},
+        },
+    ]
+    facts = [
+        {
+            "id": "f-active",
+            "document_id": "11111111-1111-1111-1111-111111111111",
+            "kind": "business_fact",
+            "category": "company",
+            "text": "ActiveCo ships 10x faster.",
+            "numbers": ["10x"],
+            "source_label": "active.com",
+            "is_core": True,
+            "removed": False,
+        },
+        {
+            "id": "f-paused",
+            "document_id": "22222222-2222-2222-2222-222222222222",
+            "kind": "business_fact",
+            "category": "product",
+            "text": "PausedCo secret product.",
+            "numbers": [],
+            "source_label": "paused.com",
+            "is_core": True,
+            "removed": False,
+        },
+    ]
+    samples = [
+        {
+            "id": "s-paused",
+            "document_id": "22222222-2222-2222-2222-222222222222",
+            "text": "Paused sample post text",
+            "char_count": 23,
+            "pinned": True,
+            "excluded": False,
+        }
+    ]
+    ctx, _ = compile_customization_context(
+        docs=docs,
+        samples=samples,
+        facts=facts,
+        settings_data={},
+    )
+    assert len(ctx.guidance.business_facts) == 1
+    assert ctx.guidance.business_facts[0]["id"] == "f-active"
+    assert "PausedCo" not in ctx.guidance.business_brief_text
+    assert ctx.guidance.exemplars == []

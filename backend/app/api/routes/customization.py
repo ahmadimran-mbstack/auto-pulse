@@ -30,6 +30,8 @@ from app.schemas.customization import (
     DocumentPatchRequest,
     DocumentSummary,
     DownloadUrlResponse,
+    FactPatchRequest,
+    FactView,
     OverridesPatchRequest,
     PasteDocumentRequest,
     PostSampleView,
@@ -88,9 +90,13 @@ def list_customization_documents(
     user: User = Depends(require_customization_enabled),
     db: Session = Depends(get_readonly_db),
 ) -> List[DocumentSummary]:
+    from sqlalchemy import func
+
     docs = custom_repo.list_documents(db, user.id, kind=kind)
     doc_ids = [d.id for d in docs]
     latest_jobs: Dict[uuid.UUID, CustomizationJob] = {}
+    fact_counts: Dict[uuid.UUID, int] = {}
+    sample_counts: Dict[uuid.UUID, int] = {}
     if doc_ids:
         jobs = (
             db.query(CustomizationJob)
@@ -104,7 +110,36 @@ def list_customization_documents(
         for j in jobs:
             if j.document_id and j.document_id not in latest_jobs:
                 latest_jobs[j.document_id] = j
-    return [custom_repo.to_document_summary(d, latest_job=latest_jobs.get(d.id)) for d in docs]
+        for doc_id_val, cnt in (
+            db.query(CustomizationFact.document_id, func.count(CustomizationFact.id))
+            .filter(
+                CustomizationFact.user_id == user.id,
+                CustomizationFact.document_id.in_(doc_ids),
+                CustomizationFact.removed.is_(False),
+            )
+            .group_by(CustomizationFact.document_id)
+            .all()
+        ):
+            fact_counts[doc_id_val] = int(cnt)
+        for doc_id_val, cnt in (
+            db.query(CustomizationPostSample.document_id, func.count(CustomizationPostSample.id))
+            .filter(
+                CustomizationPostSample.user_id == user.id,
+                CustomizationPostSample.document_id.in_(doc_ids),
+                CustomizationPostSample.excluded.is_(False),
+            )
+            .group_by(CustomizationPostSample.document_id)
+            .all()
+        ):
+            sample_counts[doc_id_val] = int(cnt)
+    return [
+        custom_repo.to_document_summary(
+            d,
+            latest_job=latest_jobs.get(d.id),
+            item_count=sample_counts.get(d.id, 0) if d.kind == "previous_posts" else fact_counts.get(d.id, 0),
+        )
+        for d in docs
+    ]
 
 
 @router.post("/documents", response_model=DocumentSummary, status_code=status.HTTP_202_ACCEPTED)
@@ -444,6 +479,66 @@ def patch_post_sample(
     )
 
 
+@router.patch("/facts/{fact_id}", response_model=FactView)
+def patch_customization_fact(
+    fact_id: str,
+    payload: FactPatchRequest,
+    user: User = Depends(require_customization_enabled),
+    db: Session = Depends(get_db),
+) -> FactView:
+    fact = (
+        db.query(CustomizationFact)
+        .filter(
+            CustomizationFact.id == _parse_uuid(fact_id),
+            CustomizationFact.user_id == user.id,
+        )
+        .first()
+    )
+    if fact is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "not_found", "message": "Fact not found."},
+        )
+    if payload.is_core is not None:
+        fact.is_core = payload.is_core
+    if payload.removed is not None:
+        fact.removed = payload.removed
+        settings_row = custom_repo.get_or_create_settings(db, user.id)
+        overrides = dict(settings_row.overrides or {})
+        removed_ids = [str(x) for x in (overrides.get("removed_fact_ids") or [])]
+        fid_str = str(fact.id)
+        if payload.removed and fid_str not in removed_ids:
+            removed_ids.append(fid_str)
+        elif not payload.removed and fid_str in removed_ids:
+            removed_ids = [x for x in removed_ids if x != fid_str]
+        overrides["removed_fact_ids"] = removed_ids
+        settings_row.overrides = overrides
+        settings_row.updated_at = datetime.datetime.now(datetime.timezone.utc)
+
+    db.commit()
+    db.refresh(fact)
+
+    custom_repo.enqueue_job(db, user_id=user.id, job_type="compile", delay_seconds=1)
+    applies_to = None
+    if fact.kind == "playbook_rule":
+        from app.services.customization.distillers import classify_rule_applies_to
+
+        applies_to = classify_rule_applies_to(fact.text, fact.evidence_quote, fact.category)
+    return FactView(
+        id=str(fact.id),
+        document_id=str(fact.document_id),
+        kind=fact.kind,
+        category=fact.category,
+        text=fact.text,
+        numbers=list(fact.numbers or []),
+        evidence_quote=fact.evidence_quote,
+        source_label=fact.source_label,
+        applies_to=applies_to,
+        is_core=fact.is_core,
+        removed=fact.removed,
+    )
+
+
 @router.get("/settings", response_model=CustomizationSettingsView)
 def get_customization_settings(
     user: User = Depends(require_customization_enabled),
@@ -518,10 +613,14 @@ def _build_policy_items(
     doc_by_prefix = {str(d.id).replace("-", "")[:3].upper(): d.title for d in docs}
     playbook_facts = (
         db.query(CustomizationFact)
+        .join(CustomizationDocument, CustomizationFact.document_id == CustomizationDocument.id)
         .filter(
             CustomizationFact.user_id == user_id,
             CustomizationFact.kind == "playbook_rule",
             CustomizationFact.removed.is_(False),
+            CustomizationDocument.enabled.is_(True),
+            CustomizationDocument.status == "ready",
+            CustomizationDocument.deleted_at.is_(None),
         )
         .all()
     )

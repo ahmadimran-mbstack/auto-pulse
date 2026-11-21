@@ -271,6 +271,7 @@ def to_document_summary(
     doc: CustomizationDocument,
     duplicate: bool = False,
     latest_job: Optional[CustomizationJob] = None,
+    item_count: int = 0,
 ) -> DocumentSummary:
     stage = _compute_stage_info(doc, latest_job=latest_job)
     return DocumentSummary(
@@ -296,6 +297,7 @@ def to_document_summary(
         token_estimate=doc.token_estimate,
         enabled=doc.enabled,
         duplicate=duplicate,
+        item_count=item_count,
         created_at=doc.created_at,
         updated_at=doc.updated_at,
         processed_at=doc.processed_at,
@@ -353,7 +355,20 @@ def get_document_detail(
         .order_by(CustomizationFact.created_at.asc())
         .all()
     )
-    base = to_document_summary(doc)
+    from app.services.customization.distillers import classify_rule_applies_to
+
+    raw_scope_by_rule: Dict[str, str] = {}
+    if doc.kind == "playbook" and isinstance(doc.distilled, dict):
+        for r in doc.distilled.get("rules") or []:
+            if isinstance(r, dict) and r.get("rule") and r.get("applies_to"):
+                raw_scope_by_rule[str(r["rule"]).strip()] = str(r["applies_to"]).strip()
+
+    active_fact_count = sum(1 for f in facts if not f.removed)
+    active_sample_count = sum(1 for s in samples if not s.excluded)
+    base = to_document_summary(
+        doc,
+        item_count=active_sample_count if doc.kind == "previous_posts" else active_fact_count,
+    )
     return DocumentDetail(
         **base.model_dump(),
         text_preview=(doc.extracted_text[:5000] if doc.extracted_text else None),
@@ -380,7 +395,18 @@ def get_document_detail(
                 category=f.category,
                 text=f.text,
                 numbers=list(f.numbers or []),
+                evidence_quote=f.evidence_quote,
                 source_label=f.source_label,
+                applies_to=(
+                    classify_rule_applies_to(
+                        f.text,
+                        f.evidence_quote,
+                        f.category,
+                        raw_scope_by_rule.get(f.text.strip()),
+                    )
+                    if f.kind == "playbook_rule"
+                    else None
+                ),
                 is_core=f.is_core,
                 removed=f.removed,
             )

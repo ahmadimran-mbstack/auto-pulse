@@ -193,6 +193,7 @@ def compile_customization_context(
     business_mention = settings_data.get("business_mention") or "natural"
 
     active_docs = [d for d in docs if d.get("enabled", True) and d.get("status") == "ready"]
+    active_doc_ids = {str(d["id"]) for d in active_docs}
     if not active_docs and not custom_instructions and not overrides.get("policy_overrides"):
         return CustomizationContext(is_empty=True), {}
 
@@ -340,7 +341,11 @@ def compile_customization_context(
             provenance[k] = "override"
 
     doc_experiences = [
-        f for f in facts if f.get("kind") == "documented_experience" and not f.get("removed")
+        f
+        for f in facts
+        if f.get("kind") == "documented_experience"
+        and not f.get("removed")
+        and (not f.get("document_id") or str(f["document_id"]) in active_doc_ids)
     ]
     policy_data["allow_first_person_events"] = bool(doc_experiences)
     provenance["allow_first_person_events"] = "previous_posts" if doc_experiences else "default"
@@ -381,7 +386,13 @@ def compile_customization_context(
         themes.extend(dist.get("themes") or [])
 
     # Fallback exemplars (pinned first, max 1 per doc, <= 1,500 tokens)
-    active_samples = [s for s in samples if not s.get("excluded") and s.get("quality_flag") != "not_a_post"]
+    active_samples = [
+        s
+        for s in samples
+        if not s.get("excluded")
+        and s.get("quality_flag") != "not_a_post"
+        and (not s.get("document_id") or str(s["document_id"]) in active_doc_ids)
+    ]
     active_samples.sort(key=lambda s: (not s.get("pinned", False), abs(int(s["char_count"]) - 950)))
     exemplars: List[Exemplar] = []
     seen_docs = set()
@@ -433,6 +444,7 @@ def compile_customization_context(
         if f.get("kind") == "business_fact"
         and not f.get("removed")
         and str(f["id"]) not in removed_facts
+        and (not f.get("document_id") or str(f["document_id"]) in active_doc_ids)
     ]
     # Deduplicate facts with cosine >= 0.92 when embeddings are present
     dedup_facts: List[Dict[str, Any]] = []

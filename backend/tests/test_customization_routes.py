@@ -123,3 +123,61 @@ def test_upload_dedupe_idor_and_delete(client, custom_env):
     # Delete doc
     assert client.delete(f"/customization/documents/{doc_id}").status_code == 204
     assert client.get(f"/customization/documents/{doc_id}").status_code == 404
+
+
+def test_patch_fact_core_and_soft_remove_with_ownership(client, custom_env):
+    active_user, uid_a, uid_b = custom_env
+
+    with SessionLocal() as db:
+        doc = CustomizationDocument(
+            user_id=uid_a,
+            kind="business",
+            source_type="url",
+            title="example.com",
+            source_url="https://example.com/",
+            status="ready",
+            enabled=True,
+        )
+        db.add(doc)
+        db.flush()
+        fact = CustomizationFact(
+            user_id=uid_a,
+            document_id=doc.id,
+            kind="business_fact",
+            category="product",
+            text="Example cuts deploy time by 50%.",
+            numbers=["50%"],
+            evidence_quote="Example cuts deploy time by 50%.",
+            source_label="example.com",
+            is_core=False,
+            removed=False,
+            content_hash="abc123",
+        )
+        db.add(fact)
+        db.commit()
+        fact_id = str(fact.id)
+
+    # IDOR: user B cannot patch user A's fact
+    active_user["uid"] = uid_b
+    assert client.patch(f"/customization/facts/{fact_id}", json={"is_core": True}).status_code == 404
+
+    # User A toggles is_core -> True
+    active_user["uid"] = uid_a
+    res = client.patch(f"/customization/facts/{fact_id}", json={"is_core": True})
+    assert res.status_code == 200
+    assert res.json()["is_core"] is True
+    assert res.json()["evidence_quote"] == "Example cuts deploy time by 50%."
+
+    # Soft remove -> True, then undo -> False
+    res_rem = client.patch(f"/customization/facts/{fact_id}", json={"removed": True})
+    assert res_rem.status_code == 200
+    assert res_rem.json()["removed"] is True
+
+    res_undo = client.patch(f"/customization/facts/{fact_id}", json={"removed": False})
+    assert res_undo.status_code == 200
+    assert res_undo.json()["removed"] is False
+
+    # Compile job was queued
+    with SessionLocal() as db:
+        jobs = db.query(CustomizationJob).filter(CustomizationJob.user_id == uid_a, CustomizationJob.job_type == "compile").all()
+        assert len(jobs) >= 1

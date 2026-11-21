@@ -350,6 +350,7 @@ def _handle_compile(db: Session, job: CustomizationJob) -> None:
     facts_dicts = [
         {
             "id": str(f.id),
+            "document_id": str(f.document_id),
             "kind": f.kind,
             "category": f.category,
             "text": f.text,

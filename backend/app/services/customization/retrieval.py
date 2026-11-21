@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import SessionLocal
-from app.models.customization import CustomizationFact, CustomizationPostSample
+from app.models.customization import CustomizationDocument, CustomizationFact, CustomizationPostSample
 from app.services.customization.compiler import CustomizationContext
 from app.services.embeddings import cosine_similarity, get_embedding_provider
 
@@ -103,12 +103,16 @@ def retrieve_for_topic(
                 CustomizationFact,
                 (1.0 - CustomizationFact.embedding.cosine_distance(q_vec)).label("sim"),
             )
+            .join(CustomizationDocument, CustomizationFact.document_id == CustomizationDocument.id)
             .filter(
                 CustomizationFact.user_id == user_id,
                 CustomizationFact.removed.is_(False),
                 CustomizationFact.kind == "business_fact",
                 CustomizationFact.embedding.isnot(None),
                 CustomizationFact.embedding_model == model_id,
+                CustomizationDocument.enabled.is_(True),
+                CustomizationDocument.status == "ready",
+                CustomizationDocument.deleted_at.is_(None),
             )
             .order_by(CustomizationFact.embedding.cosine_distance(q_vec))
             .limit(24)
@@ -149,12 +153,16 @@ def retrieve_for_topic(
                 CustomizationFact,
                 (1.0 - CustomizationFact.embedding.cosine_distance(q_vec)).label("sim"),
             )
+            .join(CustomizationDocument, CustomizationFact.document_id == CustomizationDocument.id)
             .filter(
                 CustomizationFact.user_id == user_id,
                 CustomizationFact.removed.is_(False),
                 CustomizationFact.kind == "documented_experience",
                 CustomizationFact.embedding.isnot(None),
                 CustomizationFact.embedding_model == model_id,
+                CustomizationDocument.enabled.is_(True),
+                CustomizationDocument.status == "ready",
+                CustomizationDocument.deleted_at.is_(None),
             )
             .order_by(CustomizationFact.embedding.cosine_distance(q_vec))
             .limit(6)
@@ -178,11 +186,15 @@ def retrieve_for_topic(
                 CustomizationPostSample,
                 (1.0 - CustomizationPostSample.embedding.cosine_distance(q_vec)).label("sim"),
             )
+            .join(CustomizationDocument, CustomizationPostSample.document_id == CustomizationDocument.id)
             .filter(
                 CustomizationPostSample.user_id == user_id,
                 CustomizationPostSample.excluded.is_(False),
                 CustomizationPostSample.embedding.isnot(None),
                 CustomizationPostSample.embedding_model == model_id,
+                CustomizationDocument.enabled.is_(True),
+                CustomizationDocument.status == "ready",
+                CustomizationDocument.deleted_at.is_(None),
             )
             .order_by(CustomizationPostSample.embedding.cosine_distance(q_vec))
             .limit(15)
