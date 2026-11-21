@@ -75,9 +75,13 @@ export const scheduleFormSchema = z
     post_days: z
       .array(z.number().min(0).max(6))
       .min(1, "Select at least one day to schedule posts"),
-    approval_lead_minutes: z.number().int().refine((v) => [60, 180, 360, 720].includes(v), {
-      message: "Choose 1, 3, 6, or 12 hours before publish",
-    }),
+    approval_lead_minutes: z
+      .number()
+      .int()
+      .refine((v) => [60, 180, 360, 720].includes(v), {
+        message: "Choose 1, 3, 6, or 12 hours before publish",
+      })
+      .default(180),
     approval_method: z.enum(["email", "slack", "both"]),
     email_approval_enabled: z.boolean(),
     slack_approval_enabled: z.boolean(),
