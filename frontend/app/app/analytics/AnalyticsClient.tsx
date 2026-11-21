@@ -207,7 +207,7 @@ export function AnalyticsClient({ user }: AnalyticsClientProps) {
     ? (rawRange as AnalyticsRange)
     : "30d";
 
-  const { data, isLoading, isError, refetch } = useAnalyticsQuery(
+  const { data, isLoading, isError, error: analyticsError, refetch } = useAnalyticsQuery(
     user.id,
     activeRange
   );
@@ -239,6 +239,7 @@ export function AnalyticsClient({ user }: AnalyticsClientProps) {
         />
         <ErrorState
           message="Could not load analytics data right now."
+          error={analyticsError}
           onRetry={() => refetch()}
         />
       </div>

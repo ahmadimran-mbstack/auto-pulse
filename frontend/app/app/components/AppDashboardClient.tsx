@@ -14,7 +14,8 @@ import { TodayCard } from "@/components/app/today-card";
 import { OverviewPostsSection } from "@/components/app/overview-posts-section";
 import { Button } from "@/components/ui/button";
 import { mapTabToStatusFilter, type PostsTabFilter } from "@/lib/posts";
-import { AlertCircle, Globe } from "lucide-react";
+import { Globe } from "lucide-react";
+import { ErrorState } from "@/components/app/ErrorState";
 import { toast } from "sonner";
 import { patchProfile } from "@/lib/api";
 import { SlackDisconnectedBanner } from "@/components/app/SlackDisconnectedBanner";
@@ -40,6 +41,7 @@ export function AppDashboardClient({ user }: AppDashboardClientProps) {
     data: dashboardData,
     isLoading: isDashLoading,
     isError: isDashError,
+    error: dashError,
     refetch: refetchDash,
   } = useDashboardQuery(user.id);
 
@@ -60,6 +62,7 @@ export function AppDashboardClient({ user }: AppDashboardClientProps) {
     data: postsData,
     isLoading: isPostsLoading,
     isError: isPostsError,
+    error: postsError,
     refetch: refetchPosts,
     isFetching: isFetchingPosts,
   } = usePostsQuery(user.id, {
@@ -133,28 +136,20 @@ export function AppDashboardClient({ user }: AppDashboardClientProps) {
     return <OverviewSkeleton />;
   }
 
-  // If initial query fails, display centered error block with Try again button
+  // If initial query fails, display centered error block with Try again and Details
   if (isDashError || isPostsError || !dashboardData) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 px-4 text-center">
-        <div className="flex size-10 items-center justify-center rounded-full bg-status-danger-bg text-status-danger-fg mb-4">
-          <AlertCircle className="size-5" />
-        </div>
-        <h2 className="text-base font-semibold text-foreground mb-1">
-          Unable to load dashboard
-        </h2>
-        <p className="text-sm text-muted-foreground mb-4 max-w-sm">
-          Something went wrong while fetching your posts and statistics.
-        </p>
-        <Button
-          onClick={() => {
+      <div className="py-16 px-4">
+        <ErrorState
+          title="Unable to load dashboard"
+          message="Something went wrong while fetching your posts and statistics."
+          error={dashError || postsError}
+          onRetry={() => {
             refetchDash();
             refetchPosts();
           }}
-          className="rounded-md bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-medium"
-        >
-          Try again
-        </Button>
+          className="max-w-lg mx-auto border-0 bg-transparent shadow-none"
+        />
       </div>
     );
   }

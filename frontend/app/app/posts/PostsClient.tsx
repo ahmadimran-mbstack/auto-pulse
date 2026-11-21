@@ -488,6 +488,7 @@ export function PostsClient({ user }: PostsClientProps) {
                 ? error.message
                 : "Unable to load posts for this filter."
             }
+            error={error}
             onRetry={() => refetch()}
           />
         </div>

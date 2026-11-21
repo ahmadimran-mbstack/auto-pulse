@@ -142,6 +142,7 @@ export function ConnectionsClient({ user }: ConnectionsClientProps) {
             (slackError instanceof Error && slackError.message) ||
             "Unable to load connection details."
           }
+          error={connectionsError || slackError}
           onRetry={() => {
             refetchConnections();
             refetchSlack();
