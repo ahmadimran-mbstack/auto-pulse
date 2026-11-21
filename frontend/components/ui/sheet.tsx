@@ -37,7 +37,7 @@ function SheetOverlay({
     <SheetPrimitive.Overlay
       data-slot="sheet-overlay"
       className={cn(
-        "fixed inset-0 z-50 bg-black/50 backdrop-blur-[2px]",
+        "fixed inset-0 z-50 bg-black/40 dark:bg-black/60 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 duration-200 motion-reduce:animate-none motion-reduce:transition-none",
         className
       )}
       {...props}
@@ -62,11 +62,11 @@ function SheetContent({
         data-slot="sheet-content"
         data-side={side}
         className={cn(
-          "fixed z-50 flex flex-col gap-4 bg-popover bg-clip-padding text-sm text-popover-foreground shadow-2xl",
-          side === "left" && "inset-y-0 left-0 h-full w-3/4 max-w-sm border-r border-border",
-          side === "right" && "inset-y-0 right-0 h-full w-3/4 max-w-sm border-l border-border",
-          side === "top" && "inset-x-0 top-0 h-auto border-b border-border",
-          side === "bottom" && "inset-x-0 bottom-0 h-auto border-t border-border",
+          "fixed z-50 flex flex-col gap-4 bg-popover bg-clip-padding text-sm text-popover-foreground shadow-2xl data-[state=open]:animate-in data-[state=closed]:animate-out duration-200 motion-reduce:animate-none motion-reduce:transition-none",
+          side === "left" && "inset-y-0 left-0 h-full w-full sm:max-w-[520px] border-r border-border data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left",
+          side === "right" && "inset-y-0 right-0 h-full w-full sm:max-w-[520px] border-l border-border data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
+          side === "top" && "inset-x-0 top-0 h-auto border-b border-border data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
+          side === "bottom" && "inset-x-0 bottom-0 h-auto border-t border-border data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
           className
         )}
         {...props}

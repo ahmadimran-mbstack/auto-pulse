@@ -53,12 +53,14 @@
   --destructive: #cd2b31;
   --destructive-foreground: #ffffff;
 
-  /* Borders and controls: light, smooth, non-harsh */
-  --border: rgba(8, 9, 12, 0.05);
+  /* Borders and controls: moderate, calm separation */
+  --border: rgba(0, 0, 0, 0.12);
   /* dividers, table borders, and edges */
-  --card-border: rgba(8, 9, 12, 0.05);
-  /* card outlines and inputs */
-  --input: #ebebeb;
+  --card-border: rgba(0, 0, 0, 0.12);
+  /* card outlines */
+  --border-hover: rgba(0, 0, 0, 0.20);
+  /* hover borders */
+  --input: rgba(0, 0, 0, 0.20);
   --input-focus: #666666;
   /* darker gray focus indicator */
   --ring: #0072f5;
@@ -100,6 +102,14 @@
   --status-neutral-border: rgba(82, 82, 82, 0.20);
   --status-neutral-arc: #525252;
 
+  --status-violet-fg: #6d28d9;
+  --status-violet-bg: rgba(124, 58, 237, 0.08);
+  --status-violet-border: rgba(124, 58, 237, 0.25);
+
+  --status-teal-fg: #0f766e;
+  --status-teal-bg: rgba(13, 148, 136, 0.08);
+  --status-teal-border: rgba(13, 148, 136, 0.25);
+
   /* Chart series tokens: light mode */
   --chart-1: #0072f5;
   --chart-2: #46a758;
@@ -110,8 +120,8 @@
   /* Radius rules: 8px for cards, inputs, menus; 6px for small buttons and keys */
   --radius: 8px;
 
-  /* Flat cards with no shadow */
-  --card-shadow: none;
+  /* Soft card shadow in light mode */
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   --elevation-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
@@ -123,8 +133,8 @@
   --background: #0a0a0a;
   --foreground: #ededed;
 
-  /* Card and popover surfaces */
-  --card: #111111;
+  /* Card and popover surfaces: card slightly lighter than drawer/popover in dark mode */
+  --card: #171717;
   --card-foreground: #ededed;
   --popover: #111111;
   --popover-foreground: #ededed;
@@ -146,12 +156,14 @@
   --destructive: #e5484d;
   --destructive-foreground: #ffffff;
 
-  /* Borders and controls: soft, smooth, non-harsh in dark mode */
-  --border: rgba(255, 255, 255, 0.10);
+  /* Borders and controls: moderate, calm separation in dark mode */
+  --border: rgba(255, 255, 255, 0.14);
   /* dividers, table borders, and edges */
-  --card-border: rgba(255, 255, 255, 0.10);
-  /* card outlines and inputs */
-  --input: #242424;
+  --card-border: rgba(255, 255, 255, 0.14);
+  /* card outlines */
+  --border-hover: rgba(255, 255, 255, 0.22);
+  /* hover borders */
+  --input: rgba(255, 255, 255, 0.20);
   --input-focus: #808080;
   /* lighter gray focus indicator against dark canvas */
   --ring: #3291ff;
@@ -192,6 +204,14 @@
   --status-neutral-bg: rgba(255, 255, 255, 0.06);
   --status-neutral-border: rgba(255, 255, 255, 0.14);
 
+  --status-violet-fg: #c4b5fd;
+  --status-violet-bg: rgba(167, 139, 250, 0.14);
+  --status-violet-border: rgba(167, 139, 250, 0.28);
+
+  --status-teal-fg: #5eead4;
+  --status-teal-bg: rgba(45, 212, 191, 0.14);
+  --status-teal-border: rgba(45, 212, 191, 0.28);
+
   /* Chart series tokens: dark mode */
   --chart-1: #52a9ff;
   --chart-2: #62c073;
@@ -224,6 +244,7 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-card-border: var(--card-border);
+  --color-border-hover: var(--border-hover);
   --color-input: var(--input);
   --color-input-focus: var(--input-focus);
   --color-ring: var(--ring);
@@ -257,6 +278,12 @@
   --color-status-neutral-bg: var(--status-neutral-bg);
   --color-status-neutral-border: var(--status-neutral-border);
   --color-status-neutral-arc: var(--status-neutral-arc);
+  --color-status-violet-fg: var(--status-violet-fg);
+  --color-status-violet-bg: var(--status-violet-bg);
+  --color-status-violet-border: var(--status-violet-border);
+  --color-status-teal-fg: var(--status-teal-fg);
+  --color-status-teal-bg: var(--status-teal-bg);
+  --color-status-teal-border: var(--status-teal-border);
 
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);

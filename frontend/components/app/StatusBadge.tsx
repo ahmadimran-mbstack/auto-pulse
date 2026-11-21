@@ -122,7 +122,7 @@ export const statusMap: Record<string, StatusConfig> = {
     icon: <CircleCheck className={ICON_CLS} aria-hidden="true" />,
   },
   disabled: {
-    variant: "neutral",
+    variant: "warning",
     label: "Paused",
     icon: <CirclePause className={ICON_CLS} aria-hidden="true" />,
   },
