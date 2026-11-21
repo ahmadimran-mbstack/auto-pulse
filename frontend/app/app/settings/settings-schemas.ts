@@ -2,7 +2,7 @@ import { z } from "zod";
 
 // Shared validation constants matching backend Pydantic validators
 export const NICHE_MIN_LENGTH = 1;
-export const NICHE_MAX_LENGTH = 500;
+export const NICHE_MAX_LENGTH = 1500;
 export const ROLE_MAX_LENGTH = 80;
 export const INDUSTRY_MAX_LENGTH = 80;
 export const AUDIENCE_MAX_LENGTH = 200;
@@ -80,8 +80,7 @@ export const scheduleFormSchema = z
       .int()
       .refine((v) => [60, 180, 360, 720].includes(v), {
         message: "Choose 1, 3, 6, or 12 hours before publish",
-      })
-      .default(180),
+      }),
     approval_method: z.enum(["email", "slack", "both"]),
     email_approval_enabled: z.boolean(),
     slack_approval_enabled: z.boolean(),
