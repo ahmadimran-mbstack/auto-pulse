@@ -1708,6 +1708,16 @@ def _emit_events_for_node(
     return prev_best_score
 
 
+def extract_best_draft(state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Return the best available draft dict from a pipeline state."""
+    return (
+        state.get("best_clean_draft")
+        or state.get("draft")
+        or state.get("best_draft")
+        or state.get("best_raw_draft")
+    )
+
+
 def execute_pipeline(
     user_id: str,
     profile_dict: Dict[str, Any],
@@ -1836,6 +1846,7 @@ def execute_pipeline(
     # Stream updates through LangGraph so events emit live and cancellation is checked between steps
     merged_state: Dict[str, Any] = dict(initial_state)
     prev_best_score = -1
+    last_node = "finder"
 
     try:
         for chunk in app.stream(
@@ -1849,6 +1860,7 @@ def execute_pipeline(
             if not isinstance(chunk, dict):
                 continue
             for node_name, update in chunk.items():
+                last_node = str(node_name)
                 if isinstance(update, dict):
                     merged_state.update(update)
                     prev_best_score = _emit_events_for_node(
@@ -1866,12 +1878,24 @@ def execute_pipeline(
                 event_emitter.flush()
                 break
     except Exception as exc:
-        logger.error(f"Pipeline execution error for run {run_id}: {exc}", exc_info=True)
+        logger.error(f"Pipeline execution error for run {run_id} at node {last_node}: {exc}", exc_info=True)
         merged_state["status"] = "failed_error"
         merged_state["error_code"] = "pipeline_error"
+        merged_state["error_node"] = last_node
         merged_state["error_detail"] = PLAIN_TECH_ERROR_MESSAGE
         if event_emitter is not None:
             event_emitter.emit_run_failed(PLAIN_TECH_ERROR_MESSAGE)
+
+    merged_state["last_node"] = last_node
+    if (
+        not merged_state.get("cancelled")
+        and not merged_state.get("error_code")
+        and extract_best_draft(merged_state) is None
+    ):
+        merged_state["status"] = "failed_error"
+        merged_state["error_code"] = "no_draft_produced"
+        merged_state["error_node"] = last_node
+        merged_state["error_detail"] = f"The pipeline stopped at {last_node} without producing a draft."
 
     # Record event write overhead into internal_trace if present
     if event_emitter is not None:
