@@ -30,11 +30,20 @@ export interface DashboardTodayPost {
   topic_title: string;
   run_date: string;
   publish_at: string | null;
+  approval_send_at?: string | null;
+  approval_channel?: "slack" | "email";
 }
 
 export interface DashboardSchedule {
   next_draft_at: string | null;
+  next_approval_at?: string | null;
   next_post_at: string | null;
+  approval_lead_minutes?: number;
+  timezone?: string | null;
+  timezone_offset?: string | null;
+  too_close?: boolean;
+  minutes_before_publish?: number | null;
+  approval_channel?: "slack" | "email";
 }
 
 export interface DashboardStats {

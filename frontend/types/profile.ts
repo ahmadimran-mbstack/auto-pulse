@@ -38,6 +38,8 @@ export interface Profile {
   post_days: number[];
   approval_method: ApprovalMethod;
   slack_approval_enabled?: boolean;
+  approval_lead_minutes?: number;
+  schedule_notice?: string | null;
   approval?: ProfileApprovalSettings;
   onboarding_step: number;
   onboarding_completed_at: string | null;
@@ -72,6 +74,7 @@ export interface Step4Payload {
   post_time?: string | null;
   post_days?: number[];
   approval_method?: ApprovalMethod;
+  approval_lead_minutes?: number;
 }
 
 export interface PatchProfileApprovalPayload {

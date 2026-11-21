@@ -290,7 +290,18 @@ export function PostsClient({ user }: PostsClientProps) {
             return (
               <div className="flex items-center gap-2 flex-wrap">
                 <PlatformLabel platform="linkedin" size="xs" />
-                <StatusBadge status={post.status} />
+                <StatusBadge
+                  status={post.status}
+                  label={
+                    post.status === "draft"
+                      ? "Draft ready"
+                      : post.status === "awaiting_approval"
+                        ? "Waiting for your approval"
+                        : post.status === "expired"
+                          ? "Skipped (not approved)"
+                          : undefined
+                  }
+                />
                 {post.approval?.decision && (
                   <PostDecisionBadge post={post} layout="horizontal" />
                 )}

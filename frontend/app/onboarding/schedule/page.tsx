@@ -9,6 +9,8 @@ import { TimezoneSelect } from "../components/TimezoneSelect";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PlatformLabel } from "@/components/app/PlatformLabel";
+import { ApprovalTimingControl } from "@/components/app/ApprovalTimingControl";
+import { useSlackStatusQuery } from "@/lib/queries";
 
 interface DayOption {
   day: number;
@@ -46,7 +48,10 @@ export default function OnboardingSchedulePage() {
   });
   const [postTime, setPostTime] = useState("09:00");
   const [postDays, setPostDays] = useState<number[]>([0, 1, 2, 3, 4]); // Default Mon-Fri
+  const [approvalLeadMinutes, setApprovalLeadMinutes] = useState<number>(180);
+  const [slackApprovalEnabled, setSlackApprovalEnabled] = useState<boolean>(false);
   const approvalMethod = "email";
+  const { data: slackStatus } = useSlackStatusQuery();
 
   // Reference for focusing post time input on error
   const postTimeRef = useRef<HTMLInputElement>(null);
@@ -80,6 +85,10 @@ export default function OnboardingSchedulePage() {
         if (Array.isArray(profile.post_days) && profile.post_days.length > 0) {
           setPostDays(profile.post_days);
         }
+        if (typeof profile.approval_lead_minutes === "number") {
+          setApprovalLeadMinutes(profile.approval_lead_minutes);
+        }
+        setSlackApprovalEnabled(Boolean(profile.slack_approval_enabled));
       } catch (err: unknown) {
         if (!isMounted) return;
         const msg = err instanceof Error ? err.message : "Failed to load profile";
@@ -174,6 +183,7 @@ export default function OnboardingSchedulePage() {
         post_time: postTime,
         post_days: postDays,
         approval_method: approvalMethod,
+        approval_lead_minutes: approvalLeadMinutes,
       });
 
       // 2. Mark onboarding as finalized in backend database
@@ -230,13 +240,13 @@ export default function OnboardingSchedulePage() {
         error={fieldErrors.timezone}
       />
 
-      {/* Daily post creation time input */}
+      {/* Daily publish time input */}
       <div className="space-y-1.5 text-left pt-2">
         <Label htmlFor="post_time">
-          Time to post <span className="text-primary">*</span>
+          Publish time <span className="text-primary">*</span>
         </Label>
         <p id="post_time-hint" className="text-caption text-muted-foreground">
-          The time of day when your post will be ready for review.
+          This is when your post goes live on LinkedIn.
         </p>
         <Input
           id="post_time"
@@ -257,6 +267,18 @@ export default function OnboardingSchedulePage() {
           </p>
         )}
       </div>
+
+      {/* Send approval request lead time and compact live timeline preview */}
+      <ApprovalTimingControl
+        value={approvalLeadMinutes}
+        onChange={setApprovalLeadMinutes}
+        timezone={timezone}
+        postTime={postTime}
+        postDays={postDays}
+        useSlack={Boolean(slackApprovalEnabled && slackStatus?.status === "connected")}
+        footerNote="You can change this any time in Settings."
+        compact
+      />
 
       {/* Days of the week selection buttons */}
       <div className="space-y-2 text-left pt-2">

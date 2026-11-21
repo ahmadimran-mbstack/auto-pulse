@@ -30,6 +30,7 @@ import { useSignOut } from "@/hooks/use-sign-out";
 import { getTimezonesLazy } from "@/lib/timezones";
 import { cn } from "@/lib/utils";
 
+import { ApprovalTimingControl } from "@/components/app/ApprovalTimingControl";
 import { PageHeader } from "@/components/app/PageHeader";
 import { ColorField } from "@/components/app/ColorField";
 import { TagInput } from "@/components/app/TagInput";
@@ -849,6 +850,7 @@ function ScheduleTabForm({
       post_days: Array.isArray(profile.post_days) && profile.post_days.length > 0
         ? profile.post_days
         : [0, 1, 2, 3, 4],
+      approval_lead_minutes: profile.approval_lead_minutes ?? 180,
       approval_method: defaultMethod,
       email_approval_enabled: defaultEmailEnabled,
       slack_approval_enabled: defaultSlackEnabled,
@@ -856,6 +858,9 @@ function ScheduleTabForm({
   });
 
   const selectedTz = form.watch("timezone");
+  const selectedPostTime = form.watch("post_time");
+  const selectedPostDays = form.watch("post_days") || [0, 1, 2, 3, 4];
+  const selectedLeadMinutes = form.watch("approval_lead_minutes") ?? 180;
   const emailApprovalEnabled = form.watch("email_approval_enabled");
   const slackApprovalEnabled = form.watch("slack_approval_enabled");
 
@@ -901,10 +906,11 @@ function ScheduleTabForm({
       const slackOn = values.slack_approval_enabled;
       const resolvedMethod = emailOn ? "email" : "slack";
 
-      await patchProfileMutation.mutateAsync({
+      const updated = await patchProfileMutation.mutateAsync({
         timezone: values.timezone,
         post_time: values.post_time,
         post_days: values.post_days,
+        approval_lead_minutes: values.approval_lead_minutes,
         approval_method: resolvedMethod,
         slack_approval_enabled: slackOn,
         approval: {
@@ -913,6 +919,9 @@ function ScheduleTabForm({
       });
 
       toast.success("Schedule settings saved.");
+      if (updated?.schedule_notice) {
+        toast.info(updated.schedule_notice);
+      }
       form.reset(values);
     } catch (err: unknown) {
       if (err instanceof ApiClientError && err.fields) {
@@ -991,7 +1000,7 @@ function ScheduleTabForm({
               name="post_time"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Draft Delivery Time</FormLabel>
+                  <FormLabel>Publish Time</FormLabel>
                   <FormControl>
                     <Input
                       type="time"
@@ -1000,11 +1009,26 @@ function ScheduleTabForm({
                     />
                   </FormControl>
                   <FormDescription>
-                    The time of day your morning draft will be generated and waiting for approval.
+                    The time your approved post publishes to LinkedIn in your timezone.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
+            />
+
+            {/* Send approval request lead time */}
+            <ApprovalTimingControl
+              value={selectedLeadMinutes}
+              onChange={(minutes) =>
+                form.setValue("approval_lead_minutes", minutes, {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                })
+              }
+              timezone={selectedTz || "UTC"}
+              postTime={selectedPostTime || "09:00"}
+              postDays={selectedPostDays}
+              useSlack={Boolean(slackApprovalEnabled && isSlackConnected)}
             />
 
             {/* Publishing Days Checklist */}
