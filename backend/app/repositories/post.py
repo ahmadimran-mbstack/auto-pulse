@@ -17,7 +17,7 @@ def get_caller_posts(
     status: Optional[str] = None,
 ) -> Tuple[List[Post], bool]:
     safe_limit = max(1, min(limit, 50))
-    stmt = select(Post).where(Post.user_id == user_id)
+    stmt = select(Post).where(Post.user_id == user_id, Post.is_test.is_(False))  # TEST_LAB_REMOVE
 
     if status:
         stmt = stmt.where(Post.status == status)
@@ -47,7 +47,7 @@ def get_recent_titles_and_captions(
     cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
     stmt = (
         select(Post.topic_title, Post.caption)
-        .where(Post.user_id == user_id, Post.created_at >= cutoff)
+        .where(Post.user_id == user_id, Post.created_at >= cutoff, Post.is_test.is_(False))  # TEST_LAB_REMOVE
         .order_by(desc(Post.created_at))
     )
     rows = db.execute(stmt).all()
@@ -62,7 +62,7 @@ def get_user_post_history(
 ) -> List[dict]:
     stmt = (
         select(Post)
-        .where(Post.user_id == user_id)
+        .where(Post.user_id == user_id, Post.is_test.is_(False))  # TEST_LAB_REMOVE
         .order_by(desc(Post.created_at))
         .limit(limit)
     )
@@ -193,6 +193,7 @@ def delete_draft_and_run_for_date(
     stmt = select(Post).where(
         Post.user_id == user_id,
         Post.run_date == run_date,
+        Post.is_test.is_(False),  # TEST_LAB_REMOVE
     )
     post = db.scalars(stmt).first()
     if post:

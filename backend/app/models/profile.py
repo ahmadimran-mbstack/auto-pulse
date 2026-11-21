@@ -54,6 +54,11 @@ class Profile(Base):
         Boolean, nullable=False, server_default=text("false")
     )
 
+    # How many minutes before publish_at to send the approval request (60, 180, 360, 720)
+    approval_lead_minutes: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, server_default="180"
+    )
+
     # Onboarding tracking
     onboarding_step: Mapped[int] = mapped_column(
         SmallInteger, nullable=False, server_default="0"
@@ -96,6 +101,10 @@ class Profile(Base):
         CheckConstraint(
             "onboarding_step >= 0 AND onboarding_step <= 4",
             name="ck_profiles_onboarding_step",
+        ),
+        CheckConstraint(
+            "approval_lead_minutes IN (60, 180, 360, 720)",
+            name="ck_profiles_approval_lead_minutes",
         ),
         CheckConstraint(
             "post_days <@ ARRAY[0, 1, 2, 3, 4, 5, 6]::smallint[]",

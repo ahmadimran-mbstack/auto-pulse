@@ -124,6 +124,7 @@ def send_approval_email(
     idempotency_key: Optional[str] = None,
     needs_review: bool = False,
     first_comment: Optional[str] = None,
+    publish_notice: Optional[str] = None,
 ) -> None:
     # Subject line matching specification
     subject = f"Approve your LinkedIn post for {weekday} {time_str}"
@@ -154,13 +155,14 @@ def send_approval_email(
         else ""
     )
 
+    notice_line = publish_notice or f"This post will publish before {local_deadline} if you approve. If you do not approve before then, it will be skipped and not published."
+
     # Plain text version (contains exactly one link: the decision link)
     plain_text = (
         f"Hi {display_name},\n\n"
-        f"Your automated LinkedIn post draft is ready for review.{review_notice_plain}\n\n"
+        f"{notice_line}{review_notice_plain}\n\n"
         f"Topic: {topic_title}\n\n"
         f"Caption:\n{caption}{first_comment_plain}\n\n"
-        f"Decide before {local_deadline}. After that this draft is skipped.\n\n"
         f"Review and decide:\n{approve_url}\n\n"
         f"---\n"
         f"You received this email because you enabled automated LinkedIn posting on AutoPulse."
@@ -171,6 +173,7 @@ def send_approval_email(
     escaped_topic = html.escape(topic_title)
     escaped_caption = html.escape(caption).replace("\n", "<br />")
     escaped_deadline = html.escape(local_deadline)
+    escaped_notice = html.escape(notice_line)
 
     # HTML version contains exactly ONE <a ...> link (the review button) and an <img> tag
     html_content = f"""<!DOCTYPE html>
@@ -182,7 +185,7 @@ def send_approval_email(
 <body style="margin: 0; padding: 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0b0f19; color: #f8fafc;">
   <div style="max-width: 600px; margin: 0 auto; background-color: #111827; border: 1px solid #1f2937; border-radius: 12px; padding: 32px;">
     <h2 style="margin-top: 0; color: #f8fafc; font-size: 20px;">Hi {escaped_display_name},</h2>
-    <p style="color: #94a3b8; font-size: 14px; margin-bottom: 24px;">Your LinkedIn post draft is ready for your approval.</p>
+    <p style="color: #cbd5e1; font-size: 14px; font-weight: 500; margin-bottom: 20px;">{escaped_notice}</p>
     {review_notice_html}
     <div style="background-color: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
       <div style="font-weight: 600; color: #38bdf8; font-size: 14px; margin-bottom: 8px;">Topic: {escaped_topic}</div>
@@ -250,6 +253,72 @@ def send_slack_disconnect_alert_email(
   </div>
 </body>
 </html>"""
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = settings.EMAIL_FROM
+    msg["To"] = to_email
+    msg.set_content(plain_text)
+    msg.add_alternative(html_content, subtype="html")
+    send_smtp_message(msg)
+
+
+def send_reminder_email(
+    to_email: str,
+    display_name: str,
+    publish_date_str: str,
+    publish_time_str: str,
+    tz_label: str,
+    topic_title: str,
+    post_id: str,
+) -> None:
+    subject = f"Reminder: approve your {publish_time_str} LinkedIn post (publishes in 30m)"
+    review_url = f"{settings.APP_BASE_URL.rstrip('/')}/app/posts/{post_id}"
+    plain_text = (
+        f"Hi {display_name},\n\n"
+        f"Reminder: this post will publish on {publish_date_str} at {publish_time_str} {tz_label} if you approve. "
+        f"If you do not approve before then, it will be skipped and not published.\n\n"
+        f"Topic: {topic_title}\n\n"
+        f"Open dashboard to review:\n{review_url}\n"
+    )
+    html_content = f"""<!DOCTYPE html>
+<html><body style="margin:0;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0b0f19;color:#f8fafc;">
+  <div style="max-width:560px;margin:0 auto;background:#111827;border:1px solid #1f2937;border-radius:12px;padding:28px;">
+    <h2 style="margin-top:0;font-size:18px;color:#f8fafc;">Reminder: 30 minutes left to approve</h2>
+    <p style="color:#cbd5e1;font-size:14px;">This post will publish on <strong>{html.escape(publish_date_str)}</strong> at <strong>{html.escape(publish_time_str)} {html.escape(tz_label)}</strong> if you approve. If you do not approve before then, it will be skipped and not published.</p>
+    <p style="color:#94a3b8;font-size:13px;">Topic: {html.escape(topic_title)}</p>
+    <div style="margin-top:20px;"><a href="{review_url}" style="display:inline-block;background:#0284c7;color:#fff;text-decoration:none;padding:12px 22px;font-size:14px;font-weight:600;border-radius:8px;">Review and decide</a></div>
+  </div>
+</body></html>"""
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = settings.EMAIL_FROM
+    msg["To"] = to_email
+    msg.set_content(plain_text)
+    msg.add_alternative(html_content, subtype="html")
+    send_smtp_message(msg)
+
+
+def send_skipped_notice_email(
+    to_email: str,
+    display_name: str,
+    publish_time_str: str,
+    post_id: str,
+) -> None:
+    subject = f"Skipped: your {publish_time_str} LinkedIn post was not approved"
+    dashboard_url = f"{settings.APP_BASE_URL.rstrip('/')}/app/posts/{post_id}"
+    plain_text = (
+        f"Hi {display_name},\n\n"
+        f"Your {publish_time_str} post was not published because it was not approved. "
+        f"Open the dashboard to review:\n{dashboard_url}\n"
+    )
+    html_content = f"""<!DOCTYPE html>
+<html><body style="margin:0;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0b0f19;color:#f8fafc;">
+  <div style="max-width:560px;margin:0 auto;background:#111827;border:1px solid #1f2937;border-radius:12px;padding:28px;">
+    <h2 style="margin-top:0;font-size:18px;color:#f8fafc;">Post skipped (not approved)</h2>
+    <p style="color:#cbd5e1;font-size:14px;">Your {html.escape(publish_time_str)} post was not published because it was not approved. Open the dashboard to review.</p>
+    <div style="margin-top:20px;"><a href="{dashboard_url}" style="display:inline-block;background:#0284c7;color:#fff;text-decoration:none;padding:12px 22px;font-size:14px;font-weight:600;border-radius:8px;">Open dashboard</a></div>
+  </div>
+</body></html>"""
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = settings.EMAIL_FROM

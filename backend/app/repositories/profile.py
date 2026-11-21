@@ -18,7 +18,11 @@ from app.schemas.profile import (
 
 # Converts a database Profile row into the public ProfileResponse model
 # Note: user_id is deliberately excluded to protect tenant privacy
-def format_profile_response(profile: Profile, db: Optional[Session] = None) -> ProfileResponse:
+def format_profile_response(
+    profile: Profile,
+    db: Optional[Session] = None,
+    schedule_notice: Optional[str] = None,
+) -> ProfileResponse:
     formatted_time = None
     if profile.post_time is not None:
         formatted_time = profile.post_time.strftime("%H:%M")
@@ -51,6 +55,8 @@ def format_profile_response(profile: Profile, db: Optional[Session] = None) -> P
         post_days=list(profile.post_days) if profile.post_days else [],
         approval_method=profile.approval_method,
         slack_approval_enabled=profile.slack_approval_enabled,
+        approval_lead_minutes=getattr(profile, "approval_lead_minutes", 180) or 180,
+        schedule_notice=schedule_notice,
         approval=ApprovalSettingsResponse(
             email=True,
             slack=ApprovalSlackInfo(
@@ -190,6 +196,7 @@ def update_profile_step_4(
     profile.post_time = parsed_time
     profile.post_days = data.post_days
     profile.approval_method = data.approval_method
+    profile.approval_lead_minutes = data.approval_lead_minutes
 
     profile.onboarding_step = max(profile.onboarding_step, 4)
     profile.updated_at = datetime.datetime.now(datetime.timezone.utc)

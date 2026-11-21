@@ -198,6 +198,14 @@ class OnboardingStep4Request(BaseModel):
     post_time: Optional[str] = None
     post_days: List[int] = []
     approval_method: str = "email"
+    approval_lead_minutes: int = 180
+
+    @field_validator("approval_lead_minutes")
+    @classmethod
+    def validate_approval_lead_minutes(cls, v: int) -> int:
+        if v not in (60, 180, 360, 720):
+            raise ValueError("Approval lead time must be 60, 180, 360, or 720 minutes.")
+        return v
 
     @field_validator("timezone", mode="before")
     @classmethod
@@ -287,6 +295,8 @@ class ProfileResponse(BaseModel):
     post_days: List[int] = []
     approval_method: str = "email"
     slack_approval_enabled: bool = False
+    approval_lead_minutes: int = 180
+    schedule_notice: Optional[str] = None
     approval: ApprovalSettingsResponse = ApprovalSettingsResponse()
     onboarding_step: int = 0
     onboarding_completed_at: Optional[datetime.datetime] = None
@@ -319,6 +329,14 @@ class PatchProfileRequest(BaseModel):
     timezone: Optional[str] = None
     post_time: Optional[str] = None
     post_days: Optional[List[int]] = None
+    approval_lead_minutes: Optional[int] = None
+
+    @field_validator("approval_lead_minutes")
+    @classmethod
+    def validate_approval_lead_minutes(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v not in (60, 180, 360, 720):
+            raise ValueError("Approval lead time must be 60, 180, 360, or 720 minutes.")
+        return v
 
     # Validate niche_description when sent in PATCH so blank or >500 values are rejected
     @field_validator("niche_description", mode="before")

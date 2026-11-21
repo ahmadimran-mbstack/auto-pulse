@@ -46,16 +46,160 @@ def expire_passed_posts(db: Session) -> int:
         "UPDATE posts "
         "SET status = 'expired', updated_at = now() "
         "WHERE status IN ('draft', 'awaiting_approval') "
+        "  AND is_test IS FALSE "  # TEST_LAB_REMOVE
         "  AND (approval_source IS NULL OR approval_source != 'playground') "
         "  AND (publish_at IS NULL OR publish_at <= now()) "
-        "RETURNING id"
+        "RETURNING id, user_id, publish_at, scheduled_skipped_notified_at"
     )
-    result = db.execute(stmt)
-    expired_ids = result.fetchall()
+    rows = db.execute(stmt).fetchall()
     db.commit()
-    if expired_ids:
-        logger.info(f"Marked {len(expired_ids)} draft/awaiting_approval posts as expired")
-    return len(expired_ids)
+    for r in rows:
+        if r.scheduled_skipped_notified_at is None and r.publish_at is not None:
+            _send_skipped_notice_once(db, r.id, r.user_id, r.publish_at)
+    if rows:
+        logger.info(f"Marked {len(rows)} draft/awaiting_approval posts as expired")
+    return len(rows)
+
+
+def _send_skipped_notice_once(
+    db: Session,
+    post_id,
+    user_id: str,
+    publish_at: datetime.datetime,
+) -> None:
+    claimed = db.execute(
+        text(
+            "UPDATE posts SET scheduled_skipped_notified_at = now() "
+            "WHERE id = :id AND scheduled_skipped_notified_at IS NULL "
+            "RETURNING id"
+        ),
+        {"id": post_id},
+    ).fetchone()
+    if not claimed:
+        return
+    db.commit()
+
+    profile = db.query(Profile).filter(Profile.user_id == user_id).first()
+    from app.services.schedule_timeline import compute_post_timeline
+
+    tl = compute_post_timeline(
+        publish_at_utc=publish_at,
+        approval_lead_minutes=getattr(profile, "approval_lead_minutes", 180) if profile else 180,
+        tz_name=profile.timezone if profile else "UTC",
+    )
+    try:
+        from app.services.slack import send_slack_skipped_notice
+        if send_slack_skipped_notice(db, user_id, str(post_id), tl.publish_time_str):
+            return
+    except Exception as exc:
+        logger.debug(f"Slack skipped notice skipped for post {post_id}: {exc}")
+
+    try:
+        from app.services.approval import get_user_email
+        from app.services.email import send_skipped_notice_email
+        to_email = get_user_email(db, user_id)
+        if to_email:
+            display_name = profile.display_name if profile and profile.display_name else "Creator"
+            send_skipped_notice_email(to_email, display_name, tl.publish_time_str, str(post_id))
+    except Exception as exc:
+        logger.debug(f"Email skipped notice skipped for post {post_id}: {exc}")
+
+
+def send_due_approvals(db: Session) -> int:
+    """Send approval requests for scheduled drafts whose approval_send_at has arrived."""
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    due_posts = (
+        db.query(Post)
+        .filter(
+            Post.status == "draft",
+            Post.is_test.is_(False),
+            (Post.approval_source.is_(None)) | (Post.approval_source != "playground"),
+            Post.approval_send_at.is_not(None),
+            Post.approval_send_at <= now_utc,
+            Post.publish_at > now_utc,
+        )
+        .all()
+    )
+    sent = 0
+    for p in due_posts:
+        if request_approval(db, p):
+            sent += 1
+    return sent
+
+
+def send_due_reminders(db: Session) -> int:
+    """Send at most one reminder 30 minutes before publish_at if still awaiting approval."""
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    window_end = now_utc + datetime.timedelta(minutes=30)
+    rows = (
+        db.query(Approval, Post, Profile)
+        .join(Post, Approval.post_id == Post.id)
+        .outerjoin(Profile, Profile.user_id == Post.user_id)
+        .filter(
+            Post.status == "awaiting_approval",
+            Post.is_test.is_(False),
+            Approval.decision.is_(None),
+            Approval.sent_at.is_not(None),
+            Approval.reminder_sent_at.is_(None),
+            Post.publish_at > now_utc,
+            Post.publish_at <= window_end,
+        )
+        .all()
+    )
+    reminded = 0
+    for approval, post, profile in rows:
+        lead = getattr(profile, "approval_lead_minutes", 180) if profile else 180
+        if (lead or 180) < 60:
+            continue
+        claimed = db.execute(
+            text(
+                "UPDATE approvals SET reminder_sent_at = now() "
+                "WHERE id = :id AND reminder_sent_at IS NULL AND decision IS NULL "
+                "RETURNING id"
+            ),
+            {"id": approval.id},
+        ).fetchone()
+        if not claimed:
+            continue
+        db.commit()
+
+        from app.services.schedule_timeline import compute_post_timeline
+        tl = compute_post_timeline(
+            publish_at_utc=post.publish_at,
+            approval_lead_minutes=lead,
+            tz_name=profile.timezone if profile else "UTC",
+        )
+        sent_ok = False
+        try:
+            from app.services.slack import send_slack_reminder
+            sent_ok = send_slack_reminder(db, post, tl.publish_date_str, tl.publish_time_str, f"{tl.timezone} ({tl.timezone_offset})")
+        except Exception as exc:
+            logger.debug(f"Slack reminder failed for post {post.id}: {exc}")
+
+        if not sent_ok:
+            try:
+                from app.services.approval import create_or_rotate_approval, get_user_email
+                from app.services.email import send_reminder_email
+                to_email = get_user_email(db, post.user_id)
+                if to_email:
+                    # Rotate token only if needed? No, create_or_rotate_approval only rotates when sent_at IS NULL.
+                    # For reminders, direct user to dashboard post detail so existing email link stays valid.
+                    display_name = profile.display_name if profile and profile.display_name else "Creator"
+                    send_reminder_email(
+                        to_email=to_email,
+                        display_name=display_name,
+                        publish_date_str=tl.publish_date_str,
+                        publish_time_str=tl.publish_time_str,
+                        tz_label=f"{tl.timezone} ({tl.timezone_offset})",
+                        topic_title=post.topic_title,
+                        post_id=str(post.id),
+                    )
+                    sent_ok = True
+            except Exception as exc:
+                logger.debug(f"Email reminder failed for post {post.id}: {exc}")
+        if sent_ok:
+            reminded += 1
+    return reminded
 
 
 # Retries sending approval emails for drafts whose approval has no sent_at yet
@@ -294,12 +438,19 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
         }
 
         publish_at = compute_publish_at(run_date, profile.post_time, profile.timezone)
+        from app.services.schedule_timeline import compute_post_timeline
+        tl = compute_post_timeline(
+            publish_at_utc=publish_at,
+            approval_lead_minutes=getattr(profile, "approval_lead_minutes", 180) or 180,
+            tz_name=profile.timezone,
+        )
 
         post = Post(
             user_id=profile.user_id,
             run_date=run_date,
             status="draft",
             publish_at=publish_at,
+            approval_send_at=tl.effective_approval_at_utc,
             topic_title=chosen.get("title") or "Industry Update",
             topic_label=final_state.get("topic_label") or (final_state.get("finder_output") or {}).get("topic_label"),
             topic_url=chosen.get("url") or "",
@@ -334,9 +485,10 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
             f"(ai_score={post.ai_score}, needs_review={post.needs_review})"
         )
 
-        # Call request_approval after draft is saved
-        request_approval(db, post)
-        db.refresh(post)
+        # Send approval immediately only if publish time is closer than lead time; otherwise wait for approval_send_at
+        if tl.too_close or tl.effective_approval_at_utc <= datetime.datetime.now(datetime.timezone.utc):
+            request_approval(db, post)
+            db.refresh(post)
 
         return post
 
@@ -358,11 +510,17 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
 
 # Main dispatch runner function
 def run_dispatch(db: Session) -> None:
-    # 1. Mark expired drafts
+    # 1. Mark expired drafts & send skipped notices
     expire_passed_posts(db)
 
-    # 2. Retry unsent approvals
+    # 2. Send scheduled approvals whose approval_send_at has arrived
+    send_due_approvals(db)
+
+    # 3. Retry unsent approvals
     retry_unsent_approvals(db)
+
+    # 4. Send 30-minute reminders for unapproved posts
+    send_due_reminders(db)
 
     # 3. Schedule generation for active users if generation enabled
     if not settings.GENERATION_ENABLED:
@@ -404,8 +562,11 @@ def run_dispatch(db: Session) -> None:
         if today_local.weekday() not in profile.post_days:
             continue
 
+        from app.services.schedule_timeline import DRAFT_GENERATION_BUFFER_MINUTES
+
         target_post_dt = datetime.datetime.combine(today_local, profile.post_time, tzinfo=user_tz)
-        lead_minutes = settings.DRAFT_LEAD_MINUTES
+        approval_lead = getattr(profile, "approval_lead_minutes", 180) or 180
+        lead_minutes = approval_lead + DRAFT_GENERATION_BUFFER_MINUTES
         draft_window = target_post_dt - datetime.timedelta(minutes=lead_minutes)
 
         # Trigger draft if within draft window, OR if post time passed today within 4 hours and no post exists yet
@@ -422,6 +583,7 @@ def run_dispatch(db: Session) -> None:
                 .filter(
                     Post.user_id == profile.user_id,
                     Post.run_date == today_local,
+                    Post.is_test.is_(False),  # TEST_LAB_REMOVE
                     Post.approval_source != "playground",
                 )
                 .first()

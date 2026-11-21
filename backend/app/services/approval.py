@@ -140,6 +140,20 @@ def request_approval(
         logger.warning(f"Slack approval dispatch failed for post {post.id}: {slack_exc}")
 
     # 2. Dispatch email approval if recipient email is available
+    publish_notice = None
+    if post.publish_at:
+        from app.services.schedule_timeline import compute_post_timeline
+
+        tl = compute_post_timeline(
+            publish_at_utc=post.publish_at,
+            approval_lead_minutes=getattr(profile, "approval_lead_minutes", 180) if profile else 180,
+            tz_name=tz_str,
+        )
+        publish_notice = (
+            f"This post will publish on {tl.publish_date_str} at {tl.publish_time_str} {tl.timezone} ({tl.timezone_offset}) if you approve. "
+            f"If you do not approve before then, it will be skipped and not published."
+        )
+
     if to_email:
         try:
             send_approval_email(
@@ -154,6 +168,7 @@ def request_approval(
                 idempotency_key=idempotency_key,
                 needs_review=getattr(post, "needs_review", False),
                 first_comment=(getattr(post, "image_spec", None) or {}).get("first_comment"),
+                publish_notice=publish_notice,
             )
             email_dispatched = True
             logger.info(f"Approval email dispatched for post {post.id} to {to_email}")

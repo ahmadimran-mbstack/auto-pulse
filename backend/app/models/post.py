@@ -67,6 +67,11 @@ class Post(Base):
         Boolean, nullable=False, server_default=text("false")
     )
 
+    # TEST_LAB_REMOVE: Marks posts created by Test Lab so they are excluded from normal schedule/analytics
+    is_test: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+
     # Candidate source articles used to research and ground the post
     sources: Mapped[List[Dict[str, Any]]] = mapped_column(JSONB, nullable=False)
 
@@ -83,6 +88,16 @@ class Post(Base):
 
     # Scheduled publication timestamp in UTC (also serves as approval deadline)
     publish_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Scheduled approval request send timestamp in UTC
+    approval_send_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Timestamp when the skipped (not approved) notice was sent
+    scheduled_skipped_notified_at: Mapped[Optional[datetime.datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 

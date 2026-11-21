@@ -163,7 +163,13 @@ class GenerationRunDetail(BaseModel):
 
 class ScheduleResponse(BaseModel):
     next_draft_at: Optional[str] = None
+    next_approval_at: Optional[str] = None
     next_post_at: Optional[str] = None
+    approval_lead_minutes: int = 180
+    timezone: Optional[str] = None
+    timezone_offset: Optional[str] = None
+    too_close: bool = False
+    minutes_before_publish: Optional[int] = None
 
 
 class PublicApprovalDetail(BaseModel):

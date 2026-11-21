@@ -85,12 +85,12 @@ def get_dashboard(
     # Query 2: Fetch caller's today post and recent 5 posts in a single round trip
     stmt_posts = (
         select(Post)
-        .where(Post.user_id == user.id)
+        .where(Post.user_id == user.id, Post.is_test.is_(False))  # TEST_LAB_REMOVE
         .where(
             (Post.run_date == today_local)
             | Post.id.in_(
                 select(Post.id)
-                .where(Post.user_id == user.id)
+                .where(Post.user_id == user.id, Post.is_test.is_(False))  # TEST_LAB_REMOVE
                 .order_by(desc(Post.created_at))
                 .limit(5)
             )
@@ -98,6 +98,15 @@ def get_dashboard(
         .order_by(desc(Post.created_at))
     )
     post_rows: List[Post] = list(db.scalars(stmt_posts).all())
+
+    approval_channel = "email"
+    try:
+        from app.repositories import slack as slack_repo
+        slack_int = slack_repo.get_slack_integration(db, user_id=user.id)
+        if profile_row and getattr(profile_row, "slack_approval_enabled", False) and slack_int and slack_int.status == "connected":
+            approval_channel = "slack"
+    except Exception:
+        pass
 
     today_item: Optional[DashboardTodayPost] = None
     for p in post_rows:
@@ -108,6 +117,8 @@ def get_dashboard(
                 topic_title=p.topic_title,
                 run_date=p.run_date.isoformat(),
                 publish_at=p.publish_at.isoformat() if p.publish_at else None,
+                approval_send_at=p.approval_send_at.isoformat() if getattr(p, "approval_send_at", None) else None,
+                approval_channel=approval_channel,
             )
             break
 
@@ -131,7 +142,7 @@ def get_dashboard(
             func.coalesce(func.sum(case(((Post.status == "published") & (Post.created_at >= since_30d), 1), else_=0)), 0).label("published_30d"),
             func.coalesce(func.sum(case(((Post.status == "failed") & (Post.created_at >= since_30d), 1), else_=0)), 0).label("failed_30d"),
         )
-        .where(Post.user_id == user.id)
+        .where(Post.user_id == user.id, Post.is_test.is_(False))  # TEST_LAB_REMOVE
     )
     stats_row = db.execute(stmt_stats).one()
 
@@ -145,7 +156,14 @@ def get_dashboard(
     sched_resp = calculate_next_schedule(profile_row)
     schedule_data = DashboardSchedule(
         next_draft_at=sched_resp.next_draft_at,
+        next_approval_at=sched_resp.next_approval_at,
         next_post_at=sched_resp.next_post_at,
+        approval_lead_minutes=sched_resp.approval_lead_minutes,
+        timezone=sched_resp.timezone,
+        timezone_offset=sched_resp.timezone_offset,
+        too_close=sched_resp.too_close,
+        minutes_before_publish=sched_resp.minutes_before_publish,
+        approval_channel=approval_channel,
     )
 
     return DashboardResponse(

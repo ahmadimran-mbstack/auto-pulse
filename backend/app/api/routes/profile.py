@@ -78,6 +78,10 @@ def patch_caller_profile(
         profile.brand_primary_hex = payload.brand_primary_hex
     if payload.brand_accent_hex is not None:
         profile.brand_accent_hex = payload.brand_accent_hex
+    schedule_changed = any(
+        x is not None
+        for x in (payload.timezone, payload.post_time, payload.post_days, payload.approval_lead_minutes)
+    )
     if payload.timezone is not None:
         profile.timezone = payload.timezone
     if payload.post_time is not None:
@@ -85,16 +89,55 @@ def patch_caller_profile(
         profile.post_time = dt_mod.datetime.strptime(payload.post_time, "%H:%M").time()
     if payload.post_days is not None:
         profile.post_days = payload.post_days
+    if payload.approval_lead_minutes is not None:
+        profile.approval_lead_minutes = payload.approval_lead_minutes
 
     # Ensure profile is marked active for scheduled generation if scheduling parameters are present
     if profile.timezone and profile.post_time and profile.post_days and profile.onboarding_completed_at is None:
         import datetime as dt_mod
         profile.onboarding_completed_at = dt_mod.datetime.now(dt_mod.timezone.utc)
 
+    schedule_notice = None
+    if schedule_changed:
+        # Atomically invalidate any pending scheduled draft/awaiting_approval post so old jobs/links cannot fire
+        from sqlalchemy import text
+        from app.services.schedule_timeline import compute_next_schedule_timeline
+
+        db.execute(
+            text(
+                "UPDATE approvals "
+                "SET expires_at = now() "
+                "WHERE user_id = :uid AND decision IS NULL "
+                "  AND post_id IN ("
+                "    SELECT id FROM posts "
+                "    WHERE user_id = :uid AND is_test IS FALSE "
+                "      AND (approval_source IS NULL OR approval_source != 'playground') "
+                "      AND status IN ('draft', 'awaiting_approval')"
+                "  )"
+            ),
+            {"uid": user.id},
+        )
+        db.execute(
+            text(
+                "UPDATE posts "
+                "SET status = 'expired', updated_at = now() "
+                "WHERE user_id = :uid AND is_test IS FALSE "
+                "  AND (approval_source IS NULL OR approval_source != 'playground') "
+                "  AND status IN ('draft', 'awaiting_approval')"
+            ),
+            {"uid": user.id},
+        )
+        next_tl = compute_next_schedule_timeline(profile)
+        if next_tl and next_tl.too_close:
+            schedule_notice = (
+                f"Your approval request will be sent right after the draft is written, "
+                f"about {next_tl.minutes_before_publish} minutes before publishing."
+            )
+
     db.commit()
     db.refresh(profile)
     invalidate_content_profile_cache(user.id)
-    return profile_repo.format_profile_response(profile, db=db)
+    return profile_repo.format_profile_response(profile, db=db, schedule_notice=schedule_notice)
 
 
 # Updates onboarding step 1: niche, role, audience, topics
@@ -155,14 +198,23 @@ def save_onboarding_step_4(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> ProfileResponse:
+    from app.services.schedule_timeline import compute_next_schedule_timeline
+
     profile = profile_repo.update_profile_step_4(
         db=db,
         user_id=user.id,
         data=payload,
         display_name=user.name,
     )
+    schedule_notice = None
+    next_tl = compute_next_schedule_timeline(profile)
+    if next_tl and next_tl.too_close:
+        schedule_notice = (
+            f"Your approval request will be sent right after the draft is written, "
+            f"about {next_tl.minutes_before_publish} minutes before publishing."
+        )
     invalidate_content_profile_cache(user.id)
-    return profile_repo.format_profile_response(profile, db=db)
+    return profile_repo.format_profile_response(profile, db=db, schedule_notice=schedule_notice)
 
 
 # Validates that all required fields are set and marks onboarding complete

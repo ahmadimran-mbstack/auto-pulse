@@ -55,6 +55,11 @@ class Approval(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # Timestamp when the 30-minute reminder was sent (atomic claim prevents duplicates)
+    reminder_sent_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # Short error message if the send failed (no personal text or tokens)
     send_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 

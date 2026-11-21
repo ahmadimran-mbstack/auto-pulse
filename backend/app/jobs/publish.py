@@ -44,6 +44,7 @@ def fail_missed_window_posts(db: Session, target_post_id: Optional[uuid.UUID] = 
         "FROM posts p "
         "JOIN post_publications pub ON pub.post_id = p.id AND pub.platform = 'linkedin' "
         "WHERE p.status = 'approved' AND pub.status = 'pending' "
+        "  AND p.is_test IS FALSE "  # TEST_LAB_REMOVE
         "  AND p.publish_at < now() - interval '6 hours'"
     )
     params = {}
@@ -78,6 +79,7 @@ def find_eligible_publications(db: Session, target_post_id: Optional[uuid.UUID] 
         "FROM posts p "
         "JOIN post_publications pub ON pub.post_id = p.id AND pub.platform = 'linkedin' "
         "WHERE p.status = 'approved' AND pub.status = 'pending' "
+        "  AND p.is_test IS FALSE "  # TEST_LAB_REMOVE
         "  AND p.publish_at <= now() "
         "  AND p.publish_at >= now() - interval '6 hours' "
         "  AND (pub.not_before IS NULL OR pub.not_before <= now())"

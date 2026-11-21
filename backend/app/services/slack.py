@@ -248,6 +248,7 @@ def build_approval_blocks(
     signed_image_url: Optional[str] = None,
     needs_review: bool = False,
     first_comment: Optional[str] = None,
+    publish_notice: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """
     Builds the Block Kit message layout:
@@ -266,6 +267,15 @@ def build_approval_blocks(
             },
         }
     ]
+
+    if publish_notice:
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": publish_notice,
+            },
+        })
 
     if needs_review:
         blocks.append({
@@ -372,6 +382,7 @@ def post_approval_message(
     signed_image_url: Optional[str] = None,
     needs_review: bool = False,
     first_comment: Optional[str] = None,
+    publish_notice: Optional[str] = None,
 ) -> Tuple[str, str, str]:
     """
     Posts the approval message to Slack with retries and graceful image fallbacks.
@@ -405,6 +416,7 @@ def post_approval_message(
             signed_image_url=s_url,
             needs_review=needs_review,
             first_comment=first_comment,
+            publish_notice=publish_notice,
         )
         payload = {
             "channel": channel_id,
@@ -598,6 +610,20 @@ def notify_slack_approval(db: Any, post: Any) -> Optional[str]:
             logger.warning(f"Failed to generate signed image URL: {exc}")
 
         # 8. Post approval message with retries and fallback
+        publish_notice = None
+        if getattr(post, "publish_at", None):
+            from app.services.schedule_timeline import compute_post_timeline
+
+            tl = compute_post_timeline(
+                publish_at_utc=post.publish_at,
+                approval_lead_minutes=getattr(profile, "approval_lead_minutes", 180),
+                tz_name=profile.timezone,
+            )
+            publish_notice = (
+                f"This post will publish on *{tl.publish_date_str}* at *{tl.publish_time_str} {tl.timezone} ({tl.timezone_offset})* if you approve. "
+                f"If you do not approve before then, it will be skipped and not published."
+            )
+
         try:
             resp_channel, msg_ts, route_used = post_approval_message(
                 bot_token=bot_token,
@@ -609,6 +635,7 @@ def notify_slack_approval(db: Any, post: Any) -> Optional[str]:
                 signed_image_url=signed_image_url,
                 needs_review=getattr(post, "needs_review", False),
                 first_comment=(getattr(post, "image_spec", None) or {}).get("first_comment"),
+                publish_notice=publish_notice,
             )
             db.execute(
                 text(
@@ -854,3 +881,100 @@ def handle_block_action(payload: Dict[str, Any], db: Optional[Any] = None) -> Di
 
 
 
+
+
+def send_slack_reminder(
+    db: Any,
+    post: Any,
+    publish_date_str: str,
+    publish_time_str: str,
+    tz_label: str,
+) -> bool:
+    """Send a short 30-minute reminder DM in Slack with Approve/Reject buttons."""
+    try:
+        from app.models.profile import Profile
+        from app.models.slack import SlackIntegration
+        from app.core.crypto import decrypt_text
+
+        integration = (
+            db.query(SlackIntegration)
+            .filter(SlackIntegration.user_id == post.user_id, SlackIntegration.status == "connected")
+            .first()
+        )
+        profile = db.query(Profile).filter(Profile.user_id == post.user_id).first()
+        if not integration or not integration.bot_token_encrypted or not integration.dm_channel_id:
+            return False
+        if not profile or not profile.slack_approval_enabled:
+            return False
+
+        bot_token = decrypt_text(integration.bot_token_encrypted)
+        headers = {"Authorization": f"Bearer {bot_token}", "Content-Type": "application/json"}
+        text_msg = (
+            f":alarm_clock: *Reminder:* Your post *{post.topic_title}* publishes on *{publish_date_str}* at *{publish_time_str} {tz_label}* (in ~30m) if you approve. "
+            f"If you do not approve before then, it will be skipped and not published."
+        )
+        blocks = [
+            {"type": "section", "text": {"type": "mrkdwn", "text": text_msg}},
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Approve", "emoji": True},
+                        "style": "primary",
+                        "action_id": "approve_post",
+                        "value": str(post.id),
+                    },
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "Reject", "emoji": True},
+                        "style": "danger",
+                        "action_id": "reject_post",
+                        "value": str(post.id),
+                    },
+                ],
+            },
+        ]
+        with httpx.Client(timeout=15.0) as client:
+            resp = client.post(
+                SLACK_CHAT_POST_MESSAGE_URL,
+                json={"channel": integration.dm_channel_id, "text": text_msg, "blocks": blocks},
+                headers=headers,
+            )
+            return bool(resp.json().get("ok"))
+    except Exception as exc:
+        logger.warning(f"Slack reminder failed for post {post.id}: {exc}")
+        return False
+
+
+def send_slack_skipped_notice(db: Any, user_id: str, post_id: str, publish_time_str: str) -> bool:
+    """Send a short Slack DM when a post is skipped because it was not approved in time."""
+    try:
+        from app.models.profile import Profile
+        from app.models.slack import SlackIntegration
+        from app.core.crypto import decrypt_text
+
+        integration = (
+            db.query(SlackIntegration)
+            .filter(SlackIntegration.user_id == user_id, SlackIntegration.status == "connected")
+            .first()
+        )
+        profile = db.query(Profile).filter(Profile.user_id == user_id).first()
+        if not integration or not integration.bot_token_encrypted or not integration.dm_channel_id:
+            return False
+        if not profile or not profile.slack_approval_enabled:
+            return False
+
+        bot_token = decrypt_text(integration.bot_token_encrypted)
+        dashboard_url = f"{settings.APP_BASE_URL.rstrip('/')}/app/posts/{post_id}"
+        text_msg = f"Your {publish_time_str} post was not published because it was not approved. <{dashboard_url}|Open the dashboard to review.>"
+        with httpx.Client(timeout=15.0) as client:
+            resp = client.post(
+                SLACK_CHAT_POST_MESSAGE_URL,
+                json={"channel": integration.dm_channel_id, "text": text_msg},
+                headers={"Authorization": f"Bearer {bot_token}", "Content-Type": "application/json"},
+            )
+            return bool(resp.json().get("ok"))
+    except Exception as exc:
+        logger.warning(f"Slack skipped notice failed for post {post_id}: {exc}")
+        return False

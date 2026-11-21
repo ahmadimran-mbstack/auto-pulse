@@ -123,6 +123,7 @@ base_posts AS (
     LEFT JOIN slack_approval_messages s ON s.post_id = p.id
     LEFT JOIN post_publications pub ON pub.post_id = p.id AND pub.platform = 'linkedin'
     WHERE p.user_id = :user_id
+      AND p.is_test IS FALSE -- TEST_LAB_REMOVE
       AND CAST(p.created_at AT TIME ZONE :tz AS date) BETWEEN CAST(:start_date AS date) AND CAST(:end_date AS date)
 )
 """
@@ -198,7 +199,7 @@ def _resolve_user_context(db: Session, user_id: str, range_key: AnalyticsRange) 
                   AND status = 'active'
                   AND 'r_member_postAnalytics' = ANY(scopes)
             ) AS metrics_available,
-            (SELECT COUNT(*) FROM posts WHERE user_id = :user_id) AS all_time_posts
+            (SELECT COUNT(*) FROM posts WHERE user_id = :user_id AND is_test IS FALSE) AS all_time_posts -- TEST_LAB_REMOVE
         """
     )
     meta = db.execute(meta_stmt, {"user_id": user_id}).mappings().one()
@@ -491,6 +492,7 @@ def query_approval_turnaround(db: Session, ctx: dict) -> List[ApprovalTurnaround
             LEFT JOIN approvals a ON a.post_id = p.id
             LEFT JOIN slack_approval_messages s ON s.post_id = p.id AND s.status = 'sent'
             WHERE p.user_id = :user_id
+              AND p.is_test IS FALSE -- TEST_LAB_REMOVE
               AND CAST(p.created_at AT TIME ZONE :tz AS date) BETWEEN CAST(:start_date AS date) AND CAST(:end_date AS date)
               AND COALESCE(a.sent_at, s.created_at) IS NOT NULL
               AND COALESCE(a.decided_at, p.decided_at) IS NOT NULL

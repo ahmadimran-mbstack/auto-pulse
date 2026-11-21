@@ -57,35 +57,39 @@ def compute_publish_at(
     return publish_dt
 
 
-# Helper to compute upcoming post and draft timestamps in user timezone
+# Helper to compute upcoming post, approval, and draft timestamps in user timezone
 def calculate_next_schedule(profile) -> ScheduleResponse:
     if not profile or not profile.onboarding_complete or not profile.timezone or not profile.post_time or not profile.post_days:
-        return ScheduleResponse(next_draft_at=None, next_post_at=None)
+        return ScheduleResponse(
+            next_draft_at=None,
+            next_approval_at=None,
+            next_post_at=None,
+            approval_lead_minutes=getattr(profile, "approval_lead_minutes", 180) or 180 if profile else 180,
+            timezone=profile.timezone if profile else None,
+        )
 
-    try:
-        user_tz = zoneinfo.ZoneInfo(profile.timezone)
-    except Exception:
-        user_tz = datetime.timezone.utc
+    from app.services.schedule_timeline import compute_next_schedule_timeline
 
-    now = datetime.datetime.now(user_tz)
-    lead_minutes = settings.DRAFT_LEAD_MINUTES
+    tl = compute_next_schedule_timeline(profile)
+    if not tl:
+        return ScheduleResponse(
+            next_draft_at=None,
+            next_approval_at=None,
+            next_post_at=None,
+            approval_lead_minutes=getattr(profile, "approval_lead_minutes", 180) or 180,
+            timezone=profile.timezone,
+        )
 
-    # Search the next 8 days for the next active posting day
-    for day_offset in range(9):
-        candidate_date = (now + datetime.timedelta(days=day_offset)).date()
-        # In Python weekday(): 0 is Monday, 6 is Sunday
-        if candidate_date.weekday() in profile.post_days:
-            post_dt = datetime.datetime.combine(candidate_date, profile.post_time, tzinfo=user_tz)
-            if post_dt > now:
-                draft_dt = post_dt - datetime.timedelta(minutes=lead_minutes)
-                # Ensure draft timestamp is not in the past
-                effective_draft_dt = max(now, draft_dt)
-                return ScheduleResponse(
-                    next_draft_at=effective_draft_dt.isoformat(),
-                    next_post_at=post_dt.isoformat(),
-                )
-
-    return ScheduleResponse(next_draft_at=None, next_post_at=None)
+    return ScheduleResponse(
+        next_draft_at=tl.draft_local_iso,
+        next_approval_at=tl.approval_local_iso,
+        next_post_at=tl.publish_local_iso,
+        approval_lead_minutes=getattr(profile, "approval_lead_minutes", 180) or 180,
+        timezone=tl.timezone,
+        timezone_offset=tl.timezone_offset,
+        too_close=tl.too_close,
+        minutes_before_publish=tl.minutes_before_publish,
+    )
 
 
 # GET /posts: list caller's posts with keyset cursor pagination and optional status filter
