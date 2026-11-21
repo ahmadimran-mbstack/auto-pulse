@@ -33,6 +33,7 @@ export interface DocumentSummary {
   token_estimate?: number | null;
   enabled: boolean;
   duplicate: boolean;
+  item_count?: number;
   created_at: string;
   updated_at: string;
   processed_at?: string | null;
@@ -57,7 +58,9 @@ export interface FactView {
   category: string;
   text: string;
   numbers: string[];
+  evidence_quote?: string;
   source_label: string;
+  applies_to?: string | null;
   is_core: boolean;
   removed: boolean;
 }

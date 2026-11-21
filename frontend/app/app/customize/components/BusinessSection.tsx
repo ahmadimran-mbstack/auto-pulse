@@ -111,6 +111,7 @@ export function BusinessSection({
       </Section>
 
       <Section
+        id="business-documents-section"
         title="Business documents"
         description="Upload pitch decks (exported to PDF), one-pagers, case studies, or product docs."
       >

@@ -35,6 +35,7 @@ import {
   pasteCustomizationDocument,
   patchContextOverrides,
   patchCustomizationDocument,
+  patchCustomizationFact,
   patchPostSample,
   reprocessCustomizationDocument,
   triggerCustomizationCompile,
@@ -79,6 +80,12 @@ export function CustomizeClient() {
     rawTab && TABS.some((t) => t.id === rawTab) ? rawTab : "learned";
 
   const [inspectDocId, setInspectDocId] = React.useState<string | null>(null);
+  const lastInspectTriggerRef = React.useRef<HTMLElement | null>(null);
+  const handleInspectDoc = React.useCallback((doc: DocumentSummary) => {
+    lastInspectTriggerRef.current =
+      typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null;
+    setInspectDocId(doc.id);
+  }, []);
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [activeUploadsByKind, setActiveUploadsByKind] = React.useState<
     Record<DocumentKind, ActiveUploadItem[]>
@@ -231,6 +238,18 @@ export function CustomizeClient() {
     onError: (err: Error) => toast.error(err.message || "Failed to update sample."),
   });
 
+  const factMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: { is_core?: boolean; removed?: boolean } }) =>
+      patchCustomizationFact(id, payload),
+    onSuccess: () => {
+      if (inspectDocId) {
+        queryClient.invalidateQueries({ queryKey: customizationKeys.document(inspectDocId) });
+      }
+      invalidateAll();
+    },
+    onError: (err: Error) => toast.error(err.message || "Failed to update item."),
+  });
+
   const activateVersionMutation = useMutation({
     mutationFn: activateCustomizationVersion,
     onSuccess: () => {
@@ -371,7 +390,7 @@ export function CustomizeClient() {
             onToggleEnabled={(doc: DocumentSummary, enabled: boolean) =>
               toggleDocMutation.mutate({ id: doc.id, enabled })
             }
-            onInspect={(doc) => setInspectDocId(doc.id)}
+            onInspect={handleInspectDoc}
             onReprocess={(doc) => reprocessMutation.mutate(doc.id)}
             onDelete={(doc) => deleteMutation.mutate(doc.id)}
             isUploading={uploadMutation.isPending}
@@ -393,7 +412,7 @@ export function CustomizeClient() {
             onToggleEnabled={(doc, enabled) =>
               toggleDocMutation.mutate({ id: doc.id, enabled })
             }
-            onInspect={(doc) => setInspectDocId(doc.id)}
+            onInspect={handleInspectDoc}
             onReprocess={(doc) => reprocessMutation.mutate(doc.id)}
             onDelete={(doc) => deleteMutation.mutate(doc.id)}
             isUploading={uploadMutation.isPending}
@@ -416,7 +435,7 @@ export function CustomizeClient() {
             onToggleEnabled={(doc, enabled) =>
               toggleDocMutation.mutate({ id: doc.id, enabled })
             }
-            onInspect={(doc) => setInspectDocId(doc.id)}
+            onInspect={handleInspectDoc}
             onReprocess={(doc) => reprocessMutation.mutate(doc.id)}
             onDelete={(doc) => deleteMutation.mutate(doc.id)}
             isUploading={uploadMutation.isPending}
@@ -443,10 +462,31 @@ export function CustomizeClient() {
         onOpenChange={(open) => {
           if (!open) setInspectDocId(null);
         }}
+        onToggleEnabled={(doc, enabled) =>
+          toggleDocMutation.mutate({ id: doc.id, enabled })
+        }
+        onReprocess={(doc) => reprocessMutation.mutate(doc.id)}
+        onToggleFactCore={(id, is_core) =>
+          factMutation.mutate({ id, payload: { is_core } })
+        }
+        onToggleFactRemoved={(id, removed) =>
+          factMutation.mutate({ id, payload: { removed } })
+        }
         onToggleSamplePin={(id, pinned) => sampleMutation.mutate({ id, payload: { pinned } })}
         onToggleSampleExclude={(id, excluded) =>
           sampleMutation.mutate({ id, payload: { excluded } })
         }
+        onAddBusinessDocument={() => {
+          setInspectDocId(null);
+          handleTabChange("business");
+          setTimeout(() => {
+            document.getElementById("business-documents-section")?.scrollIntoView({ behavior: "smooth" });
+          }, 150);
+        }}
+        onReturnFocus={() => {
+          lastInspectTriggerRef.current?.focus();
+          lastInspectTriggerRef.current = null;
+        }}
       />
 
       <VersionHistorySheet

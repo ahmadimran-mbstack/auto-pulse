@@ -7,6 +7,7 @@ import type {
   DocumentDetail,
   DocumentKind,
   DocumentSummary,
+  FactView,
   PostSampleView,
   VersionSummary,
 } from "@/types/customization";
@@ -177,6 +178,16 @@ export async function patchPostSample(
   payload: { pinned?: boolean; excluded?: boolean }
 ): Promise<PostSampleView> {
   return apiCall<PostSampleView>(`/customization/samples/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function patchCustomizationFact(
+  id: string,
+  payload: { is_core?: boolean; removed?: boolean }
+): Promise<FactView> {
+  return apiCall<FactView>(`/customization/facts/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(payload),
   });

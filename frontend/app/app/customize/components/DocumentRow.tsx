@@ -132,14 +132,22 @@ export function DocumentRow({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  aria-label={`Inspect ${doc.title}`}
+                  aria-label={
+                    doc.item_count
+                      ? `Inspect ${doc.item_count} learned items`
+                      : `Inspect ${doc.title}`
+                  }
                   onClick={() => onInspect(doc)}
                   className="size-8"
                 >
                   <Eye className="size-4 stroke-[1.75]" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Inspect learned items</TooltipContent>
+              <TooltipContent>
+                {doc.item_count
+                  ? `Inspect ${doc.item_count} learned items`
+                  : "Inspect learned items"}
+              </TooltipContent>
             </Tooltip>
 
             {doc.status !== "failed" && (
