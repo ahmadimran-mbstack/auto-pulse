@@ -6,6 +6,8 @@ import { SiteHeader } from "@/components/site-header";
 import { useAppSidebarState } from "@/components/providers/sidebar-provider";
 import type { AppUser } from "@/components/providers/user-provider";
 import { clearClientState } from "@/lib/queries";
+import { subscribeReconnecting } from "@/lib/api";
+import { RefreshCw } from "lucide-react";
 
 export function AppShell({
   user,
@@ -15,6 +17,11 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const { open, isReady } = useAppSidebarState();
+  const [reconnecting, setReconnecting] = React.useState(false);
+
+  React.useEffect(() => {
+    return subscribeReconnecting(setReconnecting);
+  }, []);
 
   React.useEffect(() => {
     // 1. Detect if page is restored from browser back/forward cache (bfcache)
@@ -80,6 +87,16 @@ export function AppShell({
       {/* Main content column with 56px top header */}
       <div className="flex-1 flex flex-col min-w-0 w-full max-w-full">
         <SiteHeader />
+        {reconnecting && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex items-center justify-center gap-2 px-4 py-1.5 text-xs border-b border-status-warning-border bg-status-warning-bg text-status-warning-fg"
+          >
+            <RefreshCw className="size-4 stroke-[1.75] animate-spin" />
+            <span>Reconnecting to server...</span>
+          </div>
+        )}
         <main className="flex-1 w-full min-w-0 max-w-full bg-background">
           {children}
         </main>

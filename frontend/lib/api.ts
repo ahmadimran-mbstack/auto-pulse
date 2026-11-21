@@ -44,6 +44,115 @@ export function clearCachedToken(): void {
   tokenCache.clear();
 }
 
+// Lightweight connection/reconnecting indicator for transient auth or backend errors
+let _isReconnecting = false;
+const _reconnectingListeners = new Set<(reconnecting: boolean) => void>();
+
+export function setReconnecting(value: boolean): void {
+  if (_isReconnecting === value) return;
+  _isReconnecting = value;
+  for (const listener of _reconnectingListeners) {
+    try {
+      listener(value);
+    } catch {
+      // Ignore subscriber errors
+    }
+  }
+}
+
+export function subscribeReconnecting(listener: (reconnecting: boolean) => void): () => void {
+  _reconnectingListeners.add(listener);
+  listener(_isReconnecting);
+  return () => {
+    _reconnectingListeners.delete(listener);
+  };
+}
+
+let _inFlightSessionCheck: Promise<boolean> | null = null;
+let _signOutInProgress = false;
+
+// Checks with Neon Auth once whether the session is genuinely invalid.
+// Returns true ONLY when the auth server clearly reports no active session.
+// Returns false on network errors, timeouts, 5xx, or when a valid session still exists.
+async function confirmSessionInvalid(): Promise<boolean> {
+  if (_inFlightSessionCheck) {
+    return _inFlightSessionCheck;
+  }
+
+  _inFlightSessionCheck = (async () => {
+    try {
+      const res = await authClient.getSession();
+      const errStatus = (res as { error?: { status?: number } })?.error?.status;
+      if (typeof errStatus === "number" && errStatus >= 500) {
+        return false;
+      }
+      if (res?.data?.user) {
+        return false;
+      }
+      if (errStatus === 401 || (res && !res.error && res.data === null)) {
+        return true;
+      }
+      return false;
+    } catch {
+      // Network error or timeout contacting auth server: keep user on page
+      return false;
+    } finally {
+      _inFlightSessionCheck = null;
+    }
+  })();
+
+  return _inFlightSessionCheck;
+}
+
+async function handleUnauthorizedOrMissingToken(params: {
+  reason: "missing_token" | "backend_401";
+  url: string;
+  status: number;
+}): Promise<never> {
+  const { reason, url, status } = params;
+  clearCachedToken();
+
+  const isInvalid = await confirmSessionInvalid();
+  if (!isInvalid) {
+    setReconnecting(true);
+    throw new ApiClientError(503, {
+      code: "reconnecting",
+      message: "Reconnecting to your session...",
+    });
+  }
+
+  console.info(
+    `[AUTH_SIGN_OUT] reason=${reason} code=invalid_session url=${url} status=${status}`
+  );
+
+  if (!_signOutInProgress) {
+    _signOutInProgress = true;
+    try {
+      await authClient.signOut();
+    } catch {
+      // Ignore cleanup error if already signed out
+    }
+    if (typeof window !== "undefined") {
+      try {
+        const theme = localStorage.getItem("theme");
+        const nextTheme = localStorage.getItem("next-theme");
+        localStorage.clear();
+        sessionStorage.clear();
+        if (theme) localStorage.setItem("theme", theme);
+        if (nextTheme) localStorage.setItem("next-theme", nextTheme);
+      } catch {
+        // Storage access may be restricted
+      }
+      window.location.replace("/auth/sign-in");
+    }
+  }
+
+  throw new ApiClientError(401, {
+    code: "unauthorized",
+    message: "Your session is no longer valid. Please sign in again.",
+  });
+}
+
 // Retrieves a fresh token using tokenCache manager
 // Reuses token until 60 seconds before expiration; shares in-flight requests
 export async function getFreshToken(forceRefresh: boolean = false): Promise<string | null> {
@@ -95,37 +204,19 @@ export async function apiCall<T>(
 ): Promise<T> {
   const token = await getFreshToken(isRetry);
 
-  // If no token exists, the user session is expired
-  if (!token) {
-    clearCachedToken();
-    try {
-      await authClient.signOut();
-    } catch {
-      // Ignore cleanup error if already signed out
-    }
-    if (typeof window !== "undefined") {
-      try {
-        const theme = localStorage.getItem("theme");
-        const nextTheme = localStorage.getItem("next-theme");
-        localStorage.clear();
-        sessionStorage.clear();
-        if (theme) localStorage.setItem("theme", theme);
-        if (nextTheme) localStorage.setItem("next-theme", nextTheme);
-      } catch {
-        // Storage access may be restricted
-      }
-      // Hard replace navigation to sign-in on session invalidation
-      window.location.replace("/auth/sign-in");
-    }
-    throw new ApiClientError(401, {
-      code: "unauthorized",
-      message: "Your session is no longer valid. Please sign in again.",
-    });
-  }
-
   const baseApiUrl = env.apiUrl.replace(/\/+$/, "");
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   const url = `${baseApiUrl}${normalizedPath}`;
+
+  // If no token exists, verify with auth server before deciding whether to sign out or reconnect
+  if (!token) {
+    return handleUnauthorizedOrMissingToken({
+      reason: "missing_token",
+      url,
+      status: 401,
+    });
+  }
+
   const headers = new Headers(options.headers || {});
   headers.set("Authorization", `Bearer ${token}`);
   // Do not set Content-Type header when sending FormData so the browser sets the boundary automatically
@@ -147,6 +238,7 @@ export async function apiCall<T>(
     });
   } catch {
     // Network errors or connection failures
+    setReconnecting(true);
     throw new ApiClientError(503, {
       code: "service_unavailable",
       message: "We can't reach the server right now. Try again in a moment.",
@@ -160,29 +252,17 @@ export async function apiCall<T>(
       return apiCall<T>(path, options, true);
     }
 
-    try {
-      await authClient.signOut();
-    } catch {
-      // Ignore cleanup error
-    }
-    if (typeof window !== "undefined") {
-      try {
-        const theme = localStorage.getItem("theme");
-        const nextTheme = localStorage.getItem("next-theme");
-        localStorage.clear();
-        sessionStorage.clear();
-        if (theme) localStorage.setItem("theme", theme);
-        if (nextTheme) localStorage.setItem("next-theme", nextTheme);
-      } catch {
-        // Storage access may be restricted
-      }
-      // Hard replace navigation to sign-in on session invalidation
-      window.location.replace("/auth/sign-in");
-    }
-    throw new ApiClientError(401, {
-      code: "unauthorized",
-      message: "Your session is no longer valid. Please sign in again.",
+    return handleUnauthorizedOrMissingToken({
+      reason: "backend_401",
+      url,
+      status: response.status,
     });
+  }
+
+  if (response.status >= 500) {
+    setReconnecting(true);
+  } else if (response.ok) {
+    setReconnecting(false);
   }
 
   // Handle 429 Rate Limited with Retry-After header support
@@ -391,34 +471,17 @@ export async function fetchPostImageBlob(
 ): Promise<Blob> {
   const token = await getFreshToken(isRetry);
 
+  const baseApiUrl = env.apiUrl.replace(/\/+$/, "");
+  const url = `${baseApiUrl}/posts/${id}/image.png?w=${width}`;
+
   if (!token) {
-    clearCachedToken();
-    try {
-      await authClient.signOut();
-    } catch {
-      // Ignore cleanup error if already signed out
-    }
-    if (typeof window !== "undefined") {
-      try {
-        const theme = localStorage.getItem("theme");
-        const nextTheme = localStorage.getItem("next-theme");
-        localStorage.clear();
-        sessionStorage.clear();
-        if (theme) localStorage.setItem("theme", theme);
-        if (nextTheme) localStorage.setItem("next-theme", nextTheme);
-      } catch {
-        // Storage access may be restricted
-      }
-      window.location.replace("/auth/sign-in");
-    }
-    throw new ApiClientError(401, {
-      code: "unauthorized",
-      message: "Your session is no longer valid. Please sign in again.",
+    return handleUnauthorizedOrMissingToken({
+      reason: "missing_token",
+      url,
+      status: 401,
     });
   }
 
-  const baseApiUrl = env.apiUrl.replace(/\/+$/, "");
-  const url = `${baseApiUrl}/posts/${id}/image.png?w=${width}`;
   let response: Response;
   try {
     response = await fetch(url, {
@@ -428,6 +491,7 @@ export async function fetchPostImageBlob(
       },
     });
   } catch {
+    setReconnecting(true);
     throw new ApiClientError(503, {
       code: "service_unavailable",
       message: "We can't reach the server right now. Try again in a moment.",
@@ -439,27 +503,10 @@ export async function fetchPostImageBlob(
     if (!isRetry) {
       return fetchPostImageBlob(id, width, true);
     }
-    try {
-      await authClient.signOut();
-    } catch {
-      // Ignore cleanup error
-    }
-    if (typeof window !== "undefined") {
-      try {
-        const theme = localStorage.getItem("theme");
-        const nextTheme = localStorage.getItem("next-theme");
-        localStorage.clear();
-        sessionStorage.clear();
-        if (theme) localStorage.setItem("theme", theme);
-        if (nextTheme) localStorage.setItem("next-theme", nextTheme);
-      } catch {
-        // Storage access may be restricted
-      }
-      window.location.replace("/auth/sign-in");
-    }
-    throw new ApiClientError(401, {
-      code: "unauthorized",
-      message: "Your session is no longer valid. Please sign in again.",
+    return handleUnauthorizedOrMissingToken({
+      reason: "backend_401",
+      url,
+      status: response.status,
     });
   }
 
