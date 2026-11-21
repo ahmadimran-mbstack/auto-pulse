@@ -53,4 +53,8 @@ export const env = {
     }
     return value;
   },
+  // TEST_LAB_REMOVE: Development-only Test Lab frontend gate (defaults to false)
+  get enableTestLab(): boolean {
+    return process.env.NEXT_PUBLIC_ENABLE_TEST_LAB === "true";
+  },
 };

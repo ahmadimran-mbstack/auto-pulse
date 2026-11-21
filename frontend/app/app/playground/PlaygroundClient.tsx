@@ -14,6 +14,7 @@ import {
   Globe,
   Users,
   CheckCircle2,
+  FlaskConical, // TEST_LAB_REMOVE
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -38,6 +39,8 @@ import { StatusBadge } from "@/components/app/StatusBadge";
 import { RichPostEditor } from "./components/RichPostEditor";
 import { AgentPlayground } from "./components/AgentPlayground";
 import { PlatformLabel } from "@/components/app/PlatformLabel";
+import { env } from "@/lib/env"; // TEST_LAB_REMOVE
+import { TestLabPanel } from "@/features/test-lab/TestLabPanel"; // TEST_LAB_REMOVE
 import {
   useLinkedInStatusQuery,
   usePostToLinkedInMutation,
@@ -122,11 +125,16 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
   });
 
   // Keep the active Playground tab synced with the URL ?tab= parameter
-  const activeTab: "agents" | "composer" =
-    searchParams.get("tab") === "composer" ? "composer" : "agents";
+  const rawTab = searchParams.get("tab");
+  const activeTab: "agents" | "composer" | "test-lab" =
+    rawTab === "composer"
+      ? "composer"
+      : env.enableTestLab && rawTab === "test-lab" // TEST_LAB_REMOVE
+        ? "test-lab"
+        : "agents";
 
   const handleTabChange = React.useCallback(
-    (nextTab: "agents" | "composer") => {
+    (nextTab: "agents" | "composer" | "test-lab") => {
       const params = new URLSearchParams(searchParams.toString());
       params.set("tab", nextTab);
       router.push(`${pathname}?${params.toString()}`, { scroll: false });
@@ -410,17 +418,34 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
 
       <Tabs
         value={activeTab}
-        onValueChange={(val) => handleTabChange(val as "agents" | "composer")}
+        onValueChange={(val) => handleTabChange(val as "agents" | "composer" | "test-lab")}
         className="w-full flex flex-col gap-4"
       >
         <AppTabsList>
           <AppTabsTrigger value="agents">Write with Agents</AppTabsTrigger>
           <AppTabsTrigger value="composer">LinkedIn Composer</AppTabsTrigger>
+          {/* TEST_LAB_REMOVE */}
+          {env.enableTestLab && (
+            <AppTabsTrigger value="test-lab" className="gap-1.5">
+              <FlaskConical className="size-4 stroke-[1.75]" />
+              <span>Test Lab</span>
+              <span className="inline-flex items-center rounded-full border border-status-warning-border bg-status-warning-bg px-2 py-0.5 text-[11px] font-medium text-status-warning-fg leading-none">
+                Development only
+              </span>
+            </AppTabsTrigger>
+          )}
         </AppTabsList>
 
         <TabsContent value="agents" className="mt-4">
           <AgentPlayground userId={user.id} onUseInComposer={handleUseInComposer} />
         </TabsContent>
+
+        {/* TEST_LAB_REMOVE */}
+        {env.enableTestLab && (
+          <TabsContent value="test-lab" className="mt-4">
+            <TestLabPanel />
+          </TabsContent>
+        )}
 
         <TabsContent value="composer" className="space-y-6 mt-4">
           {/* Success banner shown after publishing */}
