@@ -22,20 +22,30 @@ import type {
   RunResponse,
 } from "../types/posts";
 
-// Error class carrying HTTP status code, optional per-field validation errors, and retry-after header
+// Error class carrying HTTP status code, optional per-field validation errors, retry-after header, and request URL
 export class ApiClientError extends Error {
   status: number;
   code: string;
   fields?: Record<string, string>;
   retryAfter?: string | null;
+  requestUrl?: string;
+  isNetworkError?: boolean;
 
-  constructor(status: number, error: ApiError, retryAfter?: string | null) {
+  constructor(
+    status: number,
+    error: ApiError,
+    retryAfter?: string | null,
+    requestUrl?: string,
+    isNetworkError?: boolean
+  ) {
     super(error.message);
     this.name = "ApiClientError";
     this.status = status;
     this.code = error.code;
     this.fields = error.fields;
     this.retryAfter = retryAfter ?? null;
+    this.requestUrl = requestUrl;
+    this.isNetworkError = Boolean(isNetworkError);
   }
 }
 
@@ -68,13 +78,14 @@ export function subscribeReconnecting(listener: (reconnecting: boolean) => void)
   };
 }
 
-let _inFlightSessionCheck: Promise<boolean> | null = null;
+type AuthSessionCheckResult = "valid" | "invalid" | "network_error";
+let _inFlightSessionCheck: Promise<AuthSessionCheckResult> | null = null;
 let _signOutInProgress = false;
 
 // Checks with Neon Auth once whether the session is genuinely invalid.
-// Returns true ONLY when the auth server clearly reports no active session.
-// Returns false on network errors, timeouts, 5xx, or when a valid session still exists.
-async function confirmSessionInvalid(): Promise<boolean> {
+// Returns "invalid" ONLY when the auth server clearly reports no active session.
+// Returns "network_error" on network failures/5xx, or "valid" if a user session exists.
+async function checkAuthSessionState(): Promise<AuthSessionCheckResult> {
   if (_inFlightSessionCheck) {
     return _inFlightSessionCheck;
   }
@@ -84,18 +95,17 @@ async function confirmSessionInvalid(): Promise<boolean> {
       const res = await authClient.getSession();
       const errStatus = (res as { error?: { status?: number } })?.error?.status;
       if (typeof errStatus === "number" && errStatus >= 500) {
-        return false;
+        return "network_error";
       }
       if (res?.data?.user) {
-        return false;
+        return "valid";
       }
       if (errStatus === 401 || (res && !res.error && res.data === null)) {
-        return true;
+        return "invalid";
       }
-      return false;
+      return "network_error";
     } catch {
-      // Network error or timeout contacting auth server: keep user on page
-      return false;
+      return "network_error";
     } finally {
       _inFlightSessionCheck = null;
     }
@@ -112,15 +122,39 @@ async function handleUnauthorizedOrMissingToken(params: {
   const { reason, url, status } = params;
   clearCachedToken();
 
-  const isInvalid = await confirmSessionInvalid();
-  if (!isInvalid) {
+  const sessionState = await checkAuthSessionState();
+  if (sessionState === "network_error") {
     setReconnecting(true);
-    throw new ApiClientError(503, {
-      code: "reconnecting",
-      message: "Reconnecting to your session...",
-    });
+    throw new ApiClientError(
+      0,
+      {
+        code: "network_error",
+        message: "Unable to reach the authentication server. Try again in a moment.",
+      },
+      null,
+      url,
+      true
+    );
   }
 
+  if (sessionState === "valid") {
+    setReconnecting(false);
+    throw new ApiClientError(
+      401,
+      {
+        code: reason === "backend_401" ? "backend_unauthorized" : "token_unavailable",
+        message:
+          reason === "backend_401"
+            ? "The server rejected your session token. Please try again or sign in again."
+            : "Could not obtain an API access token. Please try again.",
+      },
+      null,
+      url,
+      false
+    );
+  }
+
+  setReconnecting(false);
   console.info(
     `[AUTH_SIGN_OUT] reason=${reason} code=invalid_session url=${url} status=${status}`
   );
@@ -147,10 +181,16 @@ async function handleUnauthorizedOrMissingToken(params: {
     }
   }
 
-  throw new ApiClientError(401, {
-    code: "unauthorized",
-    message: "Your session is no longer valid. Please sign in again.",
-  });
+  throw new ApiClientError(
+    401,
+    {
+      code: "unauthorized",
+      message: "Your session is no longer valid. Please sign in again.",
+    },
+    null,
+    url,
+    false
+  );
 }
 
 // Retrieves a fresh token using tokenCache manager
@@ -237,13 +277,22 @@ export async function apiCall<T>(
       headers,
     });
   } catch {
-    // Network errors or connection failures
+    // Real network error or connection failure
     setReconnecting(true);
-    throw new ApiClientError(503, {
-      code: "service_unavailable",
-      message: "We can't reach the server right now. Try again in a moment.",
-    });
+    throw new ApiClientError(
+      0,
+      {
+        code: "network_error",
+        message: "We can't reach the server right now. Try again in a moment.",
+      },
+      null,
+      url,
+      true
+    );
   }
+
+  // Any HTTP response means the server is reachable
+  setReconnecting(false);
 
   // Handle 401 Unauthorized: clear cached token and retry once
   if (response.status === 401) {
@@ -259,12 +308,6 @@ export async function apiCall<T>(
     });
   }
 
-  if (response.status >= 500) {
-    setReconnecting(true);
-  } else if (response.ok) {
-    setReconnecting(false);
-  }
-
   // Handle 429 Rate Limited with Retry-After header support
   if (response.status === 429) {
     const retryAfter = response.headers.get("Retry-After");
@@ -276,27 +319,38 @@ export async function apiCall<T>(
         code: errorObj.code || "rate_limited",
         message: errorObj.message || "Too many requests. Please try again in a moment.",
       },
-      retryAfter
+      retryAfter,
+      url
     );
   }
 
   // Handle 503 Service Unavailable
   if (response.status === 503) {
-    throw new ApiClientError(503, {
-      code: "service_unavailable",
-      message: "We can't reach the server right now. Try again in a moment.",
-    });
+    throw new ApiClientError(
+      503,
+      {
+        code: "service_unavailable",
+        message: "We can't reach the server right now. Try again in a moment.",
+      },
+      null,
+      url
+    );
   }
 
   // Handle 422 Unprocessable Content with field-level validation messages
   if (response.status === 422) {
     const json = await response.json().catch(() => ({}));
     const errorObj = json?.error || {};
-    throw new ApiClientError(422, {
-      code: errorObj.code || "validation_error",
-      message: errorObj.message || "Some fields need fixing.",
-      fields: errorObj.fields || {},
-    });
+    throw new ApiClientError(
+      422,
+      {
+        code: errorObj.code || "validation_error",
+        message: errorObj.message || "Some fields need fixing.",
+        fields: errorObj.fields || {},
+      },
+      null,
+      url
+    );
   }
 
   // Handle any other non-2xx response
@@ -309,10 +363,15 @@ export async function apiCall<T>(
         : typeof json?.detail?.message === "string"
         ? json.detail.message
         : undefined;
-    throw new ApiClientError(response.status, {
-      code: errorObj.code || json?.detail?.code || "api_error",
-      message: errorObj.message || detailMsg || "An unexpected error occurred.",
-    });
+    throw new ApiClientError(
+      response.status,
+      {
+        code: errorObj.code || json?.detail?.code || "api_error",
+        message: errorObj.message || detailMsg || "An unexpected error occurred.",
+      },
+      null,
+      url
+    );
   }
 
   // Handle 204 No Content responses which carry an empty body

@@ -1,12 +1,15 @@
 // TanStack Query v5 centralized cache, query keys, hooks, and prefetchers
 // In-memory cache only; keys are strictly namespaced by the signed-in user id
 import {
+  QueryCache,
   QueryClient,
   useQuery,
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
 import {
+  ApiClientError,
+  setReconnecting,
   getDashboard,
   getPosts,
   getPost,
@@ -52,23 +55,25 @@ import type {
 
 // Central in-memory QueryClient instance
 export const queryClient = new QueryClient({
+  queryCache: new QueryCache({
+    onError: () => {
+      // Once retries are exhausted and the query enters an error state, stop showing the reconnecting banner
+      setReconnecting(false);
+    },
+  }),
   defaultOptions: {
     queries: {
       staleTime: 30_000,
       gcTime: 5 * 60_000,
       refetchOnWindowFocus: false,
       retry: (failureCount, error: unknown) => {
-        // Do not retry 401 or 404 client errors
-        if (
-          error &&
-          typeof error === "object" &&
-          "status" in error &&
-          (error.status === 401 || error.status === 404)
-        ) {
-          return false;
+        // Retry only real network failures up to 3 times with increasing wait
+        if (error instanceof ApiClientError && error.isNetworkError) {
+          return failureCount < 3;
         }
-        return failureCount < 2;
+        return false;
       },
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 8000),
     },
   },
 });
