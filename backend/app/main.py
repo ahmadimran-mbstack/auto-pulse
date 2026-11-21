@@ -30,6 +30,7 @@ from app.api.routes.slack import (
     api_integrations_router as slack_api_integrations_router,
 )
 from app.core.config import settings
+from app.test_lab.router import router as test_lab_router  # TEST_LAB_REMOVE
 
 # Configure server logging based on LOG_LEVEL
 log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
@@ -233,6 +234,7 @@ app.include_router(slack_router)
 app.include_router(slack_integrations_router)
 app.include_router(slack_api_router)
 app.include_router(slack_api_integrations_router)
+app.include_router(test_lab_router)  # TEST_LAB_REMOVE
 
 
 @app.on_event("startup")
@@ -337,6 +339,15 @@ def _run_scheduler_cycle():
         except Exception as exc:
             db.rollback()
             logger.error(f"Error in automated publishing cycle: {exc}")
+
+        # TEST_LAB_REMOVE: Run due Test Lab steps on the existing 60s scheduler tick
+        if settings.ENABLE_TEST_LAB:
+            try:
+                from app.test_lab.service import process_due_test_lab_runs
+                process_due_test_lab_runs(db)
+            except Exception as exc:
+                db.rollback()
+                logger.error(f"Error in Test Lab scheduler cycle: {exc}")
 
 
 @app.on_event("startup")

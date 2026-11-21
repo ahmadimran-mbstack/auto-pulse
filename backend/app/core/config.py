@@ -89,6 +89,10 @@ class Settings(BaseSettings):
     # Master switch for pipeline execution
     GENERATION_ENABLED: bool = True
 
+    # TEST_LAB_REMOVE: Development-only Test Lab feature flag and allowlist
+    ENABLE_TEST_LAB: bool = True
+    TEST_LAB_ALLOWED_EMAILS: str = ""
+
     # Day 5: Email delivery settings
     EMAIL_API_KEY: Optional[str] = None
     EMAIL_FROM: str = "AutoPulse <noreply@autopulse.app>"
