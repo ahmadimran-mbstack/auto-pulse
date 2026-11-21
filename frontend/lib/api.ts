@@ -92,7 +92,9 @@ async function checkAuthSessionState(): Promise<AuthSessionCheckResult> {
 
   _inFlightSessionCheck = (async () => {
     try {
-      const res = await authClient.getSession();
+      const res = await authClient.getSession({
+        query: { disableCookieCache: "true" },
+      } as Parameters<typeof authClient.getSession>[0]);
       const errStatus = (res as { error?: { status?: number } })?.error?.status;
       if (typeof errStatus === "number" && errStatus >= 500) {
         return "network_error";
@@ -212,10 +214,37 @@ export async function getFreshToken(forceRefresh: boolean = false): Promise<stri
       console.warn("authClient.token() error:", err);
     }
 
-    // Method 2: Fallback to reading set-auth-jwt response header from getSession
+    // Method 2: Bypass Neon Auth local cookie cache so upstream returns a fresh set-auth-jwt header
+    if (typeof window !== "undefined") {
+      try {
+        const res = await fetch("/api/auth/get-session?disableCookieCache=true", {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+        });
+        const jwtHeader = res.headers.get("set-auth-jwt");
+        if (jwtHeader) {
+          return jwtHeader;
+        }
+        if (res.ok) {
+          const json = (await res.json().catch(() => null)) as {
+            session?: { token?: string };
+          } | null;
+          const bodyToken = json?.session?.token;
+          if (bodyToken && bodyToken.split(".").length === 3) {
+            return bodyToken;
+          }
+        }
+      } catch (err) {
+        console.warn("/api/auth/get-session?disableCookieCache=true fallback error:", err);
+      }
+    }
+
+    // Method 3: Fallback to authClient.getSession onSuccess header
     try {
       let headerToken: string | null = null;
       await authClient.getSession({
+        query: { disableCookieCache: "true" },
         fetchOptions: {
           onSuccess: (ctx: { response?: { headers?: Headers } }) => {
             const jwt = ctx.response?.headers?.get("set-auth-jwt");
@@ -224,7 +253,7 @@ export async function getFreshToken(forceRefresh: boolean = false): Promise<stri
             }
           },
         },
-      });
+      } as Parameters<typeof authClient.getSession>[0]);
       if (headerToken) {
         return headerToken;
       }

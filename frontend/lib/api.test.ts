@@ -112,4 +112,26 @@ describe("apiCall session and reconnecting behavior", () => {
     });
     expect(mockSignOut).toHaveBeenCalledTimes(1);
   });
+
+  it("retrieves set-auth-jwt via disableCookieCache when authClient.token() returns null", async () => {
+    vi.stubGlobal("window", { location: { replace: vi.fn() } });
+    mockToken.mockResolvedValue({ data: null });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/auth/get-session?disableCookieCache=true")) {
+          return new Response(JSON.stringify({ user: { id: "u1" } }), {
+            status: 200,
+            headers: { "set-auth-jwt": "header-jwt-abc" },
+          });
+        }
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      })
+    );
+
+    const res = await apiCall<{ ok: boolean }>("/dashboard");
+    expect(res.ok).toBe(true);
+    vi.unstubAllGlobals();
+  });
 });
