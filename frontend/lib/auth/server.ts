@@ -5,6 +5,12 @@ import { getServerEnv } from "@/lib/env";
 
 const { NEON_AUTH_BASE_URL, NEON_AUTH_COOKIE_SECRET } = getServerEnv();
 
+try {
+  console.info(`[NEON_AUTH] Server auth configured for origin: ${new URL(NEON_AUTH_BASE_URL).origin}`);
+} catch {
+  console.warn("[NEON_AUTH] NEON_AUTH_BASE_URL is not a valid URL");
+}
+
 // Safe Next.js request context:
 // In Next.js Server Components, cookies() is read-only.
 // When an unauthenticated or expired session check occurs, upstream Neon Auth

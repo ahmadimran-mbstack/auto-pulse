@@ -109,6 +109,9 @@ async function executeWithOriginFallback(
         (data.code === "INVALID_ORIGIN" ||
           (typeof data.message === "string" && data.message.toLowerCase().includes("origin")))
       ) {
+        console.warn(
+          `[NEON_AUTH] Untrusted origin rejected (status=403, origin=${sanitizedReq.headers.get("origin") || "unknown"}). Add this origin to Trusted Domains in the Neon Auth console.`
+        );
         const retryReq = await sanitizeAuthRequest(request, "http://localhost:3000");
         res = await handler(retryReq, context);
       }

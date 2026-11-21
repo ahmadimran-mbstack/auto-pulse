@@ -12,6 +12,7 @@ export function useSignOut() {
     e?.preventDefault();
     if (isSigningOut) return;
     setIsSigningOut(true);
+    console.info("[AUTH_SIGN_OUT] reason=manual_user_action code=user_sign_out url=/api/auth/sign-out status=200");
 
     try {
       // 1. Direct fetch to /api/auth/sign-out route handler with credentials to ensure HTTP Set-Cookie headers
