@@ -65,3 +65,4 @@ docs/customization-module.md
 # Local object storage (dev)
 .storage/
 backend/.storage/
+frontend/test-results/.last-run.json
