@@ -330,3 +330,80 @@ def send_skipped_notice_email(
     msg.add_alternative(html_content, subtype="html")
     send_smtp_message(msg)
 
+
+
+def send_spend_alert_email(
+    to_email: str,
+    user_email: str,
+    plan_id: str,
+    spend_usd: float,
+    limit_usd: float,
+) -> None:
+    """Alert ops once per user per day when a user hits their plan's daily spend limit."""
+    subject = f"[AutoPulse Alert] Daily spend limit reached: {user_email} ({plan_id})"
+    plain_text = (
+        f"User {user_email} on plan '{plan_id}' hit their daily spend limit.\n\n"
+        f"Today's spend: ${spend_usd:.4f}\n"
+        f"Daily limit:   ${limit_usd:.2f}\n\n"
+        f"Further runs for this user are blocked for the rest of their local day."
+    )
+    html_content = f"""<!DOCTYPE html>
+<html><body style="margin:0;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0b0f19;color:#f8fafc;">
+  <div style="max-width:560px;margin:0 auto;background:#111827;border:1px solid #1f2937;border-radius:12px;padding:28px;">
+    <h2 style="margin-top:0;font-size:18px;color:#f87171;">Daily Spend Limit Reached</h2>
+    <p style="color:#cbd5e1;font-size:14px;">User <strong>{html.escape(user_email)}</strong> (plan: <strong>{html.escape(plan_id)}</strong>) reached their daily spend limit.</p>
+    <p style="color:#cbd5e1;font-size:14px;">Today's spend: <strong>${spend_usd:.4f}</strong> / Limit: <strong>${limit_usd:.2f}</strong></p>
+  </div>
+</body></html>"""
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = settings.EMAIL_FROM
+    msg["To"] = to_email
+    msg.set_content(plain_text)
+    msg.add_alternative(html_content, subtype="html")
+    send_smtp_message(msg)
+
+
+def send_subscription_reminder_email(
+    to_email: str,
+    display_name: str,
+    reminder_type: str,
+    plan_name: str,
+    target_date_str: str,
+) -> None:
+    """Send trial (1d) or renewal (5d, 1d) reminder email."""
+    billing_url = f"{settings.APP_BASE_URL.rstrip('/')}/app/billing"
+    if reminder_type == "trial_1d":
+        subject = "Your AutoPulse free trial ends tomorrow"
+        headline = "1 day left in your free trial"
+        body_line = f"Your 3-day AutoPulse free trial ends on {target_date_str}. Choose a plan to keep your scheduled LinkedIn posts running."
+    elif reminder_type == "renewal_1d":
+        subject = f"Your AutoPulse {plan_name} plan renews tomorrow"
+        headline = "1 day until plan renewal"
+        body_line = f"Your AutoPulse {plan_name} plan period ends on {target_date_str}."
+    else:
+        subject = f"Your AutoPulse {plan_name} plan renews in 5 days"
+        headline = "5 days until plan renewal"
+        body_line = f"Your AutoPulse {plan_name} plan period ends on {target_date_str}."
+
+    plain_text = (
+        f"Hi {display_name},\n\n"
+        f"{body_line}\n\n"
+        f"Manage your plan:\n{billing_url}\n"
+    )
+    html_content = f"""<!DOCTYPE html>
+<html><body style="margin:0;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0b0f19;color:#f8fafc;">
+  <div style="max-width:560px;margin:0 auto;background:#111827;border:1px solid #1f2937;border-radius:12px;padding:28px;">
+    <h2 style="margin-top:0;font-size:18px;color:#f8fafc;">{html.escape(headline)}</h2>
+    <p style="color:#cbd5e1;font-size:14px;">Hi {html.escape(display_name)},</p>
+    <p style="color:#cbd5e1;font-size:14px;">{html.escape(body_line)}</p>
+    <div style="margin-top:20px;"><a href="{billing_url}" style="display:inline-block;background:#0284c7;color:#fff;text-decoration:none;padding:12px 22px;font-size:14px;font-weight:600;border-radius:8px;">View Plan &amp; Billing</a></div>
+  </div>
+</body></html>"""
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = settings.EMAIL_FROM
+    msg["To"] = to_email
+    msg.set_content(plain_text)
+    msg.add_alternative(html_content, subtype="html")
+    send_smtp_message(msg)

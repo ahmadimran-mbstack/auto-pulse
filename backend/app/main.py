@@ -13,6 +13,7 @@ from app.api.routes.health import router as health_router
 from app.api.routes.account import router as account_router
 from app.api.routes.auth_limits import router as auth_limits_router
 from app.api.routes.me import router as me_router
+from app.api.routes.plans import router as plans_router
 from app.api.routes.profile import router as profile_router
 from app.api.routes.connections import router as connections_router
 from app.api.routes.posts import router as posts_router
@@ -235,6 +236,7 @@ app.include_router(slack_integrations_router)
 app.include_router(slack_api_router)
 app.include_router(slack_api_integrations_router)
 app.include_router(test_lab_router)  # TEST_LAB_REMOVE
+app.include_router(plans_router)
 
 
 @app.on_event("startup")
@@ -339,6 +341,13 @@ def _run_scheduler_cycle():
         except Exception as exc:
             db.rollback()
             logger.error(f"Error in automated publishing cycle: {exc}")
+
+        try:
+            from app.services.reminders import send_due_subscription_reminders
+            send_due_subscription_reminders(db)
+        except Exception as exc:
+            db.rollback()
+            logger.error(f"Error in subscription reminders cycle: {exc}")
 
         # TEST_LAB_REMOVE: Run due Test Lab steps on the existing 60s scheduler tick
         if settings.ENABLE_TEST_LAB:
