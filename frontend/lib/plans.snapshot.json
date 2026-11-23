@@ -1,0 +1,108 @@
+{
+  "_note": "Generated from backend/app/core/plans.py by backend/scripts/export_plans_snapshot.py. Do not edit by hand.",
+  "currency": "USD",
+  "pkr_per_usd": 280,
+  "annual_discount": 0.05,
+  "plans": [
+    {
+      "id": "trial",
+      "name": "Free trial",
+      "monthly_price_usd": 0.0,
+      "monthly_price_pkr_approx": 0,
+      "annual_price_usd": null,
+      "annual_price_pkr_approx": null,
+      "annual_monthly_equivalent_usd": null,
+      "annual_monthly_equivalent_pkr_approx": null,
+      "plan_length_days": 3,
+      "limits": {
+        "linkedin_profiles": 1,
+        "scheduled_posts": 3,
+        "playground_runs": 2,
+        "playground_runs_per_day": 2,
+        "max_post_days_per_week": 3
+      },
+      "features": {
+        "approval_email": true,
+        "approval_slack": false,
+        "docs_token_limit": 0,
+        "analytics_level": "none",
+        "support": "help docs"
+      }
+    },
+    {
+      "id": "starter",
+      "name": "Starter",
+      "monthly_price_usd": 9.99,
+      "monthly_price_pkr_approx": 2797,
+      "annual_price_usd": 113.88,
+      "annual_price_pkr_approx": 31886,
+      "annual_monthly_equivalent_usd": 9.49,
+      "annual_monthly_equivalent_pkr_approx": 2657,
+      "plan_length_days": 30,
+      "limits": {
+        "linkedin_profiles": 1,
+        "scheduled_posts": 12,
+        "playground_runs": 3,
+        "playground_runs_per_day": 2,
+        "max_post_days_per_week": 3
+      },
+      "features": {
+        "approval_email": true,
+        "approval_slack": false,
+        "docs_token_limit": 0,
+        "analytics_level": "basic",
+        "support": "email"
+      }
+    },
+    {
+      "id": "pro",
+      "name": "Pro",
+      "monthly_price_usd": 19.99,
+      "monthly_price_pkr_approx": 5597,
+      "annual_price_usd": 227.88,
+      "annual_price_pkr_approx": 63806,
+      "annual_monthly_equivalent_usd": 18.99,
+      "annual_monthly_equivalent_pkr_approx": 5317,
+      "plan_length_days": 30,
+      "limits": {
+        "linkedin_profiles": 1,
+        "scheduled_posts": 22,
+        "playground_runs": 5,
+        "playground_runs_per_day": 3,
+        "max_post_days_per_week": 5
+      },
+      "features": {
+        "approval_email": true,
+        "approval_slack": true,
+        "docs_token_limit": 5000,
+        "analytics_level": "full",
+        "support": "email"
+      }
+    },
+    {
+      "id": "business",
+      "name": "Business",
+      "monthly_price_usd": 39.99,
+      "monthly_price_pkr_approx": 11197,
+      "annual_price_usd": 455.88,
+      "annual_price_pkr_approx": 127646,
+      "annual_monthly_equivalent_usd": 37.99,
+      "annual_monthly_equivalent_pkr_approx": 10637,
+      "plan_length_days": 30,
+      "limits": {
+        "linkedin_profiles": 1,
+        "scheduled_posts": 30,
+        "playground_runs": 15,
+        "playground_runs_per_day": 5,
+        "max_post_days_per_week": 7
+      },
+      "features": {
+        "approval_email": true,
+        "approval_slack": true,
+        "docs_token_limit": 10000,
+        "analytics_level": "full",
+        "support": "email, answered first"
+      }
+    }
+  ]
+}
