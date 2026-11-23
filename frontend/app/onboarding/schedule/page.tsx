@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { getProfile, saveStep4, completeOnboarding, ApiClientError } from "@/lib/api";
 import { setOnboardingCompletedCookieAction } from "../actions";
 import { OnboardingShell, OnboardingSkeleton } from "../components/OnboardingShell";
@@ -10,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PlatformLabel } from "@/components/app/PlatformLabel";
 import { ApprovalTimingControl } from "@/components/app/ApprovalTimingControl";
-import { useSlackStatusQuery } from "@/lib/queries";
+import { useSlackStatusQuery, useEntitlements } from "@/lib/queries";
 
 interface DayOption {
   day: number;
@@ -105,11 +106,18 @@ export default function OnboardingSchedulePage() {
     };
   }, [router]);
 
+  const { data: ent } = useEntitlements("onboarding");
+  const maxPostDays = ent?.limits.max_post_days_per_week ?? 7;
+
   // Toggles day selection in the post days array
   const toggleDay = (day: number) => {
     if (postDays.includes(day)) {
       setPostDays(postDays.filter((d) => d !== day));
     } else {
+      if (postDays.length >= maxPostDays) {
+        toast.info(`${ent?.plan_name || "Your plan"} allows ${maxPostDays} posting days a week.`);
+        return;
+      }
       setPostDays([...postDays, day].sort((a, b) => a - b));
     }
   };
@@ -254,12 +262,10 @@ export default function OnboardingSchedulePage() {
           type="time"
           value={postTime}
           onChange={(e) => setPostTime(e.target.value)}
-          aria-describedby={`post_time-hint ${
-            fieldErrors.post_time ? "post_time-error" : ""
-          }`.trim()}
-          className={`max-w-xs font-mono tabular-nums ${
-            fieldErrors.post_time ? "border-destructive" : ""
-          }`}
+          aria-describedby={`post_time-hint ${fieldErrors.post_time ? "post_time-error" : ""
+            }`.trim()}
+          className={`max-w-xs font-mono tabular-nums ${fieldErrors.post_time ? "border-destructive" : ""
+            }`}
         />
         {fieldErrors.post_time && (
           <p id="post_time-error" role="alert" className="text-caption text-destructive">
@@ -287,6 +293,11 @@ export default function OnboardingSchedulePage() {
         </Label>
         <p id="post_days-hint" className="text-caption text-muted-foreground">
           Select which days you want AutoPulse to generate drafts.
+          {maxPostDays < 7 && (
+            <span className="ml-1 font-medium text-foreground">
+              {ent?.plan_name || "Your plan"} allows {maxPostDays} posting days a week.
+            </span>
+          )}
         </p>
 
         <div
@@ -300,11 +311,10 @@ export default function OnboardingSchedulePage() {
             return (
               <label
                 key={opt.day}
-                className={`inline-flex items-center justify-center px-4 py-2 rounded-md border text-caption font-medium cursor-pointer transition-colors select-none ${
-                  isSelected
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-card text-foreground border-border hover:bg-secondary/40"
-                }`}
+                className={`inline-flex items-center justify-center px-4 py-2 rounded-md border text-caption font-medium cursor-pointer transition-colors select-none ${isSelected
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-card text-foreground border-border hover:bg-secondary/40"
+                  }`}
               >
                 <input
                   type="checkbox"

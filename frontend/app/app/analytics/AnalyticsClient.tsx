@@ -52,7 +52,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useAnalyticsQuery } from "@/lib/queries";
+import { useAnalyticsQuery, useEntitlements } from "@/lib/queries";
+import { LockedFeatureCard } from "@/components/app/LockedFeatureCard";
 import { cn } from "@/lib/utils";
 import type {
   AnalyticsRange,
@@ -225,6 +226,25 @@ export function AnalyticsClient({ user }: AnalyticsClientProps) {
       scroll: false,
     });
   };
+
+  const { data: ent } = useEntitlements(user.id);
+  const analyticsLevel = ent?.features.analytics_level ?? "full";
+
+  if (analyticsLevel === "none") {
+    return (
+      <div className="p-4 sm:p-6 md:p-8 space-y-6 max-w-7xl mx-auto w-full min-w-0">
+        <PageHeader
+          title="Analytics"
+          description="Publishing output, approval flow, editorial hook patterns, and draft quality."
+        />
+        <LockedFeatureCard
+          title="Analytics"
+          description="Upgrade to Starter for summary KPIs and posts over time, or Pro for full funnel and topic insights."
+          requiredPlan="Starter"
+        />
+      </div>
+    );
+  }
 
   if (isLoading && !data) {
     return <AnalyticsSkeleton />;
@@ -656,8 +676,33 @@ export function AnalyticsClient({ user }: AnalyticsClientProps) {
             </CardContent>
           </Card>
 
-          {/* Row 3: Approval funnel + Approval turnaround */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {analyticsLevel !== "full" ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <LockedFeatureCard
+                title="Approval funnel"
+                description="Track drafts from generation to LinkedIn publication."
+                requiredPlan="Pro"
+              />
+              <LockedFeatureCard
+                title="Approval turnaround"
+                description="Compare approval speed across email and Slack."
+                requiredPlan="Pro"
+              />
+              <LockedFeatureCard
+                title="Hook style breakdown"
+                description="See which opening hook styles get the highest approval rates."
+                requiredPlan="Pro"
+              />
+              <LockedFeatureCard
+                title="Topic breakdown"
+                description="Analyze topic performance, approval rates, and AI scores."
+                requiredPlan="Pro"
+              />
+            </div>
+          ) : (
+            <>
+              {/* Row 3: Approval funnel + Approval turnaround */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Approval Funnel */}
             <Card className="flex flex-col justify-between">
               <CardHeader className="pb-4">
@@ -1329,6 +1374,8 @@ export function AnalyticsClient({ user }: AnalyticsClientProps) {
               </CardContent>
             </Card>
           </div>
+            </>
+          )}
 
           {/* Row 5: Recent posts table */}
           <Card className="overflow-hidden">

@@ -21,6 +21,7 @@ import {
   useProfileQuery,
   usePatchProfileMutation,
   useSlackStatusQuery,
+  useEntitlements,
   clearAllAppCaches,
 } from "@/lib/queries";
 import { deleteAccount, ApiClientError } from "@/lib/api";
@@ -882,6 +883,10 @@ function ScheduleTabForm({
     onDirtyChange(isDirty);
   }, [isDirty, onDirtyChange]);
 
+  const { user } = useUser();
+  const { data: ent } = useEntitlements(user?.id);
+  const maxPostDays = ent?.limits.max_post_days_per_week ?? 7;
+
   const postDays = useWatch({ control: form.control, name: "post_days" }) || [];
 
   const toggleDay = (day: number) => {
@@ -892,6 +897,10 @@ function ScheduleTabForm({
         { shouldDirty: true, shouldValidate: true }
       );
     } else {
+      if (postDays.length >= maxPostDays) {
+        toast.info(`${ent?.plan_name || "Your plan"} allows ${maxPostDays} posting days a week.`);
+        return;
+      }
       form.setValue(
         "post_days",
         [...postDays, day].sort((a, b) => a - b),
@@ -1036,6 +1045,11 @@ function ScheduleTabForm({
               <Label>Active Days of the Week</Label>
               <p className="text-caption text-muted-foreground">
                 Select which days of the week you want posts prepared.
+                {maxPostDays < 7 && (
+                  <span className="ml-1 font-medium text-foreground">
+                    {ent?.plan_name || "Your plan"} allows {maxPostDays} posting days a week.
+                  </span>
+                )}
               </p>
               <div
                 role="group"

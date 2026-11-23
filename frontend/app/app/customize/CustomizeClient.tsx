@@ -45,6 +45,9 @@ import {
 import type { ActiveUploadItem } from "@/components/app/FileDropzone";
 import type { DocumentKind, DocumentSummary } from "@/types/customization";
 import { cn } from "@/lib/utils";
+import { useUser } from "@/components/providers/user-provider";
+import { useEntitlements } from "@/lib/queries";
+import { LockedFeatureCard } from "@/components/app/LockedFeatureCard";
 import { LearnedProfilePanel } from "./components/LearnedProfilePanel";
 import { PlaybooksSection } from "./components/PlaybooksSection";
 import { BusinessSection } from "./components/BusinessSection";
@@ -74,6 +77,9 @@ export function CustomizeClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const { user } = useUser();
+  const { data: ent } = useEntitlements(user?.id);
+  const docsLocked = Boolean(ent && ent.plan_id !== "internal" && (ent.features.docs_token_limit ?? 0) === 0);
 
   const rawTab = searchParams.get("tab") as CustomizeTab | null;
   const activeTab: CustomizeTab =
@@ -382,65 +388,89 @@ export function CustomizeClient() {
         </TabsContent>
 
         <TabsContent value="playbooks">
-          <PlaybooksSection
-            docs={playbooks}
-            mode={settings?.default_playbook_mode ?? "merge"}
-            onModeChange={(mode) => settingsMutation.mutate({ default_playbook_mode: mode })}
-            onUpload={(files) => uploadMutation.mutate({ files, kind: "playbook" })}
-            onToggleEnabled={(doc: DocumentSummary, enabled: boolean) =>
-              toggleDocMutation.mutate({ id: doc.id, enabled })
-            }
-            onInspect={handleInspectDoc}
-            onReprocess={(doc) => reprocessMutation.mutate(doc.id)}
-            onDelete={(doc) => deleteMutation.mutate(doc.id)}
-            isUploading={uploadMutation.isPending}
-            activeUploads={activeUploadsByKind.playbook}
-          />
+          {docsLocked ? (
+            <LockedFeatureCard
+              title="Playbooks"
+              description="Upload your LinkedIn playbooks and frameworks on Pro or Business."
+              requiredPlan="Pro"
+            />
+          ) : (
+            <PlaybooksSection
+              docs={playbooks}
+              mode={settings?.default_playbook_mode ?? "merge"}
+              onModeChange={(mode) => settingsMutation.mutate({ default_playbook_mode: mode })}
+              onUpload={(files) => uploadMutation.mutate({ files, kind: "playbook" })}
+              onToggleEnabled={(doc: DocumentSummary, enabled: boolean) =>
+                toggleDocMutation.mutate({ id: doc.id, enabled })
+              }
+              onInspect={handleInspectDoc}
+              onReprocess={(doc) => reprocessMutation.mutate(doc.id)}
+              onDelete={(doc) => deleteMutation.mutate(doc.id)}
+              isUploading={uploadMutation.isPending}
+              activeUploads={activeUploadsByKind.playbook}
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="business">
-          <BusinessSection
-            docs={businessDocs}
-            businessMention={settings?.business_mention ?? "natural"}
-            onBusinessMentionChange={(val) =>
-              settingsMutation.mutate({ business_mention: val })
-            }
-            onAddUrl={async (vals) => {
-              await urlMutation.mutateAsync(vals);
-            }}
-            onUpload={(files) => uploadMutation.mutate({ files, kind: "business" })}
-            onToggleEnabled={(doc, enabled) =>
-              toggleDocMutation.mutate({ id: doc.id, enabled })
-            }
-            onInspect={handleInspectDoc}
-            onReprocess={(doc) => reprocessMutation.mutate(doc.id)}
-            onDelete={(doc) => deleteMutation.mutate(doc.id)}
-            isUploading={uploadMutation.isPending}
-            activeUploads={activeUploadsByKind.business}
-          />
+          {docsLocked ? (
+            <LockedFeatureCard
+              title="Business documents"
+              description="Upload product briefs, case studies, and company facts on Pro or Business."
+              requiredPlan="Pro"
+            />
+          ) : (
+            <BusinessSection
+              docs={businessDocs}
+              businessMention={settings?.business_mention ?? "natural"}
+              onBusinessMentionChange={(val) =>
+                settingsMutation.mutate({ business_mention: val })
+              }
+              onAddUrl={async (vals) => {
+                await urlMutation.mutateAsync(vals);
+              }}
+              onUpload={(files) => uploadMutation.mutate({ files, kind: "business" })}
+              onToggleEnabled={(doc, enabled) =>
+                toggleDocMutation.mutate({ id: doc.id, enabled })
+              }
+              onInspect={handleInspectDoc}
+              onReprocess={(doc) => reprocessMutation.mutate(doc.id)}
+              onDelete={(doc) => deleteMutation.mutate(doc.id)}
+              isUploading={uploadMutation.isPending}
+              activeUploads={activeUploadsByKind.business}
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="posts">
-          <PreviousPostsSection
-            docs={prevPostsDocs}
-            samplesCount={overview?.quota.samples_used ?? 0}
-            useForVoice={settings?.use_previous_posts_for_voice ?? true}
-            onUseForVoiceChange={(val) =>
-              settingsMutation.mutate({ use_previous_posts_for_voice: val })
-            }
-            onUpload={(files) => uploadMutation.mutate({ files, kind: "previous_posts" })}
-            onPaste={async (vals) => {
-              await pasteMutation.mutateAsync({ ...vals, kind: "previous_posts" });
-            }}
-            onToggleEnabled={(doc, enabled) =>
-              toggleDocMutation.mutate({ id: doc.id, enabled })
-            }
-            onInspect={handleInspectDoc}
-            onReprocess={(doc) => reprocessMutation.mutate(doc.id)}
-            onDelete={(doc) => deleteMutation.mutate(doc.id)}
-            isUploading={uploadMutation.isPending}
-            activeUploads={activeUploadsByKind.previous_posts}
-          />
+          {docsLocked ? (
+            <LockedFeatureCard
+              title="Previous posts"
+              description="Upload or paste your past posts for voice matching on Pro or Business."
+              requiredPlan="Pro"
+            />
+          ) : (
+            <PreviousPostsSection
+              docs={prevPostsDocs}
+              samplesCount={overview?.quota.samples_used ?? 0}
+              useForVoice={settings?.use_previous_posts_for_voice ?? true}
+              onUseForVoiceChange={(val) =>
+                settingsMutation.mutate({ use_previous_posts_for_voice: val })
+              }
+              onUpload={(files) => uploadMutation.mutate({ files, kind: "previous_posts" })}
+              onPaste={async (vals) => {
+                await pasteMutation.mutateAsync({ ...vals, kind: "previous_posts" });
+              }}
+              onToggleEnabled={(doc, enabled) =>
+                toggleDocMutation.mutate({ id: doc.id, enabled })
+              }
+              onInspect={handleInspectDoc}
+              onReprocess={(doc) => reprocessMutation.mutate(doc.id)}
+              onDelete={(doc) => deleteMutation.mutate(doc.id)}
+              isUploading={uploadMutation.isPending}
+              activeUploads={activeUploadsByKind.previous_posts}
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="instructions">

@@ -37,7 +37,9 @@ import {
   useDisconnectSlackMutation,
   useProfileQuery,
   usePatchProfileMutation,
+  useEntitlements,
 } from "@/lib/queries";
+import { LockedFeatureCard } from "@/components/app/LockedFeatureCard";
 import {
   startLinkedInConnection,
   connectSlack,
@@ -87,6 +89,8 @@ export function ConnectionsClient({ user }: ConnectionsClientProps) {
     isLoading: isProfileLoading,
     refetch: refetchProfile,
   } = useProfileQuery(user.id);
+  const { data: ent } = useEntitlements(user.id);
+  const slackLocked = Boolean(ent && !ent.features.approval_slack);
 
   const disconnectLinkedInMutation = useDisconnectLinkedInMutation(user.id);
   const disconnectSlackMutation = useDisconnectSlackMutation(user.id);
@@ -371,6 +375,16 @@ export function ConnectionsClient({ user }: ConnectionsClientProps) {
 
             {/* Slack Actions */}
             <div className="pt-6 mt-4 border-t border-border flex flex-wrap items-center gap-2">
+              {slackLocked && !isSlackConnected ? (
+                <div className="w-full">
+                  <LockedFeatureCard
+                    title="Slack approvals"
+                    description="Receive post previews and approve directly in Slack."
+                    requiredPlan="Pro"
+                  />
+                </div>
+              ) : (
+                <>
               {!isSlackConnected && !isSlackDisconnected && (
                 <Button
                   size="sm"
@@ -423,6 +437,8 @@ export function ConnectionsClient({ user }: ConnectionsClientProps) {
                   ) : null}
                   <span>Reconnect</span>
                 </Button>
+              )}
+                </>
               )}
             </div>
           </Card>

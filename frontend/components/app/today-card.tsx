@@ -17,7 +17,10 @@ import { PostThumbnail } from "@/components/app/PostThumbnail";
 import { StatusBadge } from "@/components/app/StatusBadge";
 import { StatusRing } from "@/components/app/status-ring";
 import { Button } from "@/components/ui/button";
-import { generateDraftNow } from "@/lib/api";
+import { ApiClientError, generateDraftNow } from "@/lib/api";
+import { useUser } from "@/components/providers/user-provider";
+import { useEntitlements, invalidateEntitlements } from "@/lib/queries";
+import { UpgradeDialog } from "@/components/app/UpgradeDialog";
 import {
   formatCountdown,
   formatPlainScheduleTime,
@@ -45,7 +48,10 @@ function getNextPostStatusLabel(status: string): string | undefined {
 
 export function TodayCard({ today, schedule, timezone }: TodayCardProps) {
   const queryClient = useQueryClient();
+  const { user } = useUser();
+  const { data: ent } = useEntitlements(user?.id);
   const [isGenerating, setIsGenerating] = React.useState(false);
+  const [upgradeError, setUpgradeError] = React.useState<ApiClientError | null>(null);
   const [nowMs, setNowMs] = React.useState<number>(() => Date.now());
 
   React.useEffect(() => {
@@ -61,6 +67,15 @@ export function TodayCard({ today, schedule, timezone }: TodayCardProps) {
       ? formatCountdown(today.publish_at, nowMs)
       : null;
 
+  const schedLimit = ent?.usage.scheduled_limit ?? null;
+  const schedUsed = ent?.usage.scheduled_used ?? 0;
+  const generateDisabledReason =
+    ent?.status === "expired"
+      ? "Plan expired. Upgrade to generate posts."
+      : schedLimit !== null && schedUsed >= schedLimit
+      ? `Monthly limit reached (${schedUsed}/${schedLimit}).`
+      : null;
+
   const handleGenerateNow = async () => {
     setIsGenerating(true);
     try {
@@ -68,12 +83,17 @@ export function TodayCard({ today, schedule, timezone }: TodayCardProps) {
       toast.success("Draft generated successfully! Dispatched for your approval.");
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["posts"] });
+      invalidateEntitlements(user?.id);
     } catch (err: unknown) {
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : "Failed to generate draft. Please verify your profile settings."
-      );
+      if (err instanceof ApiClientError && err.status === 403) {
+        setUpgradeError(err);
+      } else {
+        toast.error(
+          err instanceof Error
+            ? err.message
+            : "Failed to generate draft. Please verify your profile settings."
+        );
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -119,25 +139,30 @@ export function TodayCard({ today, schedule, timezone }: TodayCardProps) {
                 {tzOffset ? ` (${tzOffset})` : ""} · You can approve any time before it publishes.
               </p>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleGenerateNow}
-              disabled={isGenerating}
-              className="h-8 gap-1.5 text-xs font-medium self-start sm:self-auto"
-            >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="size-3.5 animate-spin" />
-                  <span>Generating...</span>
-                </>
-              ) : (
-                <>
-                  <PenLine className="size-3.5 text-primary stroke-[1.75]" />
-                  <span>Generate draft now</span>
-                </>
+            <div className="flex flex-col items-start sm:items-end gap-1">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleGenerateNow}
+                disabled={isGenerating || Boolean(generateDisabledReason)}
+                className="h-8 gap-1.5 text-xs font-medium self-start sm:self-auto"
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" />
+                    <span>Generating...</span>
+                  </>
+                ) : (
+                  <>
+                    <PenLine className="size-3.5 text-primary stroke-[1.75]" />
+                    <span>Generate draft now</span>
+                  </>
+                )}
+              </Button>
+              {generateDisabledReason && (
+                <span className="text-[11px] text-muted-foreground">{generateDisabledReason}</span>
               )}
-            </Button>
+            </div>
           </div>
 
           <div className="grid gap-2 sm:grid-cols-3 rounded-md border border-border bg-muted/20 p-3">
@@ -271,6 +296,11 @@ export function TodayCard({ today, schedule, timezone }: TodayCardProps) {
           </div>
         </div>
       )}
+      <UpgradeDialog
+        error={upgradeError}
+        currentPlanId={ent?.plan_id}
+        onClose={() => setUpgradeError(null)}
+      />
     </div>
   );
 }

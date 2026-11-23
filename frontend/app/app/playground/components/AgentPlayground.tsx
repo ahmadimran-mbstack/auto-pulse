@@ -24,18 +24,22 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { LimitMeter } from "@/components/app/ProgressBars";
 import {
+  ApiClientError,
   getPlaygroundRunEvents,
   type RunEventItem,
   type RunEventsResponse,
 } from "@/lib/api";
 import { customizationKeys, getCompiledContext } from "@/lib/customization";
 import {
+  invalidateEntitlements,
   queryKeys,
   useCancelPlaygroundRunMutation,
   useCreatePlaygroundRunMutation,
+  useEntitlements,
   useProfileQuery,
   useRunQuery,
 } from "@/lib/queries";
+import { UpgradeDialog } from "@/components/app/UpgradeDialog";
 import { AgentActivityPanel } from "./AgentActivityPanel";
 
 export interface AgentDraftMetadata {
@@ -99,6 +103,8 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
   const createMutation = useCreatePlaygroundRunMutation();
   const cancelMutation = useCancelPlaygroundRunMutation();
   const { data: profile, isLoading: isProfileLoading } = useProfileQuery(userId);
+  const { data: ent } = useEntitlements(userId);
+  const [upgradeError, setUpgradeError] = React.useState<ApiClientError | null>(null);
   const hasNiche = Boolean(profile?.niche_description?.trim());
 
   const contextQuery = useQuery({
@@ -112,6 +118,28 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
 
   const isTerminal = Boolean(runStatus && TERMINAL_STATUSES.has(runStatus));
   const isRunning = Boolean(runId && !isTerminal);
+
+  React.useEffect(() => {
+    if (isTerminal) {
+      invalidateEntitlements(userId);
+    }
+  }, [isTerminal, userId]);
+
+  const pgLimit = ent?.usage.playground_limit ?? null;
+  const pgUsed = ent?.usage.playground_used ?? 0;
+  const pgLeft = pgLimit !== null ? Math.max(0, pgLimit - pgUsed) : null;
+  const pgTodayLimit = ent?.usage.playground_today_limit ?? null;
+  const pgTodayUsed = ent?.usage.playground_today_used ?? 0;
+  const isExpired = ent?.status === "expired";
+  const isMonthlyReached = pgLeft !== null && pgLeft <= 0;
+  const isDailyReached = pgTodayLimit !== null && pgTodayUsed >= pgTodayLimit;
+  const quotaBlockedReason = isExpired
+    ? "Your plan has expired."
+    : isMonthlyReached
+      ? `You have used all ${pgLimit} Playground runs this period.`
+      : isDailyReached
+        ? `Daily limit reached (${pgTodayUsed} of ${pgTodayLimit} today). Try again tomorrow.`
+        : null;
 
   const syncRunIdToUrl = React.useCallback(
     (nextId: string | null) => {
@@ -258,8 +286,13 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
       setPendingPost(null);
       setRunId(res.run_id);
       syncRunIdToUrl(res.run_id);
-    } catch {
-      toast.error(PLAIN_FAIL_MESSAGE);
+      invalidateEntitlements(userId);
+    } catch (err: unknown) {
+      if (err instanceof ApiClientError && err.status === 403) {
+        setUpgradeError(err);
+      } else {
+        toast.error(PLAIN_FAIL_MESSAGE);
+      }
     }
   };
 
@@ -329,7 +362,7 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
               />
               <Button
                 type="submit"
-                disabled={isRunning || createMutation.isPending || (!isProfileLoading && !hasNiche)}
+                disabled={isRunning || createMutation.isPending || (!isProfileLoading && !hasNiche) || Boolean(quotaBlockedReason)}
                 className="sm:w-auto font-medium text-sm gap-2"
               >
                 {createMutation.isPending || isRunning ? (
@@ -345,7 +378,20 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
                 )}
               </Button>
             </div>
-            {!isProfileLoading && !hasNiche ? (
+            {pgLeft !== null && pgLimit !== null && (
+              <p className="text-xs text-muted-foreground tabular-nums">
+                {pgLeft} of {pgLimit} runs left this month
+                {pgTodayLimit !== null ? ` · today ${pgTodayUsed} of ${pgTodayLimit}` : ""}
+              </p>
+            )}
+            {quotaBlockedReason ? (
+              <p className="text-xs text-status-danger-fg">
+                {quotaBlockedReason}{" "}
+                <Link href="/app/billing" className="underline font-medium">
+                  Upgrade plan
+                </Link>
+              </p>
+            ) : !isProfileLoading && !hasNiche ? (
               <p className="text-xs text-status-danger-fg">
                 Your niche description is empty.{" "}
                 <Link href="/app/settings?tab=content" className="underline font-medium">
@@ -536,6 +582,11 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
           )}
         </div>
       </div>
+      <UpgradeDialog
+        error={upgradeError}
+        currentPlanId={ent?.plan_id}
+        onClose={() => setUpgradeError(null)}
+      />
     </div>
   );
 }

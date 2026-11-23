@@ -3,6 +3,7 @@ import { env } from "./env";
 import { tokenCache } from "./token-cache";
 import type { DashboardData } from "../types/dashboard";
 import type { AnalyticsDashboardData, AnalyticsRange } from "../types/analytics";
+import type { PublicPlansResponse, UserEntitlements } from "../types/plans";
 import type {
   ApiError,
   Profile,
@@ -30,13 +31,15 @@ export class ApiClientError extends Error {
   retryAfter?: string | null;
   requestUrl?: string;
   isNetworkError?: boolean;
+  upgrade_to?: string | null;
 
   constructor(
     status: number,
     error: ApiError,
     retryAfter?: string | null,
     requestUrl?: string,
-    isNetworkError?: boolean
+    isNetworkError?: boolean,
+    upgradeTo?: string | null
   ) {
     super(error.message);
     this.name = "ApiClientError";
@@ -46,6 +49,7 @@ export class ApiClientError extends Error {
     this.retryAfter = retryAfter ?? null;
     this.requestUrl = requestUrl;
     this.isNetworkError = Boolean(isNetworkError);
+    this.upgrade_to = upgradeTo ?? null;
   }
 }
 
@@ -390,8 +394,8 @@ export async function apiCall<T>(
       typeof json?.detail === "string"
         ? json.detail
         : typeof json?.detail?.message === "string"
-        ? json.detail.message
-        : undefined;
+          ? json.detail.message
+          : undefined;
     throw new ApiClientError(
       response.status,
       {
@@ -399,7 +403,9 @@ export async function apiCall<T>(
         message: errorObj.message || detailMsg || "An unexpected error occurred.",
       },
       null,
-      url
+      url,
+      false,
+      errorObj.upgrade_to ?? json?.detail?.upgrade_to ?? null
     );
   }
 
@@ -409,6 +415,19 @@ export async function apiCall<T>(
   }
 
   return (await response.json()) as T;
+}
+
+export async function getPublicPlans(): Promise<PublicPlansResponse> {
+  const baseApiUrl = env.apiUrl.replace(/\/+$/, "");
+  const res = await fetch(`${baseApiUrl}/api/plans`, { cache: "no-store" });
+  if (!res.ok) {
+    throw new Error("Failed to load plans");
+  }
+  return (await res.json()) as PublicPlansResponse;
+}
+
+export async function getMyEntitlements(): Promise<UserEntitlements> {
+  return apiCall<UserEntitlements>("/api/me/entitlements", { method: "GET" });
 }
 
 // Typed convenience helper for dashboard overview route

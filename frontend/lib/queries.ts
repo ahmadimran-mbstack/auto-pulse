@@ -32,8 +32,11 @@ import {
   getRun,
   getPostAgentTrace,
   getAnalytics,
+  getMyEntitlements,
+  getPublicPlans,
   type RunEventsResponse,
 } from "./api";
+import type { PublicPlansResponse, UserEntitlements } from "../types/plans";
 import type { DashboardData } from "../types/dashboard";
 import type { AnalyticsDashboardData, AnalyticsRange } from "../types/analytics";
 import type {
@@ -204,6 +207,29 @@ export function useAnalyticsQuery(userId: string, range: AnalyticsRange = "30d")
     staleTime: 60_000,
     enabled: !!userId,
   });
+}
+
+export function useEntitlements(userId?: string) {
+  return useQuery<UserEntitlements>({
+    queryKey: ["user", userId || "anon", "entitlements"],
+    queryFn: () => getMyEntitlements(),
+    staleTime: 15_000,
+    refetchOnWindowFocus: true,
+    enabled: !!userId,
+  });
+}
+
+export function usePublicPlans() {
+  return useQuery<PublicPlansResponse>({
+    queryKey: ["public", "plans"],
+    queryFn: () => getPublicPlans(),
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function invalidateEntitlements(userId?: string) {
+  if (!userId) return;
+  queryClient.invalidateQueries({ queryKey: ["user", userId, "entitlements"] });
 }
 
 // Prefetch helpers for fast hover / keyboard focus navigation

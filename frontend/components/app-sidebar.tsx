@@ -19,6 +19,7 @@ import {
   PenSquare,
   BarChart3,
   Sparkles,
+  CreditCard,
 } from "lucide-react";
 
 import { useDashboardQuery, prefetchDashboard, prefetchPosts, prefetchConnections, prefetchProfile, prefetchAnalytics } from "@/lib/queries";
@@ -87,6 +88,7 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
     { title: "Playground", url: "/app/playground", icon: PenSquare, exact: false },
     { title: "Customize", url: "/app/customize", icon: Sparkles, exact: false },
     { title: "Connections", url: "/app/connections", icon: Share2, exact: false },
+    { title: "Billing", url: "/app/billing", icon: CreditCard, exact: false },
   ];
 
 

@@ -4,7 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2Icon, SparklesIcon } from "lucide-react";
-import { getPosts, getPostSchedule, generateDraft } from "@/lib/api";
+import { ApiClientError, getPosts, getPostSchedule, generateDraft } from "@/lib/api";
+import { useUser } from "@/components/providers/user-provider";
+import { useEntitlements, invalidateEntitlements } from "@/lib/queries";
+import { UpgradeDialog } from "@/components/app/UpgradeDialog";
 import { formatRunDate, formatNextDraftTime } from "@/lib/posts";
 import type { PostListItem, PostSchedule } from "@/types/posts";
 
@@ -27,6 +30,9 @@ export function DraftsSection({
   initialSchedule,
 }: DraftsSectionProps) {
   const router = useRouter();
+  const { user } = useUser();
+  const { data: ent } = useEntitlements(user?.id);
+  const [upgradeError, setUpgradeError] = useState<ApiClientError | null>(null);
   const [posts, setPosts] = useState<PostListItem[] | null>(initialPosts ?? null);
   const [schedule, setSchedule] = useState<PostSchedule | null>(initialSchedule ?? null);
   const [loading, setLoading] = useState(
@@ -125,14 +131,28 @@ export function DraftsSection({
     setGenerateError(null);
     try {
       const newPost = await generateDraft(true);
+      invalidateEntitlements(user?.id);
       router.prefetch(`/app/posts/${newPost.id}`);
       router.push(`/app/posts/${newPost.id}`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Could not generate draft.";
-      setGenerateError(msg);
+      if (err instanceof ApiClientError && err.status === 403) {
+        setUpgradeError(err);
+      } else {
+        const msg = err instanceof Error ? err.message : "Could not generate draft.";
+        setGenerateError(msg);
+      }
       setGenerating(false);
     }
   }
+
+  const schedLimit = ent?.usage.scheduled_limit ?? null;
+  const schedUsed = ent?.usage.scheduled_used ?? 0;
+  const generateDisabledReason =
+    ent?.status === "expired"
+      ? "Plan expired."
+      : schedLimit !== null && schedUsed >= schedLimit
+        ? `Monthly limit reached (${schedUsed}/${schedLimit}).`
+        : null;
 
   const formattedNextDraft = formatNextDraftTime(schedule?.next_draft_at, timezone);
 
@@ -148,7 +168,7 @@ export function DraftsSection({
               variant="default"
               size="sm"
               onClick={handleGenerateNow}
-              disabled={generating}
+              disabled={generating || Boolean(generateDisabledReason)}
               className="gap-2"
             >
               {generating ? (
@@ -158,6 +178,14 @@ export function DraftsSection({
               )}
               <span>{generating ? "Generating draft..." : "Generate a draft now"}</span>
             </Button>
+            {generateDisabledReason && (
+              <p className="text-xs text-muted-foreground">{generateDisabledReason}</p>
+            )}
+            <UpgradeDialog
+              error={upgradeError}
+              currentPlanId={ent?.plan_id}
+              onClose={() => setUpgradeError(null)}
+            />
             <span className="text-caption text-muted-foreground">
               Development only
             </span>

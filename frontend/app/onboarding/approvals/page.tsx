@@ -6,7 +6,8 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { CheckCircle2Icon, Loader2Icon, ArrowRightIcon } from "lucide-react";
 import { getProfile, connectSlack } from "@/lib/api";
-import { useSlackStatusQuery } from "@/lib/queries";
+import { useSlackStatusQuery, useEntitlements } from "@/lib/queries";
+import { LockedFeatureCard } from "@/components/app/LockedFeatureCard";
 import { OnboardingShell, OnboardingSkeleton } from "../components/OnboardingShell";
 import { PlatformLabel } from "@/components/app/PlatformLabel";
 import { Card } from "@/components/ui/card";
@@ -25,6 +26,8 @@ export default function OnboardingApprovalsPage() {
 
   // Read current Slack integration status
   const { data: slackStatus, isLoading: slackLoading, refetch: refetchSlack } = useSlackStatusQuery();
+  const { data: ent } = useEntitlements("onboarding");
+  const slackLocked = Boolean(ent && !ent.features.approval_slack);
 
   // Guard: checks that earlier steps 1 through 3 were completed
   useEffect(() => {
@@ -181,6 +184,14 @@ export default function OnboardingApprovalsPage() {
                   <span>Continue</span>
                   <ArrowRightIcon className="size-4" />
                 </Button>
+              ) : slackLocked ? (
+                <div className="w-full sm:w-auto">
+                  <LockedFeatureCard
+                    title="Slack approvals"
+                    description="Upgrade to Pro or Business to approve posts in Slack."
+                    requiredPlan="Pro"
+                  />
+                </div>
               ) : (
                 <Button
                   type="button"
