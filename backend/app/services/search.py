@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, Field
 from app.core.config import settings
 from app.services.resilient_llm import run_call_with_timeout
+from app.services.usage_logger import log_search_call
 
 
 class Candidate(BaseModel):
@@ -83,8 +84,11 @@ class TavilySearchAdapter:
         attempts = 0
         last_exc = None
         while attempts < 2:
+            from app.services.quota import RunBudgetExceeded, check_run_budgets_before_call
+            check_run_budgets_before_call(is_llm=False)
             attempts += 1
             self.call_count += 1
+            log_search_call(provider="tavily", depth="basic")
             try:
                 # Call Tavily with topic, lookback start date, content request, and explicit timeout
                 payload = {
@@ -148,8 +152,11 @@ class ExaSearchAdapter:
         attempts = 0
         last_exc = None
         while attempts < 2:
+            from app.services.quota import RunBudgetExceeded, check_run_budgets_before_call
+            check_run_budgets_before_call(is_llm=False)
             attempts += 1
             self.call_count += 1
+            log_search_call(provider="exa", depth="basic")
             try:
                 # ExaSearchResults supports start_published_date and text_contents_options with explicit timeout
                 raw_results = run_call_with_timeout(

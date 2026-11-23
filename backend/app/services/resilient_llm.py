@@ -1,4 +1,5 @@
 import concurrent.futures
+import contextvars
 import logging
 import re
 import time
@@ -8,6 +9,7 @@ from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.runnables import Runnable, RunnableLambda
 from pydantic import BaseModel
 from app.core.config import settings
+from app.services.usage_logger import log_llm_call
 
 logger = logging.getLogger(__name__)
 
@@ -15,8 +17,9 @@ logger = logging.getLogger(__name__)
 def run_call_with_timeout(func, args=(), kwargs=None, timeout_seconds: float = 45.0) -> Any:
     """Executes a blocking function with a hard wall-clock timeout using a single-worker executor."""
     kwargs = kwargs or {}
+    ctx = contextvars.copy_context()
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(func, *args, **kwargs)
+        future = executor.submit(ctx.run, func, *args, **kwargs)
         try:
             return future.result(timeout=timeout_seconds)
         except concurrent.futures.TimeoutError as exc:
@@ -61,29 +64,37 @@ class ResilientChatModelWrapper(Runnable):
     def with_structured_output(self, schema: Any, include_raw: bool = False, **kwargs: Any) -> Runnable:
         real_model = self.real_model
         timeout_sec = self.timeout_seconds
+        model_name = self.model_name
 
         def _invoke_structured(input_val: Any) -> Any:
             if real_model is None:
-                raise RuntimeError(f"LLM model '{self.model_name}' is not configured or available")
+                raise RuntimeError(f"LLM model '{model_name}' is not configured or available")
 
             last_exc = None
             for attempt in range(1, 3):
+                from app.services.quota import RunBudgetExceeded, check_run_budgets_before_call
+                check_run_budgets_before_call(is_llm=True)
                 try:
-                    structured = real_model.with_structured_output(schema, include_raw=include_raw, **kwargs)
+                    # Always request include_raw=True internally so usage_metadata is logged for every call
+                    structured = real_model.with_structured_output(schema, include_raw=True, **kwargs)
                     result = run_call_with_timeout(structured.invoke, args=(input_val,), timeout_seconds=timeout_sec)
-                    if include_raw:
-                        if isinstance(result, dict) and result.get("parsed") is not None:
-                            return result
+                    if isinstance(result, dict):
+                        log_llm_call(model_name, result.get("raw"))
+                        if result.get("parsed") is not None:
+                            return result if include_raw else result["parsed"]
                     elif result is not None:
+                        log_llm_call(model_name, result)
                         return result
+                except RunBudgetExceeded:
+                    raise
                 except Exception as exc:
                     last_exc = exc
-                    logger.warning(f"LLM call to {self.model_name} failed on attempt {attempt}: {exc}")
+                    logger.warning(f"LLM call to {model_name} failed on attempt {attempt}: {exc}")
                     if attempt < 2:
                         time.sleep(1.0)  # Capped backoff
 
             raise RuntimeError(
-                f"LLM call to {self.model_name} for schema {getattr(schema, '__name__', str(schema))} "
+                f"LLM call to {model_name} for schema {getattr(schema, '__name__', str(schema))} "
                 f"failed after 2 attempts: {last_exc}"
             )
 
@@ -93,13 +104,19 @@ class ResilientChatModelWrapper(Runnable):
         if self.real_model is not None:
             last_exc = None
             for attempt in range(1, 3):
+                from app.services.quota import RunBudgetExceeded, check_run_budgets_before_call
+                check_run_budgets_before_call(is_llm=True)
                 try:
-                    return run_call_with_timeout(
+                    res = run_call_with_timeout(
                         self.real_model.invoke,
                         args=(input_val,),
                         kwargs=kwargs,
                         timeout_seconds=self.timeout_seconds,
                     )
+                    log_llm_call(self.model_name, res)
+                    return res
+                except RunBudgetExceeded:
+                    raise
                 except Exception as exc:
                     last_exc = exc
                     logger.warning(f"LLM invoke to {self.model_name} failed on attempt {attempt}: {exc}")
