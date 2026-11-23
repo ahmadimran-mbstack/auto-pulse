@@ -29,7 +29,7 @@ from app.schemas.post import (
 )
 from app.services.approval import decide_approval, request_approval
 from app.services.content_profile import get_content_profile
-from app.services.image import build_image_etag, render_post_image
+from app.services.image import build_image_etag, build_post_image_spec, post_has_image, render_post_image
 from app.services.pipeline import execute_pipeline
 from app.services.prompts import PROMPT_VERSION
 from app.services.search import get_search_adapter
@@ -171,6 +171,7 @@ def list_posts(
                 ai_score=p.ai_score,
                 needs_review=p.needs_review,
                 topic=p.topic_title,
+                has_image=post_has_image(p.image_spec),
             )
         )
 
@@ -277,6 +278,7 @@ def get_post(
         topic=p.topic_label or p.topic_title,
         topic_label=p.topic_label,
         key_facts=p.key_facts,
+        has_image=post_has_image(p.image_spec),
     )
 
 
@@ -401,6 +403,12 @@ def get_post_image(
         raise HTTPException(
             status_code=http_status.HTTP_404_NOT_FOUND,
             detail={"code": "not_found", "message": "Post not found"},
+        )
+
+    if not post_has_image(p.image_spec):
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail={"code": "no_image", "message": "Post has no image"},
         )
 
     etag = build_image_etag(p.image_spec, w)
@@ -535,13 +543,12 @@ def generate_draft_now(
         for c in candidates[:5]
     ]
 
-    image_spec = {
-        "headline": draft.get("image_headline", chosen.get("title", "")),
-        "brand_name": profile.brand_name or "AutoPulse",
-        "brand_primary_hex": profile.brand_primary_hex or "#0F172A",
-        "brand_accent_hex": profile.brand_accent_hex or "#38BDF8",
-        "template_version": "v1",
-    }
+    image_spec = build_post_image_spec(
+        draft=draft,
+        chosen=chosen,
+        profile=profile,
+        auto_image_enabled=settings.AUTO_IMAGE_ENABLED,
+    )
 
     publish_at = compute_publish_at(today_local, profile.post_time, profile.timezone)
 
@@ -603,6 +610,7 @@ def generate_draft_now(
         post_format=post.post_format,
         ai_score=post.ai_score,
         needs_review=post.needs_review,
+        has_image=post_has_image(post.image_spec),
     )
 
 

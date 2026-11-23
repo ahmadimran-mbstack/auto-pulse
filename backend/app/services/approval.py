@@ -156,6 +156,7 @@ def request_approval(
 
     if to_email:
         try:
+            from app.services.image import post_has_image
             send_approval_email(
                 to_email=to_email,
                 display_name=display_name,
@@ -169,6 +170,7 @@ def request_approval(
                 needs_review=getattr(post, "needs_review", False),
                 first_comment=(getattr(post, "image_spec", None) or {}).get("first_comment"),
                 publish_notice=publish_notice,
+                has_image=post_has_image(getattr(post, "image_spec", None)),
             )
             email_dispatched = True
             logger.info(f"Approval email dispatched for post {post.id} to {to_email}")

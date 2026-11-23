@@ -25,6 +25,7 @@ class DashboardTodayPost(BaseModel):
     publish_at: Optional[str] = None
     approval_send_at: Optional[str] = None
     approval_channel: str = "email"
+    has_image: bool = True
 
 
 class DashboardRecentPost(BaseModel):
@@ -34,6 +35,7 @@ class DashboardRecentPost(BaseModel):
     topic_title: str
     caption_preview: str
     created_at: str
+    has_image: bool = True
 
 
 class DashboardSchedule(BaseModel):

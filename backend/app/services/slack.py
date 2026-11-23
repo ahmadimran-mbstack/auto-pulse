@@ -584,30 +584,28 @@ def notify_slack_approval(db: Any, post: Any) -> Optional[str]:
             logger.debug(f"Slack approval message for post {post.id} already claimed or sent")
             return None
 
-        # 5. Render image bytes
+        # 5-7. Render/upload image and signed URL only when post has an image
+        from app.services.image import generate_signed_image_url, post_has_image, render_post_image
+
         image_bytes = None
-        if post.image_spec:
+        image_file_id = None
+        signed_image_url = None
+        if post_has_image(getattr(post, "image_spec", None)):
             try:
-                from app.services.image import render_post_image
                 image_bytes = render_post_image(post.image_spec, width_target=1200)
             except Exception as exc:
                 logger.warning(f"Could not render image for post {post.id}: {exc}")
 
-        # 6. Upload image to Slack (external upload)
-        image_file_id = None
-        if image_bytes:
-            try:
-                image_file_id = upload_file_external(bot_token, image_bytes)
-            except Exception as exc:
-                logger.warning(f"Slack external image upload failed: {exc}")
+            if image_bytes:
+                try:
+                    image_file_id = upload_file_external(bot_token, image_bytes)
+                except Exception as exc:
+                    logger.warning(f"Slack external image upload failed: {exc}")
 
-        # 7. Generate signed image URL fallback
-        signed_image_url = None
-        try:
-            from app.services.image import generate_signed_image_url
-            signed_image_url = generate_signed_image_url(post.id)
-        except Exception as exc:
-            logger.warning(f"Failed to generate signed image URL: {exc}")
+            try:
+                signed_image_url = generate_signed_image_url(post.id)
+            except Exception as exc:
+                logger.warning(f"Failed to generate signed image URL: {exc}")
 
         # 8. Post approval message with retries and fallback
         publish_notice = None

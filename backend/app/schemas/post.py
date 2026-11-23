@@ -28,6 +28,7 @@ class PostListItem(BaseModel):
     topic: Optional[str] = None
     topic_label: Optional[str] = None
     key_facts: Optional[List[Dict[str, Any]]] = None
+    has_image: bool = True
 
 
 class PaginatedPostsResponse(BaseModel):
@@ -65,6 +66,7 @@ class PostDetail(BaseModel):
     topic: Optional[str] = None
     topic_label: Optional[str] = None
     key_facts: Optional[List[Dict[str, Any]]] = None
+    has_image: bool = True
 
 
 class PlaygroundRunCreateRequest(BaseModel):
@@ -182,6 +184,7 @@ class PublicApprovalDetail(BaseModel):
     timezone: str
     publish_at: Optional[str] = None
     expires_at: str
+    has_image: bool = True
 
 
 class DecisionRequest(BaseModel):

@@ -13,6 +13,7 @@ from app.models.profile import Profile
 from app.repositories import connection as connection_repo
 from app.repositories import profile as profile_repo
 from app.api.routes.posts import calculate_next_schedule
+from app.services.image import post_has_image
 from app.schemas.dashboard import (
     DashboardProfile,
     DashboardRecentPost,
@@ -119,6 +120,7 @@ def get_dashboard(
                 publish_at=p.publish_at.isoformat() if p.publish_at else None,
                 approval_send_at=p.approval_send_at.isoformat() if getattr(p, "approval_send_at", None) else None,
                 approval_channel=approval_channel,
+                has_image=post_has_image(p.image_spec),
             )
             break
 
@@ -130,6 +132,7 @@ def get_dashboard(
             topic_title=p.topic_title,
             caption_preview=p.caption[:140] if p.caption else "",
             created_at=p.created_at.isoformat(),
+            has_image=post_has_image(p.image_spec),
         )
         for p in post_rows[:5]
     ]

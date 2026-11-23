@@ -10,7 +10,7 @@ from app.core.crypto import decrypt_text
 from app.models.post import Post
 from app.models.publication import PostPublication
 from app.models.social_connection import SocialConnection
-from app.services.image import render_post_image
+from app.services.image import post_has_image, render_post_image
 
 logger = logging.getLogger(__name__)
 
@@ -96,12 +96,16 @@ def publish_post_to_linkedin(
         logger.error(f"Failed to decrypt LinkedIn token for user {post.user_id}: {exc}")
         return False, None, "step_failed", "Could not decrypt connection token"
 
-    # Step 3: Render the PNG from image_spec
-    try:
-        png_bytes = render_post_image(post.image_spec)
-    except Exception as exc:
-        logger.error(f"Image rendering failed for post {post.id}: {exc}")
-        return False, None, "step_failed", f"Failed to render post image: {str(exc)[:100]}"
+    has_image = post_has_image(getattr(post, "image_spec", None))
+
+    # Step 3: Render the PNG from image_spec only if this post has an image
+    png_bytes = None
+    if has_image:
+        try:
+            png_bytes = render_post_image(post.image_spec)
+        except Exception as exc:
+            logger.error(f"Image rendering failed for post {post.id}: {exc}")
+            return False, None, "step_failed", f"Failed to render post image: {str(exc)[:100]}"
 
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -113,51 +117,53 @@ def publish_post_to_linkedin(
     should_close_client = client is None
 
     try:
-        # Step 4: initializeUpload
-        init_url = "https://api.linkedin.com/rest/images?action=initializeUpload"
-        init_body = {
-            "initializeUploadRequest": {
-                "owner": f"urn:li:person:{conn.provider_account_id}"
+        image_urn = None
+        if png_bytes is not None:
+            # Step 4: initializeUpload
+            init_url = "https://api.linkedin.com/rest/images?action=initializeUpload"
+            init_body = {
+                "initializeUploadRequest": {
+                    "owner": f"urn:li:person:{conn.provider_account_id}"
+                }
             }
-        }
 
-        try:
-            init_res = http.post(init_url, json=init_body, headers=headers)
-        except Exception as exc:
-            err_code, err_detail = map_linkedin_error(None, is_create_post_sent=False, exc=exc)
-            return False, None, err_code, err_detail
+            try:
+                init_res = http.post(init_url, json=init_body, headers=headers)
+            except Exception as exc:
+                err_code, err_detail = map_linkedin_error(None, is_create_post_sent=False, exc=exc)
+                return False, None, err_code, err_detail
 
-        if init_res.status_code != 200:
-            if init_res.status_code == 401:
-                conn.status = "expired"
-                db.commit()
-            err_code, err_detail = map_linkedin_error(init_res.status_code, is_create_post_sent=False)
-            return False, None, err_code, err_detail
+            if init_res.status_code != 200:
+                if init_res.status_code == 401:
+                    conn.status = "expired"
+                    db.commit()
+                err_code, err_detail = map_linkedin_error(init_res.status_code, is_create_post_sent=False)
+                return False, None, err_code, err_detail
 
-        init_data = init_res.json()
-        upload_url = init_data.get("value", {}).get("uploadUrl")
-        image_urn = init_data.get("value", {}).get("image")
+            init_data = init_res.json()
+            upload_url = init_data.get("value", {}).get("uploadUrl")
+            image_urn = init_data.get("value", {}).get("image")
 
-        if not upload_url or not image_urn:
-            return False, None, "step_failed", "Missing uploadUrl or image URN from LinkedIn initializeUpload"
+            if not upload_url or not image_urn:
+                return False, None, "step_failed", "Missing uploadUrl or image URN from LinkedIn initializeUpload"
 
-        # Step 5: PUT image bytes to uploadUrl
-        put_headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "image/png",
-        }
-        try:
-            put_res = http.put(upload_url, content=png_bytes, headers=put_headers)
-        except Exception as exc:
-            err_code, err_detail = map_linkedin_error(None, is_create_post_sent=False, exc=exc)
-            return False, None, err_code, err_detail
+            # Step 5: PUT image bytes to uploadUrl
+            put_headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "image/png",
+            }
+            try:
+                put_res = http.put(upload_url, content=png_bytes, headers=put_headers)
+            except Exception as exc:
+                err_code, err_detail = map_linkedin_error(None, is_create_post_sent=False, exc=exc)
+                return False, None, err_code, err_detail
 
-        if put_res.status_code not in (200, 201):
-            if put_res.status_code == 401:
-                conn.status = "expired"
-                db.commit()
-            err_code, err_detail = map_linkedin_error(put_res.status_code, is_create_post_sent=False)
-            return False, None, err_code, err_detail
+            if put_res.status_code not in (200, 201):
+                if put_res.status_code == 401:
+                    conn.status = "expired"
+                    db.commit()
+                err_code, err_detail = map_linkedin_error(put_res.status_code, is_create_post_sent=False)
+                return False, None, err_code, err_detail
 
         # Step 6: Create the post with escaped commentary
         escaped_caption = escape_little_text(post.caption)
@@ -169,9 +175,7 @@ def publish_post_to_linkedin(
         else:
             commentary = escaped_caption
 
-        alt_text = (post.image_spec or {}).get("headline", post.topic_title)
-
-        post_body = {
+        post_body: dict = {
             "author": f"urn:li:person:{conn.provider_account_id}",
             "commentary": commentary,
             "visibility": settings.LINKEDIN_VISIBILITY,
@@ -180,14 +184,17 @@ def publish_post_to_linkedin(
                 "targetEntities": [],
                 "thirdPartyDistributionChannels": [],
             },
-            "content": {
+            "lifecycleState": "PUBLISHED",
+        }
+
+        if image_urn:
+            alt_text = (post.image_spec or {}).get("headline", post.topic_title)
+            post_body["content"] = {
                 "media": {
                     "id": image_urn,
                     "altText": alt_text,
                 }
-            },
-            "lifecycleState": "PUBLISHED",
-        }
+            }
 
         posts_url = "https://api.linkedin.com/rest/posts"
         posts_headers = dict(headers)

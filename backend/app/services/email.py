@@ -125,6 +125,7 @@ def send_approval_email(
     needs_review: bool = False,
     first_comment: Optional[str] = None,
     publish_notice: Optional[str] = None,
+    has_image: bool = True,
 ) -> None:
     # Subject line matching specification
     subject = f"Approve your LinkedIn post for {weekday} {time_str}"
@@ -175,7 +176,13 @@ def send_approval_email(
     escaped_deadline = html.escape(local_deadline)
     escaped_notice = html.escape(notice_line)
 
-    # HTML version contains exactly ONE <a ...> link (the review button) and an <img> tag
+    image_block_html = (
+        f"""\n    <div style="margin-bottom: 24px; text-align: center;">\n      <img src="{image_url}" alt="Post graphic preview" style="max-width: 100%; height: auto; border-radius: 8px; border: 1px solid #334155;" />\n    </div>\n"""
+        if has_image
+        else ""
+    )
+
+    # HTML version contains exactly ONE <a ...> link (the review button) and optional <img> tag
     html_content = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -191,11 +198,7 @@ def send_approval_email(
       <div style="font-weight: 600; color: #38bdf8; font-size: 14px; margin-bottom: 8px;">Topic: {escaped_topic}</div>
       <div style="color: #e2e8f0; font-size: 14px; line-height: 1.6;">{escaped_caption}</div>
     </div>
-    {first_comment_html}
-
-    <div style="margin-bottom: 24px; text-align: center;">
-      <img src="{image_url}" alt="Post graphic preview" style="max-width: 100%; height: auto; border-radius: 8px; border: 1px solid #334155;" />
-    </div>
+    {first_comment_html}{image_block_html}
 
     <p style="color: #cbd5e1; font-size: 14px; font-weight: 500;">Decide before {escaped_deadline}. After that this draft is skipped.</p>
 

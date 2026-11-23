@@ -10,7 +10,7 @@ from app.models.post import Post
 from app.models.profile import Profile
 from app.schemas.post import DecisionRequest, PublicApprovalDetail
 from app.services.approval import decide_approval
-from app.services.image import build_image_etag, render_post_image, verify_signed_image_signature
+from app.services.image import build_image_etag, post_has_image, render_post_image, verify_signed_image_signature
 
 # DAY 6: rate limit these routes
 router = APIRouter(prefix="/public/approvals", tags=["public-approvals"])
@@ -76,6 +76,7 @@ def get_public_approval(
         timezone=tz_str,
         publish_at=post.publish_at.isoformat() if post.publish_at else None,
         expires_at=approval.expires_at.isoformat(),
+        has_image=post_has_image(post.image_spec),
     )
 
 
@@ -94,6 +95,11 @@ def get_public_approval_image(
         )
 
     _, post, _ = get_approval_and_post_by_token(db, token)
+    if not post_has_image(post.image_spec):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "no_image", "message": "Post has no image"},
+        )
     etag = build_image_etag(post.image_spec, w)
 
     if_none_match = request.headers.get("if-none-match")
@@ -171,6 +177,12 @@ def get_public_post_signed_image(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "not_found", "message": "Post not found"},
+        )
+
+    if not post_has_image(post.image_spec):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "no_image", "message": "Post has no image"},
         )
 
     etag = build_image_etag(post.image_spec, w)
