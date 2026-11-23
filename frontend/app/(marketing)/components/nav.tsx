@@ -15,6 +15,10 @@ export function Nav() {
       link: "#pipeline",
     },
     {
+      name: "Pricing",
+      link: "#pricing",
+    },
+    {
       name: "FAQ",
       link: "#faq",
     },

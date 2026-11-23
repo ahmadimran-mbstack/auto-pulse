@@ -51,6 +51,11 @@ export function Footer() {
                 </a>
               </li>
               <li>
+                <a href="#pricing" className="hover:text-[var(--lp-ice)] transition-colors duration-200">
+                  Pricing
+                </a>
+              </li>
+              <li>
                 <a href="#faq" className="hover:text-[var(--lp-ice)] transition-colors duration-200">
                   FAQ
                 </a>

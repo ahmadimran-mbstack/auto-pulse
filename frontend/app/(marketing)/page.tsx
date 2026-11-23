@@ -9,6 +9,7 @@ import { OneRealRun } from "./components/one-real-run";
 import { WhoItsFor } from "./components/who-its-for";
 import { GetStarted } from "./components/get-started";
 import { BentoGrid } from "./components/bento-grid";
+import { Pricing } from "./components/pricing";
 import { Faq } from "./components/faq";
 import { FinalCta } from "./components/final-cta";
 import { Footer } from "./components/footer";
@@ -45,6 +46,9 @@ export default function MarketingPage() {
 
         {/* 6. Bento grid safety and roadmap cards */}
         <BentoGrid />
+
+        {/* 6B. Public pricing section */}
+        <Pricing />
 
         {/* 7. Frequently asked questions accordion */}
         <Faq />
