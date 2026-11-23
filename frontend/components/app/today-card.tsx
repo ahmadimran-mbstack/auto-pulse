@@ -180,14 +180,16 @@ export function TodayCard({ today, schedule, timezone }: TodayCardProps) {
         <div className="space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 w-full min-w-0">
             <div className="flex items-center gap-3.5 min-w-0 flex-1">
-              <div className="size-14 shrink-0 rounded-md overflow-hidden border border-border bg-muted">
-                <PostThumbnail
-                  postId={today.id}
-                  alt={today.topic_title}
-                  width={240}
-                  className="size-full object-cover"
-                />
-              </div>
+              {today.has_image !== false && (
+                <div className="size-14 shrink-0 rounded-md overflow-hidden border border-border bg-muted">
+                  <PostThumbnail
+                    postId={today.id}
+                    alt={today.topic_title}
+                    width={240}
+                    className="size-full object-cover"
+                  />
+                </div>
+              )}
 
               <div className="min-w-0 flex-1 space-y-1">
                 <h4 className="text-sm font-semibold text-foreground truncate">

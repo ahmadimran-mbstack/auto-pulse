@@ -236,9 +236,12 @@ export function ApprovePageClient({ token }: ApprovePageClientProps) {
   const formattedDeadline = formatDecisionDeadline(data.expires_at, data.timezone);
   const formattedPublishAt = formatDecisionDeadline(data.publish_at, data.timezone);
 
-  // Directly construct image URL using the public image endpoint
+  // Directly construct image URL using the public image endpoint only when post has an image
   const apiUrlClean = env.apiUrl.replace(/\/+$/, "");
-  const imageUrl = `${apiUrlClean}/public/approvals/${encodeURIComponent(token)}/image.png`;
+  const imageUrl =
+    data.has_image !== false
+      ? `${apiUrlClean}/public/approvals/${encodeURIComponent(token)}/image.png`
+      : null;
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">

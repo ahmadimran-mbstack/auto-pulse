@@ -142,7 +142,7 @@ export default function OnboardingBrandPage() {
     <OnboardingShell
       step={3}
       title="Your brand"
-      subtitle="Define your brand identity and color palette for automatically generated LinkedIn graphics."
+      subtitle="Define your brand identity and color palette for your AutoPulse workspace."
       backHref="/onboarding/voice"
       onSubmit={handleSubmit}
       isSaving={isSaving}
@@ -155,15 +155,14 @@ export default function OnboardingBrandPage() {
             Brand name <span className="text-primary">*</span>
           </Label>
           <span
-            className={`text-caption font-mono tabular-nums ${
-              brandName.length > 60 ? "text-destructive" : "text-muted-foreground"
-            }`}
+            className={`text-caption font-mono tabular-nums ${brandName.length > 60 ? "text-destructive" : "text-muted-foreground"
+              }`}
           >
             {brandName.length} / 60 characters
           </span>
         </div>
         <p id="brand_name-hint" className="text-caption text-muted-foreground">
-          Your personal or company brand name as it should appear on your social graphics.
+          Your personal or company brand name.
         </p>
         <Input
           id="brand_name"
@@ -173,9 +172,8 @@ export default function OnboardingBrandPage() {
           value={brandName}
           onChange={(e) => setBrandName(e.target.value)}
           placeholder="For example, Jane Doe or CloudScale Systems"
-          aria-describedby={`brand_name-hint ${
-            fieldErrors.brand_name ? "brand_name-error" : ""
-          }`.trim()}
+          aria-describedby={`brand_name-hint ${fieldErrors.brand_name ? "brand_name-error" : ""
+            }`.trim()}
           className={fieldErrors.brand_name ? "border-destructive" : ""}
         />
         {fieldErrors.brand_name && (
@@ -193,7 +191,7 @@ export default function OnboardingBrandPage() {
             Primary color <span className="text-primary">*</span>
           </Label>
           <p id="primary-color-hint" className="text-caption text-muted-foreground">
-            Used as the background for image titles.
+            Your primary brand background color.
           </p>
           <ColorField
             id="brand_primary_hex"
@@ -234,7 +232,7 @@ export default function OnboardingBrandPage() {
           Live graphics preview
         </Label>
         <p className="text-caption text-muted-foreground">
-          Here is how your brand name and color pairing will render on generated social assets.
+          Preview of your brand name and color pairing.
         </p>
 
         <div className="pt-2">

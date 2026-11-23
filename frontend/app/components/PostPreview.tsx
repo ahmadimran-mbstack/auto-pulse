@@ -20,29 +20,33 @@ export function PostPreview({
   hashtags,
   imageAlt = "Post graphic preview",
 }: PostPreviewProps) {
+  const showImageBox = imageLoading || Boolean(imageUrl) || imageError;
+
   return (
     <div className="space-y-6 w-full">
-      {/* Branded image container with square aspect ratio */}
-      <div className="relative aspect-square w-full bg-card border border-border rounded-lg overflow-hidden flex items-center justify-center">
-        {imageLoading && (
-          <Skeleton className="absolute inset-0 size-full" />
-        )}
+      {/* Branded image container with square aspect ratio (only rendered when image exists or is loading) */}
+      {showImageBox && (
+        <div className="relative aspect-square w-full bg-card border border-border rounded-lg overflow-hidden flex items-center justify-center">
+          {imageLoading && (
+            <Skeleton className="absolute inset-0 size-full" />
+          )}
 
-        {imageUrl && !imageLoading && (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={imageUrl}
-            alt={imageAlt}
-            className="size-full object-cover"
-          />
-        )}
+          {imageUrl && !imageLoading && (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={imageUrl}
+              alt={imageAlt}
+              className="size-full object-cover"
+            />
+          )}
 
-        {imageError && !imageLoading && (
-          <div className="p-4 text-center text-xs text-muted-foreground">
-            Image preview unavailable right now.
-          </div>
-        )}
-      </div>
+          {imageError && !imageLoading && (
+            <div className="p-4 text-center text-xs text-muted-foreground">
+              Image preview unavailable right now.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Post caption preserving line breaks and paragraph spacing */}
       <div className="p-6 rounded-lg bg-card border border-border text-sm text-foreground leading-relaxed whitespace-pre-wrap font-sans">

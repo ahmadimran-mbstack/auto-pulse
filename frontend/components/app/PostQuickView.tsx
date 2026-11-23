@@ -160,14 +160,16 @@ export function PostQuickView({
             <div className="rounded-xl border border-border bg-card p-4 space-y-3 shadow-xs">
               {/* Author Row */}
               <div className="flex items-center gap-3">
-                <div className="size-10 rounded-full border border-border bg-muted overflow-hidden shrink-0">
-                  <PostThumbnail
-                    postId={post.id}
-                    alt={post.topic_title}
-                    width={240}
-                    className="size-full object-cover rounded-full"
-                  />
-                </div>
+                {post.has_image !== false && (
+                  <div className="size-10 rounded-full border border-border bg-muted overflow-hidden shrink-0">
+                    <PostThumbnail
+                      postId={post.id}
+                      alt={post.topic_title}
+                      width={240}
+                      className="size-full object-cover rounded-full"
+                    />
+                  </div>
+                )}
                 <div className="min-w-0 flex-1 space-y-0.5">
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs font-semibold text-foreground">
@@ -192,14 +194,16 @@ export function PostQuickView({
               </div>
 
               {/* Companion Image Thumbnail */}
-              <div className="rounded-lg overflow-hidden border border-border bg-muted/40 aspect-video w-full max-h-56">
-                <PostThumbnail
-                  postId={post.id}
-                  alt={post.topic_title}
-                  width={480}
-                  className="size-full object-cover"
-                />
-              </div>
+              {post.has_image !== false && (
+                <div className="rounded-lg overflow-hidden border border-border bg-muted/40 aspect-video w-full max-h-56">
+                  <PostThumbnail
+                    postId={post.id}
+                    alt={post.topic_title}
+                    width={480}
+                    className="size-full object-cover"
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>

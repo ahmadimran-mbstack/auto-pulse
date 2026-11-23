@@ -32,6 +32,7 @@ export interface DashboardTodayPost {
   publish_at: string | null;
   approval_send_at?: string | null;
   approval_channel?: "slack" | "email";
+  has_image?: boolean;
 }
 
 export interface DashboardSchedule {

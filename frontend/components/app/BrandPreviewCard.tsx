@@ -73,7 +73,7 @@ export function BrandPreviewCard({
           role="alert"
           className="p-2.5 rounded-md bg-status-draft-bg border border-status-draft-fg/20 text-xs text-status-draft-fg leading-relaxed max-w-xs"
         >
-          This color may be hard to read in your images.
+          This color may have low text contrast.
         </div>
       )}
     </div>

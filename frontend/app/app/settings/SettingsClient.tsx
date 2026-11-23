@@ -694,7 +694,7 @@ function BrandTabForm({
       <CardHeader>
         <CardTitle>Brand Identity</CardTitle>
         <CardDescription>
-          Customize the brand label and colors rendered on your LinkedIn post images.
+          Customize your brand name and color palette.
         </CardDescription>
       </CardHeader>
       <Form {...form}>
@@ -710,7 +710,7 @@ function BrandTabForm({
                     <Input placeholder="AutoPulse" {...field} />
                   </FormControl>
                   <FormDescription>
-                    Displayed prominently on your daily generated post images.
+                    Your personal or company brand name.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -764,7 +764,7 @@ function BrandTabForm({
             {/* Live Visual Preview with WCAG Contrast Warning */}
             <div className="space-y-2 pt-2 border-t border-border">
               <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                Live Image Card Preview
+                Live Brand Card Preview
               </Label>
               <BrandPreviewCard
                 brandName={brandName}

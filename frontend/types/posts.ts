@@ -37,6 +37,7 @@ export interface PostListItem {
   caption_preview: string;
   created_at: string;
   approval?: PostApprovalItem | null;
+  has_image?: boolean;
 }
 
 export interface PaginatedPosts {
@@ -75,6 +76,7 @@ export interface PostDetail {
   publish_at?: string | null;
   approval?: PostApprovalItem | null;
   publications?: PostPublicationItem[];
+  has_image?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -225,4 +227,5 @@ export interface PublicApprovalData {
   timezone: string;
   publish_at: string | null;
   expires_at: string | null;
+  has_image?: boolean;
 }

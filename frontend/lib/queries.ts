@@ -164,13 +164,14 @@ export function usePostDetailQuery(userId: string, postId: string) {
 export function usePostImageQuery(
   userId: string,
   postId: string,
-  width: 240 | 480 | 1200 = 480
+  width: 240 | 480 | 1200 = 480,
+  enabled: boolean = true
 ) {
   return useQuery<Blob>({
     queryKey: queryKeys.postImage(userId, postId, width),
     queryFn: () => fetchPostImageBlob(postId, width),
     staleTime: 5 * 60_000,
-    enabled: !!userId && !!postId,
+    enabled: !!userId && !!postId && enabled,
   });
 }
 
@@ -476,12 +477,12 @@ export function useDisconnectSlackMutation(userId: string = "current") {
       qc.setQueryData<SlackStatusResponse>(queryKeys.slackStatus(userId), (old) =>
         old
           ? {
-              ...old,
-              connected: false,
-              status: "not_connected",
-              team_id: null,
-              team_name: null,
-            }
+            ...old,
+            connected: false,
+            status: "not_connected",
+            team_id: null,
+            team_name: null,
+          }
           : old
       );
       return { prevSlack };

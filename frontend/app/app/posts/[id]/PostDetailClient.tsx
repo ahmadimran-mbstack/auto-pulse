@@ -79,11 +79,13 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
     refetch,
   } = usePostDetailQuery(user.id, id);
 
+  const hasImage = post?.has_image !== false;
+
   const {
     data: imageBlob,
     isLoading: imageLoading,
     isError: imageError,
-  } = usePostImageQuery(user.id, id, 480);
+  } = usePostImageQuery(user.id, id, 480, Boolean(post && hasImage));
 
   // Convert image blob to local object URL
   const [imageUrl, setImageUrl] = React.useState<string | null>(null);
@@ -426,9 +428,9 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
             imageAlt={post.topic_title}
             caption={post.caption}
             hashtags={post.hashtags}
-            imageUrl={imageUrl}
-            imageLoading={imageLoading}
-            imageError={imageError}
+            imageUrl={hasImage ? imageUrl : null}
+            imageLoading={hasImage ? imageLoading : false}
+            imageError={hasImage ? imageError : false}
           />
         </div>
 

@@ -252,15 +252,17 @@ export function PostsClient({ user }: PostsClientProps) {
                 className="flex items-center gap-3.5 min-w-0 max-w-md cursor-pointer group"
                 onClick={() => handleOpenQuickView(post)}
               >
-                {/* 40px Circular Avatar */}
-                <div className="size-10 rounded-full border border-border bg-muted overflow-hidden shrink-0">
-                  <PostThumbnail
-                    postId={post.id}
-                    alt={post.topic_title}
-                    width={240}
-                    className="size-full object-cover rounded-full group-hover:scale-105 transition-transform duration-200"
-                  />
-                </div>
+                {/* 40px Circular Avatar (only when post has an image) */}
+                {post.has_image !== false && (
+                  <div className="size-10 rounded-full border border-border bg-muted overflow-hidden shrink-0">
+                    <PostThumbnail
+                      postId={post.id}
+                      alt={post.topic_title}
+                      width={240}
+                      className="size-full object-cover rounded-full group-hover:scale-105 transition-transform duration-200"
+                    />
+                  </div>
+                )}
 
                 <div className="min-w-0 flex-1 space-y-0.5">
                   <p className="text-sm font-semibold text-foreground truncate group-hover:underline">
@@ -565,14 +567,16 @@ export function PostsClient({ user }: PostsClientProps) {
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <div className="size-10 rounded-full border border-border bg-muted overflow-hidden shrink-0">
-                      <PostThumbnail
-                        postId={post.id}
-                        alt={post.topic_title}
-                        width={240}
-                        className="size-full object-cover rounded-full"
-                      />
-                    </div>
+                    {post.has_image !== false && (
+                      <div className="size-10 rounded-full border border-border bg-muted overflow-hidden shrink-0">
+                        <PostThumbnail
+                          postId={post.id}
+                          alt={post.topic_title}
+                          width={240}
+                          className="size-full object-cover rounded-full"
+                        />
+                      </div>
+                    )}
                     <div className="min-w-0 flex-1 space-y-0.5">
                       <p className="text-sm font-semibold text-foreground truncate">
                         {post.topic_title}

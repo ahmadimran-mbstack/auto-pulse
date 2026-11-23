@@ -77,17 +77,19 @@ export function OverviewPostsSection({
                 {/* Top row: Avatar (32px round), Title, Run date, and StatusBadge + StatusRing */}
                 <div className="flex items-start sm:items-center justify-between gap-3 w-full min-w-0">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div
-                      style={{ backgroundColor: brandPrimaryHex || "var(--muted)" }}
-                      className="size-8 shrink-0 rounded-full overflow-hidden border border-border flex items-center justify-center text-xs font-semibold text-foreground"
-                    >
-                      <PostThumbnail
-                        postId={post.id}
-                        alt={post.topic_title}
-                        width={240}
-                        className="size-full object-cover rounded-full"
-                      />
-                    </div>
+                    {post.has_image !== false && (
+                      <div
+                        style={{ backgroundColor: brandPrimaryHex || "var(--muted)" }}
+                        className="size-8 shrink-0 rounded-full overflow-hidden border border-border flex items-center justify-center text-xs font-semibold text-foreground"
+                      >
+                        <PostThumbnail
+                          postId={post.id}
+                          alt={post.topic_title}
+                          width={240}
+                          className="size-full object-cover rounded-full"
+                        />
+                      </div>
+                    )}
 
                     <div className="min-w-0 flex-1">
                       <h4 className="font-sans text-base font-semibold tracking-tight text-foreground truncate group-hover:underline">
@@ -134,17 +136,19 @@ export function OverviewPostsSection({
                 className="flex h-12 items-center justify-between px-3.5 rounded-lg border border-card-border bg-card transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring w-full min-w-0 overflow-hidden"
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1 pr-3">
-                  <div
-                    style={{ backgroundColor: brandPrimaryHex || "var(--muted)" }}
-                    className="size-6 shrink-0 rounded-full overflow-hidden border border-border"
-                  >
-                    <PostThumbnail
-                      postId={post.id}
-                      alt={post.topic_title}
-                      width={240}
-                      className="size-full object-cover rounded-full"
-                    />
-                  </div>
+                  {post.has_image !== false && (
+                    <div
+                      style={{ backgroundColor: brandPrimaryHex || "var(--muted)" }}
+                      className="size-6 shrink-0 rounded-full overflow-hidden border border-border"
+                    >
+                      <PostThumbnail
+                        postId={post.id}
+                        alt={post.topic_title}
+                        width={240}
+                        className="size-full object-cover rounded-full"
+                      />
+                    </div>
+                  )}
                   <span className="text-sm font-semibold text-foreground truncate min-w-0 flex-1">
                     {post.topic_title}
                   </span>

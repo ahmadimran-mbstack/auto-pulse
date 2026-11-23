@@ -176,7 +176,7 @@ export function DraftsSection({
       {generating && (
         <div className="p-4 rounded-md bg-signal-soft border border-signal-line text-xs text-primary flex items-center gap-3 mb-4">
           <Loader2Icon className="size-4 animate-spin text-primary shrink-0" />
-          <span>Creating your draft and branded image. This can take up to a minute.</span>
+          <span>Creating your draft. This can take up to a minute.</span>
         </div>
       )}
 
