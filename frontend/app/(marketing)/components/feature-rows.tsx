@@ -30,7 +30,6 @@ interface FeatureItem {
   panelAngle?: number;
   rows: {
     title: React.ReactNode;
-    description: string;
   }[];
 }
 
@@ -45,18 +44,12 @@ const features: FeatureItem[] = [
     rows: [
       {
         title: "Reads your profile and past posts",
-        description:
-          "Learns what topics you discuss, what resonates with your readers, and what matches your professional background.",
       },
       {
         title: "Searches the web for current topics",
-        description:
-          "Scans relevant industry news and active online discussions each morning to surface timely angles.",
       },
       {
         title: "Avoids repeating what you already posted",
-        description:
-          "Maintains a memory of your published archive so you never share duplicate thoughts or repeated themes.",
       },
     ],
   },
@@ -70,18 +63,12 @@ const features: FeatureItem[] = [
     rows: [
       {
         title: "Uses your role, audience and goals",
-        description:
-          "Frames each draft around the specific industry peers and prospective clients you want to reach.",
       },
       {
         title: "Follows proven hook styles",
-        description:
-          "Starts with crisp opening statements that catch attention without using gimmicks.",
       },
       {
         title: "Keeps your voice settings",
-        description:
-          "Respects your guidance on whether you prefer concise analysis, practical tutorials, or structured reflections.",
       },
     ],
   },
@@ -94,18 +81,12 @@ const features: FeatureItem[] = [
     rows: [
       {
         title: "Scores the draft for AI-sounding writing",
-        description:
-          "Measures vocabulary predictability and sentence patterns against an objective detection benchmark.",
       },
       {
         title: "Rewrites in a loop until the score is under 15 out of 100",
-        description:
-          "Performs continuous revision passes until the draft sounds natural and distinct.",
       },
       {
         title: "Only passing drafts reach you",
-        description:
-          "If a draft fails to pass the strict quality bar, it is discarded rather than delivered to your queue.",
       },
     ],
   },
@@ -131,8 +112,6 @@ const features: FeatureItem[] = [
             </span>
           </span>
         ),
-        description:
-          "Review drafts on your phone or computer and confirm publication with one tap.",
       },
       {
         title: (
@@ -145,8 +124,6 @@ const features: FeatureItem[] = [
             <span>after approval</span>
           </span>
         ),
-        description:
-          "Connects securely to your verified LinkedIn account and posts only after explicit approval.",
       },
       {
         title: (
@@ -159,8 +136,6 @@ const features: FeatureItem[] = [
             <span>connection needs renewing</span>
           </span>
         ),
-        description:
-          "Sends timely email notifications before the 60-day connection token expires so posting never stops.",
       },
     ],
   },
@@ -421,18 +396,6 @@ function FeatureRowBlock({
                       {row.title}
                     </span>
                   </div>
-
-                  {/* Description shown for active row with at least 15px body text */}
-                  {isActive && (
-                    <motion.p
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-                      className="mt-2 text-[15px] lg:text-base text-[var(--lp-text-body)] font-normal leading-relaxed overflow-hidden"
-                    >
-                      {row.description}
-                    </motion.p>
-                  )}
 
                   {/* 1px progress indicator filling over 6 seconds */}
                   <div className="mt-3 w-full h-[1px] bg-[var(--lp-border-hairline)] relative overflow-hidden">
