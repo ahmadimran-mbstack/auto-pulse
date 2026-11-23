@@ -1430,12 +1430,15 @@ def build_graph(
             }
 
         final_draft = dict(best_clean_draft)
-        if not final_draft.get("image_headline"):
-            from app.services.checks import generate_companion_image_headline
-            final_draft["image_headline"] = generate_companion_image_headline(
-                post_text=final_draft.get("post_text", ""),
-                model=_fast_model,
-            )
+        if settings.AUTO_IMAGE_ENABLED:
+            if not final_draft.get("image_headline"):
+                from app.services.checks import generate_companion_image_headline
+                final_draft["image_headline"] = generate_companion_image_headline(
+                    post_text=final_draft.get("post_text", ""),
+                    model=_fast_model,
+                )
+        else:
+            final_draft.pop("image_headline", None)
 
         seconds["post_loop"] = round(time.perf_counter() - start_t, 3)
 

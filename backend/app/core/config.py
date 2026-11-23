@@ -89,6 +89,9 @@ class Settings(BaseSettings):
     # Master switch for pipeline execution
     GENERATION_ENABLED: bool = True
 
+    # Feature flag for auto-generating branded poster images on pipeline posts
+    AUTO_IMAGE_ENABLED: bool = False
+
     # TEST_LAB_REMOVE: Development-only Test Lab feature flag and allowlist
     ENABLE_TEST_LAB: bool = True
     TEST_LAB_ALLOWED_EMAILS: str = ""

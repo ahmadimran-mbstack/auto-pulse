@@ -66,6 +66,33 @@ def build_image_etag(image_spec: Dict[str, Any], width: int) -> str:
     return f'"{spec_hash}-{width}"'
 
 
+def post_has_image(image_spec: Any) -> bool:
+    """Return True when image_spec describes a renderable poster image."""
+    if not isinstance(image_spec, dict) or not image_spec:
+        return False
+    return bool(image_spec.get("headline") or image_spec.get("template_version"))
+
+
+def build_post_image_spec(
+    draft: Dict[str, Any],
+    chosen: Dict[str, Any],
+    profile: Any,
+    auto_image_enabled: bool,
+) -> Dict[str, Any]:
+    """Build Post.image_spec for either branded-image or text-only posts."""
+    first_comment = draft.get("first_comment") or ""
+    if not auto_image_enabled:
+        return {"first_comment": first_comment} if first_comment else {}
+    return {
+        "headline": draft.get("image_headline", chosen.get("title", "")),
+        "brand_name": getattr(profile, "brand_name", None) or "AutoPulse",
+        "brand_primary_hex": getattr(profile, "brand_primary_hex", None) or "#0F172A",
+        "brand_accent_hex": getattr(profile, "brand_accent_hex", None) or "#38BDF8",
+        "template_version": "v1",
+        "first_comment": first_comment,
+    }
+
+
 def generate_signed_image_url(post_id: uuid.UUID, expires_in_seconds: int = 7 * 86400) -> str:
     """Generates an HMAC SHA-256 signed public URL valid for 7 days."""
     exp = int(time.time()) + expires_in_seconds

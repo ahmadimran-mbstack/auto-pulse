@@ -80,7 +80,11 @@ def _save_playground_draft_post(
         sources=sources if isinstance(sources, list) else [],
         caption=caption,
         hashtags=draft_dict.get("hashtags") if isinstance(draft_dict.get("hashtags"), list) else [],
-        image_spec={"headline": draft_dict.get("image_headline") or ""} if draft_dict.get("image_headline") else {},
+        image_spec=(
+            {"headline": draft_dict.get("image_headline") or ""}
+            if settings.AUTO_IMAGE_ENABLED and draft_dict.get("image_headline")
+            else ({"first_comment": draft_dict["first_comment"]} if draft_dict.get("first_comment") else {})
+        ),
         llm_model=settings.LLM_MODEL,
         prompt_version=PROMPT_VERSION,
     )

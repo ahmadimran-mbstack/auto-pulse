@@ -348,14 +348,13 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
                 }
                 for c in candidates[:5]
             ]
-            image_spec = {
-                "headline": draft.get("image_headline", chosen.get("title", "")),
-                "brand_name": profile.brand_name or "AutoPulse",
-                "brand_primary_hex": profile.brand_primary_hex or "#0F172A",
-                "brand_accent_hex": profile.brand_accent_hex or "#38BDF8",
-                "template_version": "v1",
-                "first_comment": draft.get("first_comment", ""),
-            }
+            from app.services.image import build_post_image_spec
+            image_spec = build_post_image_spec(
+                draft=draft,
+                chosen=chosen,
+                profile=profile,
+                auto_image_enabled=settings.AUTO_IMAGE_ENABLED,
+            )
             publish_at = compute_publish_at(run_date, profile.post_time, profile.timezone)
 
             post = Post(
@@ -428,14 +427,13 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
             for c in candidates[:5]
         ]
 
-        image_spec = {
-            "headline": draft.get("image_headline", chosen.get("title", "")),
-            "brand_name": profile.brand_name or "AutoPulse",
-            "brand_primary_hex": profile.brand_primary_hex or "#0F172A",
-            "brand_accent_hex": profile.brand_accent_hex or "#38BDF8",
-            "template_version": "v1",
-            "first_comment": draft.get("first_comment", ""),
-        }
+        from app.services.image import build_post_image_spec
+        image_spec = build_post_image_spec(
+            draft=draft,
+            chosen=chosen,
+            profile=profile,
+            auto_image_enabled=settings.AUTO_IMAGE_ENABLED,
+        )
 
         publish_at = compute_publish_at(run_date, profile.post_time, profile.timezone)
         from app.services.schedule_timeline import compute_post_timeline
