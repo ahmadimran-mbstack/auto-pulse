@@ -41,24 +41,24 @@ export function Footer() {
             </div>
             <ul className="space-y-2 text-xs">
               <li>
-                <a href="#features" className="hover:text-[var(--lp-ice)] transition-colors duration-200">
+                <Link href="/#features" className="hover:text-[var(--lp-ice)] transition-colors duration-200">
                   Features
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#how-it-works" className="hover:text-[var(--lp-ice)] transition-colors duration-200">
+                <Link href="/#pipeline" className="hover:text-[var(--lp-ice)] transition-colors duration-200">
                   How it works
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#pricing" className="hover:text-[var(--lp-ice)] transition-colors duration-200">
+                <Link href="/pricing" className="hover:text-[var(--lp-ice)] transition-colors duration-200">
                   Pricing
-                </a>
+                </Link>
               </li>
               <li>
-                <a href="#faq" className="hover:text-[var(--lp-ice)] transition-colors duration-200">
+                <Link href="/#faq" className="hover:text-[var(--lp-ice)] transition-colors duration-200">
                   FAQ
-                </a>
+                </Link>
               </li>
               <li>
                 <Link href="/auth/sign-in" className="hover:text-[var(--lp-ice)] transition-colors duration-200">

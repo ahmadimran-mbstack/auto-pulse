@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import {
   motion,
@@ -30,6 +31,7 @@ export const FloatingNav = ({
 
   /* Track whether the mobile dropdown menu is open */
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const pathname = usePathname();
   const { isLoaded, isSignedIn } = useSessionStatus();
 
   /* Show the navbar at the top or when scrolling up, and hide it when scrolling down */
@@ -120,7 +122,14 @@ export const FloatingNav = ({
             {/* Brand logo mark (dark variant) and title */}
             <Link
               href="/"
-              onClick={handleCloseMobileMenu}
+              aria-label="AutoPulse home"
+              onClick={(e) => {
+                handleCloseMobileMenu();
+                if (pathname === "/") {
+                  e.preventDefault();
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }
+              }}
               className="flex items-center gap-2 pl-1 pr-1 min-h-[44px] md:min-h-0 group"
             >
               <Image
@@ -141,18 +150,24 @@ export const FloatingNav = ({
 
             {/* Navigation links container with smooth hover underline on tablet and desktop */}
             <div className="hidden md:flex items-center gap-0.5 sm:gap-1">
-              {navItems.map((navItem, idx: number) => (
-                <a
-                  key={`link-${idx}`}
-                  href={navItem.link}
-                  className={cn(
-                    "relative flex items-center gap-1 rounded-full px-3 py-1.5 text-xs sm:text-sm font-normal text-[var(--lp-text-body)] transition-colors duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-[var(--lp-text-heading)] after:content-[''] after:absolute after:bottom-1 after:left-3 after:right-3 after:h-px after:bg-[var(--lp-ice)] after:scale-x-0 hover:after:scale-x-100 after:origin-left after:transition-transform after:duration-200 after:ease-[cubic-bezier(0.22,1,0.36,1)]"
-                  )}
-                >
-                  {navItem.icon && <span className="block sm:hidden">{navItem.icon}</span>}
-                  <span className={navItem.icon ? "hidden sm:block" : "block"}>{navItem.name}</span>
-                </a>
-              ))}
+              {navItems.map((navItem, idx: number) => {
+                const isActive = pathname === navItem.link;
+                return (
+                  <Link
+                    key={`link-${idx}`}
+                    href={navItem.link}
+                    className={cn(
+                      "relative flex items-center gap-1 rounded-full px-3 py-1.5 text-xs sm:text-sm font-normal transition-colors duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-[var(--lp-text-heading)] after:content-[''] after:absolute after:bottom-1 after:left-3 after:right-3 after:h-px after:bg-[var(--lp-ice)] after:origin-left after:transition-transform after:duration-200 after:ease-[cubic-bezier(0.22,1,0.36,1)]",
+                      isActive
+                        ? "text-[var(--lp-text-heading)] after:scale-x-100"
+                        : "text-[var(--lp-text-body)] after:scale-x-0 hover:after:scale-x-100"
+                    )}
+                  >
+                    {navItem.icon && <span className="block sm:hidden">{navItem.icon}</span>}
+                    <span className={navItem.icon ? "hidden sm:block" : "block"}>{navItem.name}</span>
+                  </Link>
+                );
+              })}
             </div>
 
             {/* Vertical divider between navigation links and auth buttons on tablet and desktop */}
@@ -204,14 +219,19 @@ export const FloatingNav = ({
             >
               {/* Mobile section links */}
               {navItems.map((navItem, idx: number) => (
-                <a
+                <Link
                   key={`mobile-link-${idx}`}
                   href={navItem.link}
                   onClick={handleCloseMobileMenu}
-                  className="min-h-[44px] flex items-center px-3 rounded-xl text-[15px] font-normal text-[var(--lp-text-body)] hover:text-[var(--lp-text-heading)] hover:bg-white/5 transition-colors duration-200"
+                  className={cn(
+                    "min-h-[44px] flex items-center px-3 rounded-xl text-[15px] font-normal hover:text-[var(--lp-text-heading)] hover:bg-white/5 transition-colors duration-200",
+                    pathname === navItem.link
+                      ? "text-[var(--lp-text-heading)] bg-white/5"
+                      : "text-[var(--lp-text-body)]"
+                  )}
                 >
                   {navItem.name}
-                </a>
+                </Link>
               ))}
 
               {/* Divider separating section links from auth actions */}

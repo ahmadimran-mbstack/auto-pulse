@@ -8,19 +8,19 @@ export function Nav() {
   const navItems = [
     {
       name: "Product",
-      link: "#features",
+      link: "/#features",
     },
     {
       name: "How it works",
-      link: "#pipeline",
+      link: "/#pipeline",
     },
     {
       name: "Pricing",
-      link: "#pricing",
+      link: "/pricing",
     },
     {
       name: "FAQ",
-      link: "#faq",
+      link: "/#faq",
     },
   ];
 
