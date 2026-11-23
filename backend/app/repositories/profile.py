@@ -108,6 +108,10 @@ def get_or_create_profile(
     profile = get_profile(db, user_id=user_id)
     if profile is None:
         raise RuntimeError(f"Failed to find or create profile for user {user_id}")
+
+    from app.services.entitlements import ensure_trial_subscription
+    ensure_trial_subscription(db, user_id)
+
     return profile
 
 
@@ -237,7 +241,8 @@ def complete_onboarding(
 
     # Set completion timestamp only once; subsequent calls keep the original timestamp
     if profile.onboarding_completed_at is None:
-        profile.onboarding_completed_at = datetime.datetime.now(datetime.timezone.utc)
+        from app.services.entitlements import mark_onboarding_completed
+        mark_onboarding_completed(db, profile)
 
     profile.onboarding_step = max(profile.onboarding_step, 4)
     profile.updated_at = datetime.datetime.now(datetime.timezone.utc)
