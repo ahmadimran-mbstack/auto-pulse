@@ -157,6 +157,9 @@ class GenerationRun(Base):
     # Run type: 'scheduled' for daily loop, 'manual' for playground / on-demand triggers
     run_type: Mapped[str] = mapped_column(Text, nullable=False, server_default="scheduled")
 
+    # Usage quota bucket: 'scheduled' (daily loop + /posts/generate) or 'playground'
+    usage_kind: Mapped[str] = mapped_column(Text, nullable=False, server_default="scheduled")
+
     # Run lifecycle status: queued, started, running, succeeded, completed, failed, or skipped
     status: Mapped[str] = mapped_column(Text, nullable=False)
 

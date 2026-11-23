@@ -458,36 +458,27 @@ def create_playground_run(
         force_release_manual_run_lock(user.id)
         acquire_manual_run_lock(user.id, new_run_id, ttl_seconds=lock_ttl)
 
+    from app.services.quota import check_and_reserve_run
+
     today_local = datetime.datetime.now(datetime.timezone.utc).date()
 
-    # 1. Insert fresh manual record into generation_runs
-    gen_run = GenerationRun(
-        id=new_run_id,
+    gen_run, blocked = check_and_reserve_run(
+        db,
         user_id=user.id,
-        run_date=today_local,
+        usage_kind="playground",
+        run_id=new_run_id,
         run_type="manual",
-        status="queued",
-        current_step="queued",
-        current_node="queued",
+        run_date=today_local,
         boot_id=settings.BOOT_ID,
-        last_progress_at=datetime.datetime.now(datetime.timezone.utc),
-        round=0,
+        create_playground_row=True,
+        initial_status="queued",
         search_provider=settings.SEARCH_PROVIDER,
     )
-    db.add(gen_run)
+    if blocked:
+        db.rollback()
+        release_manual_run_lock(user.id, new_run_id)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=blocked)
 
-    # 2. Insert record into playground_runs with matching id
-    new_run = PlaygroundRun(
-        id=new_run_id,
-        user_id=user.id,
-        status="queued",
-        current_step="queued",
-        current_node="queued",
-        boot_id=settings.BOOT_ID,
-        last_progress_at=datetime.datetime.now(datetime.timezone.utc),
-        round=0,
-    )
-    db.add(new_run)
     db.commit()
 
     # Launch non-blocking background task

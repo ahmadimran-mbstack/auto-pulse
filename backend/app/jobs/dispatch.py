@@ -239,18 +239,25 @@ def claim_generation_run(db: Session, user_id: str, run_date: datetime.date) -> 
     )
 
     if not existing:
-        run = GenerationRun(
+        import uuid as _uuid
+        from app.services.quota import check_and_reserve_run
+
+        run, blocked = check_and_reserve_run(
+            db,
             user_id=user_id,
-            run_date=run_date,
+            usage_kind="scheduled",
+            run_id=_uuid.uuid4(),
             run_type="scheduled",
-            status="started",
-            attempts=1,
+            run_date=run_date,
             boot_id=settings.BOOT_ID,
-            current_node="plan",
-            last_progress_at=datetime.datetime.now(datetime.timezone.utc),
+            create_playground_row=False,
+            initial_status="started",
             search_provider=settings.SEARCH_PROVIDER,
         )
-        db.add(run)
+        if blocked:
+            logger.info(f"Skipping scheduled run for user {user_id}: {blocked.get('code')} - {blocked.get('message')}")
+            db.rollback()
+            return None
         db.commit()
         db.refresh(run)
         return run
@@ -306,6 +313,7 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
             history=history,
             search_tool=search_tool,
             step_callback=_step_callback,
+            run_id=str(run.id),
         )
 
         counters = final_state.get("counters", {})
@@ -546,7 +554,8 @@ def run_dispatch(db: Session) -> None:
             continue
 
         if profile.onboarding_completed_at is None:
-            profile.onboarding_completed_at = datetime.datetime.now(datetime.timezone.utc)
+            from app.services.entitlements import mark_onboarding_completed
+            mark_onboarding_completed(db, profile)
             db.commit()
 
         try:

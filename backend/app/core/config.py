@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     MAX_TOPICS_PER_RUN: int = 4
     MAX_REWRITES_PER_TOPIC: int = 4
     MAX_LLM_CALLS_PER_RUN: int = 30
+    MAX_CONCURRENT_RUNS: int = 3
 
     # Process and execution lifecycle constants
     BOOT_ID: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -92,14 +93,18 @@ class Settings(BaseSettings):
     # Feature flag for auto-generating branded poster images on pipeline posts
     AUTO_IMAGE_ENABLED: bool = False
 
-    # TEST_LAB_REMOVE: Development-only Test Lab feature flag and allowlist
-    ENABLE_TEST_LAB: bool = True
+    # TEST_LAB_REMOVE: Development-only Test Lab feature flag and allowlist (defaults to False)
+    ENABLE_TEST_LAB: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("TEST_LAB_ENABLED", "ENABLE_TEST_LAB"),
+    )
     TEST_LAB_ALLOWED_EMAILS: str = ""
 
     # Day 5: Email delivery settings
     EMAIL_API_KEY: Optional[str] = None
     EMAIL_FROM: str = "AutoPulse <noreply@autopulse.app>"
     APP_BASE_URL: str = "https://autopulse-three.vercel.app"
+    OPS_ALERT_EMAIL: Optional[str] = None
 
     # SMTP configuration for sending approval emails
     SMTP_HOST: Optional[str] = None

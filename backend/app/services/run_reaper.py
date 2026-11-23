@@ -42,8 +42,33 @@ def cleanup_interrupted_runs_on_startup(db: Session, current_boot_id: str) -> in
         res_p = db.execute(stmt_p, {"boot_id": current_boot_id}).fetchall()
         db.commit()
 
+        # 3. Safety sweep: mark any run still running/started/queued older than 30 minutes as failed_error
+        stmt_30m_gen = text(
+            "UPDATE generation_runs "
+            "SET status = 'failed_error', "
+            "    error_code = 'timed_out', "
+            "    error_detail = 'Run exceeded 30 minute maximum runtime', "
+            "    error_reason = 'Run exceeded 30 minute maximum runtime', "
+            "    finished_at = now() "
+            "WHERE status IN ('running', 'started', 'queued') "
+            "  AND started_at < now() - interval '30 minutes' "
+            "RETURNING id, user_id, current_node"
+        )
+        res_30m_gen = db.execute(stmt_30m_gen).fetchall()
+        stmt_30m_p = text(
+            "UPDATE playground_runs "
+            "SET status = 'failed_error', "
+            "    error_reason = 'Run exceeded 30 minute maximum runtime', "
+            "    finished_at = now() "
+            "WHERE status IN ('running', 'started', 'queued') "
+            "  AND started_at < now() - interval '30 minutes' "
+            "RETURNING id, user_id, current_node"
+        )
+        res_30m_p = db.execute(stmt_30m_p).fetchall()
+        db.commit()
+
         seen_locks = set()
-        for row in res_gen + res_p:
+        for row in res_gen + res_p + res_30m_gen + res_30m_p:
             run_id = row[0]
             user_id = row[1]
             lock_pair = (str(user_id), str(run_id))
@@ -112,8 +137,33 @@ def reap_stalled_runs(db: Session, stall_threshold_seconds: Optional[int] = None
         res_p = db.execute(stmt_p, {"stall_sec": stall_threshold_seconds}).fetchall()
         db.commit()
 
+        # 3. Safety sweep: mark any run still running/started/queued older than 30 minutes as failed_error
+        stmt_30m_gen = text(
+            "UPDATE generation_runs "
+            "SET status = 'failed_error', "
+            "    error_code = 'timed_out', "
+            "    error_detail = 'Run exceeded 30 minute maximum runtime', "
+            "    error_reason = 'Run exceeded 30 minute maximum runtime', "
+            "    finished_at = now() "
+            "WHERE status IN ('running', 'started', 'queued') "
+            "  AND started_at < now() - interval '30 minutes' "
+            "RETURNING id, user_id, current_node"
+        )
+        res_30m_gen = db.execute(stmt_30m_gen).fetchall()
+        stmt_30m_p = text(
+            "UPDATE playground_runs "
+            "SET status = 'failed_error', "
+            "    error_reason = 'Run exceeded 30 minute maximum runtime', "
+            "    finished_at = now() "
+            "WHERE status IN ('running', 'started', 'queued') "
+            "  AND started_at < now() - interval '30 minutes' "
+            "RETURNING id, user_id, current_node"
+        )
+        res_30m_p = db.execute(stmt_30m_p).fetchall()
+        db.commit()
+
         seen_locks = set()
-        for row in res_gen + res_p:
+        for row in res_gen + res_p + res_30m_gen + res_30m_p:
             run_id = row[0]
             user_id = row[1]
             node = row[2] if len(row) > 2 else "unknown"

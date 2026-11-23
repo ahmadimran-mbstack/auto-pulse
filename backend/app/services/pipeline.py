@@ -47,6 +47,7 @@ from app.services.source_quality import is_blocked_domain, score_domain
 from app.services.resilient_llm import run_call_with_timeout
 
 logger = logging.getLogger(__name__)
+_PIPELINE_SEMAPHORE = None
 
 
 def _update_db_node_progress(
@@ -365,11 +366,6 @@ def build_graph(
             counters["llm_calls"] = counters.get("llm_calls", 0) + 1
             try:
                 res = chain.invoke(prompt_input)
-                raw_msg = res.get("raw")
-                if raw_msg and hasattr(raw_msg, "usage_metadata") and raw_msg.usage_metadata:
-                    counters["tokens_in"] = counters.get("tokens_in", 0) + raw_msg.usage_metadata.get("input_tokens", 0)
-                    counters["tokens_out"] = counters.get("tokens_out", 0) + raw_msg.usage_metadata.get("output_tokens", 0)
-
                 parsed_output = res.get("parsed")
                 if parsed_output is None and res.get("parsing_error"):
                     last_error = str(res.get("parsing_error"))
@@ -567,8 +563,6 @@ def build_graph(
         uctx = state.get("user_context") or {}
 
         counters["llm_calls"] = counters.get("llm_calls", 0) + 1
-        counters["tokens_in"] = counters.get("tokens_in", 0) + 850
-        counters["tokens_out"] = counters.get("tokens_out", 0) + 320
         finder_output, warnings = run_finder_agent(
             profile=profile,
             candidates=candidates,
@@ -822,8 +816,6 @@ def build_graph(
         playbook_rules_override = uctx.get("playbook_rules_text") or resolve_playbook_rules(state.get("customization"))
 
         counters["llm_calls"] = counters.get("llm_calls", 0) + 1
-        counters["tokens_in"] = counters.get("tokens_in", 0) + 650
-        counters["tokens_out"] = counters.get("tokens_out", 0) + 280
         try:
             brief = run_gtm_brief(
                 topic=topic_label,
@@ -916,8 +908,6 @@ def build_graph(
                 )
 
         counters["llm_calls"] = counters.get("llm_calls", 0) + 1
-        counters["tokens_in"] = counters.get("tokens_in", 0) + 950
-        counters["tokens_out"] = counters.get("tokens_out", 0) + 420
 
         try:
             if current_round == 0:
@@ -1021,8 +1011,6 @@ def build_graph(
         allow_emojis = bool(policy and policy.get("emoji_policy", "none") != "none")
 
         counters["llm_calls"] = counters.get("llm_calls", 0) + 1
-        counters["tokens_in"] = counters.get("tokens_in", 0) + 650
-        counters["tokens_out"] = counters.get("tokens_out", 0) + 280
         try:
             detection_res = evaluate_post(
                 post_text=post_text,
@@ -1846,40 +1834,91 @@ def execute_pipeline(
         event_emitter.emit_run_started()
         event_emitter.emit_agent_started("finder", "Searching for fresh topics in your space.", 1)
 
+    from app.services.quota import RunBudgetExceeded
+    from app.services.usage_logger import aggregate_run_usage, usage_logging_context
+    import threading
+
+    global _PIPELINE_SEMAPHORE
+    if _PIPELINE_SEMAPHORE is None:
+        _PIPELINE_SEMAPHORE = threading.BoundedSemaphore(max(1, int(getattr(settings, "MAX_CONCURRENT_RUNS", 3))))
+
+    # Enforce docs_token_limit == 0 gate: strip uploaded documents (keep custom_instructions)
+    try:
+        from app.db.session import SessionLocal
+        from app.services.entitlements import get_entitlements
+        with SessionLocal() as ent_db:
+            ent = get_entitlements(ent_db, user_id)
+            if ent["plan_id"] != "internal" and (ent["features"].get("docs_token_limit") or 0) == 0:
+                if isinstance(user_context_dict, dict):
+                    user_context_dict["playbook_rules_text"] = ""
+                    user_context_dict["business_facts_text"] = ""
+                    user_context_dict["previous_posts_voice_text"] = ""
+                    user_context_dict["scoped_rules"] = []
+                customization_dict = {"is_empty": True}
+                policy_dict = None
+                initial_state["user_context"] = user_context_dict
+                initial_state["customization"] = customization_dict
+                initial_state["policy"] = None
+    except Exception as exc:
+        logger.debug(f"Could not check docs_token_limit in execute_pipeline: {exc}")
+
     # Stream updates through LangGraph so events emit live and cancellation is checked between steps
     merged_state: Dict[str, Any] = dict(initial_state)
     prev_best_score = -1
     last_node = "finder"
 
-    try:
-        for chunk in app.stream(
-            initial_state,
-            config={
-                "recursion_limit": 150,
-                "configurable": {"thread_id": thread_id},
-            },
-            stream_mode="updates",
-        ):
-            if not isinstance(chunk, dict):
-                continue
-            for node_name, update in chunk.items():
-                last_node = str(node_name)
-                if isinstance(update, dict):
-                    merged_state.update(update)
-                    prev_best_score = _emit_events_for_node(
-                        node_name, update, merged_state, event_emitter, prev_best_score
-                    )
+    run_kind = "playground" if is_manual else "scheduled"
 
-            # Check user cancellation between node steps
-            if event_emitter is not None and event_emitter.is_cancelled():
-                merged_state["cancelled"] = True
-                merged_state["status"] = "cancelled"
-                if merged_state.get("best_clean_draft"):
-                    merged_state["draft"] = merged_state["best_clean_draft"]
-                    merged_state["best_draft"] = merged_state["best_clean_draft"]
-                    merged_state["ai_score"] = merged_state.get("best_clean_slop", 0)
-                event_emitter.flush()
-                break
+    try:
+        with _PIPELINE_SEMAPHORE:
+            with usage_logging_context(run_id=run_id, user_id=user_id, kind=run_kind):
+                for chunk in app.stream(
+                    initial_state,
+                    config={
+                        "recursion_limit": 150,
+                        "configurable": {"thread_id": thread_id},
+                    },
+                    stream_mode="updates",
+                ):
+                    if not isinstance(chunk, dict):
+                        continue
+                    for node_name, update in chunk.items():
+                        last_node = str(node_name)
+                        if isinstance(update, dict):
+                            merged_state.update(update)
+                            prev_best_score = _emit_events_for_node(
+                                node_name, update, merged_state, event_emitter, prev_best_score
+                            )
+
+                    # Check user cancellation between node steps
+                    if event_emitter is not None and event_emitter.is_cancelled():
+                        merged_state["cancelled"] = True
+                        merged_state["status"] = "cancelled"
+                        if merged_state.get("best_clean_draft"):
+                            merged_state["draft"] = merged_state["best_clean_draft"]
+                            merged_state["best_draft"] = merged_state["best_clean_draft"]
+                            merged_state["ai_score"] = merged_state.get("best_clean_slop", 0)
+                        event_emitter.flush()
+                        break
+    except RunBudgetExceeded as budget_exc:
+        logger.warning(f"Pipeline budget stop for run {run_id} at node {last_node}: {budget_exc.reason}")
+        best = extract_best_draft(merged_state)
+        if best:
+            merged_state["draft"] = best
+            merged_state["best_draft"] = best
+            merged_state["status"] = "succeeded"
+            merged_state["exit_reason"] = budget_exc.reason
+            if event_emitter is not None:
+                rounds_used = max(1, len(merged_state.get("rounds_history", [])))
+                ai_score = int(merged_state.get("best_clean_slop") or merged_state.get("ai_score") or 0)
+                event_emitter.emit_run_completed(best, ai_score, rounds_used)
+        else:
+            merged_state["status"] = "failed_error"
+            merged_state["error_code"] = budget_exc.reason
+            merged_state["error_node"] = last_node
+            merged_state["error_detail"] = PLAIN_TECH_ERROR_MESSAGE
+            if event_emitter is not None:
+                event_emitter.emit_run_failed(PLAIN_TECH_ERROR_MESSAGE)
     except Exception as exc:
         logger.error(f"Pipeline execution error for run {run_id} at node {last_node}: {exc}", exc_info=True)
         merged_state["status"] = "failed_error"
@@ -1888,6 +1927,17 @@ def execute_pipeline(
         merged_state["error_detail"] = PLAIN_TECH_ERROR_MESSAGE
         if event_emitter is not None:
             event_emitter.emit_run_failed(PLAIN_TECH_ERROR_MESSAGE)
+
+    # Populate counters from llm_call_log for this run_id
+    if run_id:
+        try:
+            from app.db.session import SessionLocal
+            with SessionLocal() as usage_db:
+                agg = aggregate_run_usage(usage_db, run_id)
+                if agg["llm_calls"] > 0 or agg["search_calls"] > 0:
+                    merged_state["counters"] = agg
+        except Exception as exc:
+            logger.warning(f"Failed to aggregate llm_call_log for run {run_id}: {exc}")
 
     merged_state["last_node"] = last_node
     if (

@@ -62,6 +62,17 @@ def start_slack_connect(
         error_message="Too many Slack connection attempts. Please wait a minute.",
     )
 
+    # Plan gate: Slack connect requires Pro or higher
+    from app.services.entitlements import get_entitlements
+    from app.services.quota import raise_blocked_403
+    ent = get_entitlements(db, user.id)
+    if not ent["features"].get("approval_slack"):
+        raise_blocked_403(
+            "feature_locked",
+            "Slack approvals are available on Pro and Business plans.",
+            upgrade_to="pro",
+        )
+
     # Determine return_to destination strictly as onboarding or dashboard
     chosen_return_to = payload.return_to if payload else return_to
     if chosen_return_to not in ("onboarding", "dashboard"):

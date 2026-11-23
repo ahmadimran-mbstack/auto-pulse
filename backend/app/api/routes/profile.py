@@ -88,14 +88,25 @@ def patch_caller_profile(
         import datetime as dt_mod
         profile.post_time = dt_mod.datetime.strptime(payload.post_time, "%H:%M").time()
     if payload.post_days is not None:
+        from app.services.entitlements import get_entitlements
+        from app.services.quota import raise_blocked_403
+        ent = get_entitlements(db, user.id)
+        max_days = ent["limits"].get("max_post_days_per_week")
+        if max_days is not None and len(payload.post_days) > max_days:
+            upgrade = "pro" if ent["plan_id"] in ("trial", "starter") else "business"
+            raise_blocked_403(
+                "feature_locked",
+                f"Your plan allows up to {max_days} posting days per week.",
+                upgrade_to=upgrade,
+            )
         profile.post_days = payload.post_days
     if payload.approval_lead_minutes is not None:
         profile.approval_lead_minutes = payload.approval_lead_minutes
 
     # Ensure profile is marked active for scheduled generation if scheduling parameters are present
     if profile.timezone and profile.post_time and profile.post_days and profile.onboarding_completed_at is None:
-        import datetime as dt_mod
-        profile.onboarding_completed_at = dt_mod.datetime.now(dt_mod.timezone.utc)
+        from app.services.entitlements import mark_onboarding_completed
+        mark_onboarding_completed(db, profile)
 
     schedule_notice = None
     if schedule_changed:
@@ -198,7 +209,19 @@ def save_onboarding_step_4(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> ProfileResponse:
+    from app.services.entitlements import get_entitlements
+    from app.services.quota import raise_blocked_403
     from app.services.schedule_timeline import compute_next_schedule_timeline
+
+    ent = get_entitlements(db, user.id)
+    max_days = ent["limits"].get("max_post_days_per_week")
+    if max_days is not None and len(payload.post_days) > max_days:
+        upgrade = "pro" if ent["plan_id"] in ("trial", "starter") else "business"
+        raise_blocked_403(
+            "feature_locked",
+            f"Your plan allows up to {max_days} posting days per week.",
+            upgrade_to=upgrade,
+        )
 
     profile = profile_repo.update_profile_step_4(
         db=db,

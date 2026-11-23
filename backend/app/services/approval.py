@@ -210,6 +210,28 @@ def decide_approval(
     post_id: Optional[uuid.UUID] = None,
     user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    # Block approval publishing when the user's account/subscription is expired
+    if decision == "approved":
+        owner_id = user_id
+        if not owner_id and token_hash:
+            owner_id = db.execute(
+                text("SELECT user_id FROM approvals WHERE token_hash = :th LIMIT 1"),
+                {"th": token_hash},
+            ).scalar_one_or_none()
+        if owner_id:
+            from app.services.entitlements import get_entitlements
+            ent = get_entitlements(db, str(owner_id))
+            if ent["status"] == "expired":
+                code = "trial_expired" if ent["plan_id"] == "trial" else "subscription_expired"
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={
+                        "code": code,
+                        "message": "Your plan has expired. Upgrade to publish posts.",
+                        "upgrade_to": "starter" if ent["plan_id"] == "trial" else ent["plan_id"],
+                    },
+                )
+
     # Atomically claim the approval where no decision has been recorded yet and deadline is active
     if token_hash:
         claim_stmt = text(

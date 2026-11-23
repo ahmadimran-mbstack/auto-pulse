@@ -526,6 +526,12 @@ def notify_slack_approval(db: Any, post: Any) -> Optional[str]:
         from sqlalchemy.dialects.postgresql import insert as pg_insert
         from sqlalchemy import text
 
+        # 0. Plan gate: if user downgraded or expired, fall back to email
+        from app.services.entitlements import get_entitlements
+        ent = get_entitlements(db, post.user_id)
+        if ent["status"] == "expired" or not ent["features"].get("approval_slack"):
+            return None
+
         # 1. Verify Slack integration is connected
         integration = db.query(SlackIntegration).filter(
             SlackIntegration.user_id == post.user_id,

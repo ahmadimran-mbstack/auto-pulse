@@ -76,6 +76,38 @@ def _parse_uuid(raw: str) -> uuid.UUID:
         ) from exc
 
 
+def _enforce_docs_plan_gate(db: Session, user_id: str, incoming_tokens: int = 0) -> None:
+    """Enforce docs_token_limit on uploaded/pasted documents and URLs (internal always allowed)."""
+    from app.services.entitlements import get_entitlements
+    from app.services.quota import get_docs_tokens_used, raise_blocked_403
+
+    ent = get_entitlements(db, user_id)
+    if ent["plan_id"] == "internal":
+        return
+    if ent["status"] == "expired":
+        raise_blocked_403(
+            "trial_expired" if ent["plan_id"] == "trial" else "subscription_expired",
+            "Your plan has expired. Upgrade to upload business documents.",
+            upgrade_to="starter" if ent["plan_id"] == "trial" else ent["plan_id"],
+        )
+    limit = ent["features"].get("docs_token_limit")
+    if limit == 0:
+        raise_blocked_403(
+            "feature_locked",
+            "Business document uploads are available on Pro and Business plans.",
+            upgrade_to="pro",
+        )
+    if limit is not None:
+        used = get_docs_tokens_used(db, user_id)
+        if used + incoming_tokens > limit:
+            upgrade = "business" if ent["plan_id"] == "pro" else "pro"
+            raise_blocked_403(
+                "feature_locked",
+                f"Document limit reached ({used:,} / {limit:,} tokens). Upgrade for more capacity.",
+                upgrade_to=upgrade,
+            )
+
+
 @router.get("", response_model=CustomizationOverview)
 def get_customization_overview(
     user: User = Depends(require_customization_enabled),
@@ -158,6 +190,8 @@ async def upload_customization_document(
         error_message="Upload limit reached (30/hour). Please try again later.",
     )
 
+    _enforce_docs_plan_gate(db, user.id, incoming_tokens=0)
+
     # Check count quota before reading upload stream
     try:
         custom_repo.enforce_quota(db, user.id, kind=kind, source_type="upload", incoming_bytes=0)
@@ -188,6 +222,9 @@ async def upload_customization_document(
         detected_mime, decoded_text = detect_and_validate_file(raw_bytes, filename=file.filename)
     except ValidationError as exc:
         raise HTTPException(status_code=exc.status_code, detail={"code": exc.code, "message": exc.message})
+
+    incoming_tokens = max(1, len(decoded_text) // 4) if decoded_text else 0
+    _enforce_docs_plan_gate(db, user.id, incoming_tokens=incoming_tokens)
 
     sha = custom_repo.compute_sha256(raw_bytes)
     existing = custom_repo.find_duplicate_by_sha256(db, user.id, kind=kind, sha256=sha)
@@ -235,6 +272,9 @@ def paste_customization_document(
     db: Session = Depends(get_db),
 ) -> DocumentSummary:
     enforce_rate_limit(f"custom_upload:{user.id}", max_requests=30, window_seconds=3600)
+    text_clean_len = len(payload.text.strip())
+    incoming_tokens = max(1, text_clean_len // 4) if text_clean_len else 0
+    _enforce_docs_plan_gate(db, user.id, incoming_tokens=incoming_tokens)
     raw_bytes = payload.text.strip().encode("utf-8")
     try:
         custom_repo.enforce_quota(
@@ -284,6 +324,7 @@ def add_business_url(
         window_seconds=3600,
         error_message="URL add limit reached (10/hour). Please try again later.",
     )
+    _enforce_docs_plan_gate(db, user.id, incoming_tokens=0)
     try:
         custom_repo.enforce_quota(db, user.id, kind="business", source_type="url", incoming_bytes=0)
         normalized_url = normalize_and_validate_url(payload.url)

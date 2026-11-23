@@ -455,7 +455,8 @@ def generate_draft_now(
         )
     if not profile.onboarding_complete:
         if profile.timezone and profile.post_time:
-            profile.onboarding_completed_at = datetime.datetime.now(datetime.timezone.utc)
+            from app.services.entitlements import mark_onboarding_completed
+            mark_onboarding_completed(db, profile)
             db.commit()
         else:
             raise HTTPException(
@@ -473,17 +474,26 @@ def generate_draft_now(
     if replace:
         post_repo.delete_draft_and_run_for_date(db=db, user_id=user.id, run_date=today_local)
 
-    # Always create a brand new generation run with fresh UUID and run_type='manual'
+    from app.services.quota import check_and_reserve_run
+
+    # Always create a brand new generation run with fresh UUID and run_type='manual', usage_kind='scheduled'
     new_run_id = uuid.uuid4()
-    run = GenerationRun(
-        id=new_run_id,
+    run, blocked = check_and_reserve_run(
+        db,
         user_id=user.id,
-        run_date=today_local,
+        usage_kind="scheduled",
+        run_id=new_run_id,
         run_type="manual",
-        status="started",
+        run_date=today_local,
+        boot_id=settings.BOOT_ID,
+        create_playground_row=False,
+        initial_status="started",
         search_provider=settings.SEARCH_PROVIDER,
     )
-    db.add(run)
+    if blocked:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=blocked)
+
     db.commit()
     db.refresh(run)
 
