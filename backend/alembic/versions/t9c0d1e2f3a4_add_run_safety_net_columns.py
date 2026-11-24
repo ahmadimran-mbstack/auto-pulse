@@ -8,7 +8,6 @@ Create Date: 2026-11-24 21:40:00.000000
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
 
 
 revision: str = "t9c0d1e2f3a4"
@@ -18,14 +17,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("generation_runs", sa.Column("entry_point", sa.Text(), nullable=True))
-    op.add_column("generation_runs", sa.Column("failed_stage", sa.Text(), nullable=True))
-    op.add_column("generation_runs", sa.Column("error_category", sa.Text(), nullable=True))
-    op.add_column("generation_runs", sa.Column("real_error", sa.Text(), nullable=True))
+    op.execute("ALTER TABLE generation_runs ADD COLUMN IF NOT EXISTS entry_point TEXT")
+    op.execute("ALTER TABLE generation_runs ADD COLUMN IF NOT EXISTS failed_stage TEXT")
+    op.execute("ALTER TABLE generation_runs ADD COLUMN IF NOT EXISTS error_category TEXT")
+    op.execute("ALTER TABLE generation_runs ADD COLUMN IF NOT EXISTS real_error TEXT")
 
 
 def downgrade() -> None:
-    op.drop_column("generation_runs", "real_error")
-    op.drop_column("generation_runs", "error_category")
-    op.drop_column("generation_runs", "failed_stage")
-    op.drop_column("generation_runs", "entry_point")
+    op.execute("ALTER TABLE generation_runs DROP COLUMN IF EXISTS real_error")
+    op.execute("ALTER TABLE generation_runs DROP COLUMN IF EXISTS error_category")
+    op.execute("ALTER TABLE generation_runs DROP COLUMN IF EXISTS failed_stage")
+    op.execute("ALTER TABLE generation_runs DROP COLUMN IF EXISTS entry_point")
