@@ -515,9 +515,11 @@ def generate_draft_now(
         step_callback=_step_callback,
         is_manual=True,
         run_id=str(new_run_id),
+        entry_point="posts_generate",
     )
 
     counters = final_state.get("counters", {})
+    run.entry_point = "posts_generate"
     run.search_calls = counters.get("search_calls", 0)
     run.llm_calls = counters.get("llm_calls", 0)
     run.tokens_in = counters.get("tokens_in", 0)
@@ -528,16 +530,25 @@ def generate_draft_now(
 
     err_code = final_state.get("error_code")
     if err_code:
-        run.status = "failed"
+        from app.services.run_errors import ERROR_CATEGORY_TEMPORARY_PROBLEM, MSG_TEMPORARY_PROBLEM
+        run.status = "failed_error"
         run.error_code = err_code
-        run.error_detail = final_state.get("error_detail")
+        run.error_category = final_state.get("error_category") or ERROR_CATEGORY_TEMPORARY_PROBLEM
+        run.failed_stage = final_state.get("failed_stage") or final_state.get("last_node")
+        run.real_error = final_state.get("real_error") or final_state.get("error_detail")
+        run.error_detail = MSG_TEMPORARY_PROBLEM
         run.finished_at = datetime.datetime.now(datetime.timezone.utc)
         if run.started_at:
             run.duration = round((run.finished_at - run.started_at).total_seconds(), 2)
         db.commit()
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": err_code, "message": run.error_detail or "Generation failed"},
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": err_code,
+                "error_category": run.error_category,
+                "message": MSG_TEMPORARY_PROBLEM,
+                "run_id": str(run.id),
+            },
         )
 
     chosen = final_state.get("chosen", {})

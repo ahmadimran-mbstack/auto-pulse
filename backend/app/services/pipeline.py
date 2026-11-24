@@ -231,6 +231,9 @@ def create_chat_model(model_name: str, temperature: Optional[float] = None) -> A
     elif not model_provider and "gemini" in clean_model.lower():
         model_provider = "google_genai"
 
+    if model_provider == "google_genai":
+        kwargs.setdefault("max_retries", 1)
+
     real_model = None
     if model_provider != "mock":
         try:
@@ -1479,30 +1482,28 @@ def build_graph(
             topic_idx = state.get("current_topic_index", 0)
             best_draft = state.get("best_draft")
 
-            # Whole-run safety ceiling check (1200s)
+            # Whole-run safety ceiling & 120s time budget check
             deadline = state.get("run_deadline")
+            budget_deadline = state.get("time_budget_deadline")
             ceiling_limit = getattr(settings, "RUN_SAFETY_CEILING_SECONDS", 1200)
-            if deadline and time.time() > deadline:
-                logger.warning(f"[SAFETY CEILING HIT] run_id={run_id} | user_id={user_id} | node={node_name} | ceiling={ceiling_limit}s")
+            best_any = (
+                state.get("best_clean_draft")
+                or best_draft
+                or state.get("best_raw_draft")
+            )
+            if (budget_deadline and time.time() > budget_deadline and best_any) or (deadline and time.time() > deadline):
+                logger.warning(f"[BUDGET/CEILING HIT] run_id={run_id} | user_id={user_id} | node={node_name}")
                 best_score = state.get("best_score", 999)
-                if best_draft and best_score <= getattr(settings, "AI_SCORE_THRESHOLD", 15):
-                    logger.info(f"[CEILING RECOVER] run_id={run_id} | returning passing draft (score={best_score})")
+                if best_any:
+                    logger.info(f"[CEILING RECOVER] run_id={run_id} | returning best candidate (score={best_score})")
                     return {
                         "status": "succeeded",
-                        "draft": best_draft,
-                        "best_draft": best_draft,
+                        "draft": best_any,
+                        "best_draft": best_any,
+                        "best_clean_draft": best_any,
                         "best_score": best_score,
                         "ai_score": best_score,
-                        "current_step": "completed",
-                    }
-                elif best_draft:
-                    logger.info(f"[CEILING RECOVER] run_id={run_id} | returning best effort draft marked needs_review (score={best_score})")
-                    return {
-                        "status": "needs_review",
-                        "draft": best_draft,
-                        "best_draft": best_draft,
-                        "best_score": best_score,
-                        "ai_score": best_score,
+                        "is_loop_terminal": True,
                         "current_step": "post_loop",
                     }
                 return {
@@ -1535,11 +1536,13 @@ def build_graph(
             except TimeoutError as te:
                 logger.error(f"[NODE TIMEOUT] run_id={run_id} | node={node_name} timed out after {settings.PER_NODE_TIMEOUT_SECONDS}s: {te}")
                 best_score = state.get("best_score", 999)
-                if best_draft:
+                best_any = state.get("best_clean_draft") or best_draft or state.get("best_raw_draft")
+                if best_any:
                     return {
-                        "status": "needs_review",
-                        "draft": best_draft,
-                        "best_draft": best_draft,
+                        "status": "succeeded",
+                        "draft": best_any,
+                        "best_draft": best_any,
+                        "best_clean_draft": best_any,
                         "best_score": best_score,
                         "ai_score": best_score,
                         "is_loop_terminal": True,
@@ -1553,6 +1556,19 @@ def build_graph(
                 }
             except Exception as exc:
                 logger.error(f"[NODE ERROR] run_id={run_id} | node={node_name} failed: {exc}", exc_info=True)
+                best_any = state.get("best_clean_draft") or best_draft or state.get("best_raw_draft")
+                if best_any:
+                    best_score = state.get("best_score", 999)
+                    return {
+                        "status": "succeeded",
+                        "draft": best_any,
+                        "best_draft": best_any,
+                        "best_clean_draft": best_any,
+                        "best_score": best_score,
+                        "ai_score": best_score,
+                        "is_loop_terminal": True,
+                        "current_step": "post_loop",
+                    }
                 raise
             finally:
                 dur = time.perf_counter() - node_start_t
@@ -1709,6 +1725,77 @@ def extract_best_draft(state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     )
 
 
+def _run_plain_fallback_drafter(
+    profile_dict: Dict[str, Any],
+    user_context_dict: Dict[str, Any],
+    topic_hint: Optional[str] = None,
+    models: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    """Run one plain drafter call with user profile, customization, and playbook when no candidate exists."""
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    model = (models or {}).get("main") if isinstance(models, dict) else None
+    if model is None:
+        model = create_chat_model(settings.LLM_MODEL, temperature=0.7)
+
+    role_title = profile_dict.get("role_title") or "Professional"
+    industry = profile_dict.get("industry") or "Technology"
+    niche = profile_dict.get("niche_description") or ""
+    audience = profile_dict.get("audience") or "Industry peers"
+    tone = profile_dict.get("tone") or "direct"
+    goals = profile_dict.get("goals") or "Share practical lessons"
+    custom_instr = user_context_dict.get("custom_instructions") or "None."
+    playbook = user_context_dict.get("playbook_rules_text") or "None."
+    facts = user_context_dict.get("business_facts_text") or "None."
+    topic_line = f"Topic or angle: {topic_hint.strip()}" if topic_hint and topic_hint.strip() else "Choose a concrete, practical topic from the user's niche."
+
+    sys_msg = SystemMessage(
+        content=(
+            "You write concise, authentic LinkedIn posts in plain English. "
+            "Follow these minimum rules: 400 to 2500 characters, no em dashes, "
+            "no generic filler, no markdown headers, and never output just a topic title."
+        )
+    )
+    hum_msg = HumanMessage(
+        content=(
+            f"Author role: {role_title} in {industry}\n"
+            f"Niche: {niche}\n"
+            f"Audience: {audience}\n"
+            f"Tone: {tone}\n"
+            f"Goals: {goals}\n"
+            f"Custom instructions: {custom_instr[:800]}\n"
+            f"Playbook rules: {playbook[:800]}\n"
+            f"Business facts: {facts[:600]}\n"
+            f"{topic_line}\n\n"
+            "Write the LinkedIn post text only."
+        )
+    )
+    try:
+        res = model.invoke([sys_msg, hum_msg])
+        text_val = getattr(res, "content", res)
+        if isinstance(text_val, list):
+            text_val = "\n".join(
+                str(part.get("text", "")) if isinstance(part, dict) else str(part)
+                for part in text_val
+            )
+        post_text = str(text_val or "").strip()
+        if not post_text or len(post_text) < 80:
+            return None
+        if topic_hint and post_text.lower() == topic_hint.strip().lower():
+            return None
+        if len(post_text) > 3000:
+            post_text = post_text[:2997].rstrip() + "..."
+        return {
+            "post_text": post_text,
+            "hashtags": [],
+            "image_headline": "",
+            "first_comment": "",
+        }
+    except Exception as exc:
+        logger.warning(f"Plain fallback drafter failed: {exc}")
+        return None
+
+
 def execute_pipeline(
     user_id: str,
     profile_dict: Dict[str, Any],
@@ -1721,6 +1808,7 @@ def execute_pipeline(
     run_id: Optional[str] = None,
     event_emitter: Optional[Any] = None,
     use_customization: bool = True,
+    entry_point: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Single unified entrypoint for both daily content generation runs and playground runs."""
     import uuid
@@ -1907,6 +1995,8 @@ def execute_pipeline(
             merged_state["draft"] = best
             merged_state["best_draft"] = best
             merged_state["status"] = "succeeded"
+            merged_state["error_code"] = None
+            merged_state["error_detail"] = None
             merged_state["exit_reason"] = budget_exc.reason
             if event_emitter is not None:
                 rounds_used = max(1, len(merged_state.get("rounds_history", [])))
@@ -1916,17 +2006,28 @@ def execute_pipeline(
             merged_state["status"] = "failed_error"
             merged_state["error_code"] = budget_exc.reason
             merged_state["error_node"] = last_node
-            merged_state["error_detail"] = PLAIN_TECH_ERROR_MESSAGE
-            if event_emitter is not None:
-                event_emitter.emit_run_failed(PLAIN_TECH_ERROR_MESSAGE)
+            merged_state["failed_stage"] = last_node
+            merged_state["real_error"] = str(budget_exc)
     except Exception as exc:
         logger.error(f"Pipeline execution error for run {run_id} at node {last_node}: {exc}", exc_info=True)
-        merged_state["status"] = "failed_error"
-        merged_state["error_code"] = "pipeline_error"
-        merged_state["error_node"] = last_node
-        merged_state["error_detail"] = PLAIN_TECH_ERROR_MESSAGE
-        if event_emitter is not None:
-            event_emitter.emit_run_failed(PLAIN_TECH_ERROR_MESSAGE)
+        best = extract_best_draft(merged_state)
+        if best:
+            merged_state["draft"] = best
+            merged_state["best_draft"] = best
+            merged_state["status"] = "succeeded"
+            merged_state["error_code"] = None
+            merged_state["error_detail"] = None
+            merged_state["exit_reason"] = "recovered_best_draft"
+            if event_emitter is not None:
+                rounds_used = max(1, len(merged_state.get("rounds_history", [])))
+                ai_score = int(merged_state.get("best_clean_slop") or merged_state.get("ai_score") or 0)
+                event_emitter.emit_run_completed(best, ai_score, rounds_used)
+        else:
+            merged_state["status"] = "failed_error"
+            merged_state["error_code"] = "pipeline_error"
+            merged_state["error_node"] = last_node
+            merged_state["failed_stage"] = last_node
+            merged_state["real_error"] = f"{type(exc).__name__}: {str(exc)[:800]}"
 
     # Populate counters from llm_call_log for this run_id
     if run_id:
@@ -1940,15 +2041,50 @@ def execute_pipeline(
             logger.warning(f"Failed to aggregate llm_call_log for run {run_id}: {exc}")
 
     merged_state["last_node"] = last_node
-    if (
-        not merged_state.get("cancelled")
-        and not merged_state.get("error_code")
-        and extract_best_draft(merged_state) is None
-    ):
-        merged_state["status"] = "failed_error"
-        merged_state["error_code"] = "no_draft_produced"
-        merged_state["error_node"] = last_node
-        merged_state["error_detail"] = f"The pipeline stopped at {last_node} without producing a draft."
+
+    # Safety net: if not cancelled and we have a best candidate despite an error/timeout, recover it
+    if not merged_state.get("cancelled"):
+        best = extract_best_draft(merged_state)
+        if best and (merged_state.get("status") in ("failed_error", "failed", "failed_quality", "timed_out") or merged_state.get("error_code")):
+            merged_state["draft"] = best
+            merged_state["best_draft"] = best
+            merged_state["status"] = "succeeded"
+            merged_state["error_code"] = None
+            merged_state["error_detail"] = None
+            merged_state["exit_reason"] = merged_state.get("exit_reason") or "recovered_best_draft"
+            if event_emitter is not None:
+                rounds_used = max(1, len(merged_state.get("rounds_history", [])))
+                ai_score = int(merged_state.get("best_clean_slop") or merged_state.get("ai_score") or 0)
+                event_emitter.emit_run_completed(best, ai_score, rounds_used)
+        elif best is None and merged_state.get("error_code") not in ("daily_spend_limit", "max_llm_calls"):
+            # Try one plain drafter call with user's profile, customization, and playbook
+            real_err_before = merged_state.get("real_error") or merged_state.get("error_detail")
+            fallback_draft = _run_plain_fallback_drafter(
+                profile_dict=profile_dict or {},
+                user_context_dict=user_context_dict or {},
+                topic_hint=topic_hint,
+                models=models,
+            )
+            if fallback_draft:
+                merged_state["draft"] = fallback_draft
+                merged_state["best_draft"] = fallback_draft
+                merged_state["best_clean_draft"] = fallback_draft
+                merged_state["status"] = "succeeded"
+                merged_state["error_code"] = None
+                merged_state["error_detail"] = None
+                merged_state["exit_reason"] = "plain_fallback"
+                if event_emitter is not None:
+                    event_emitter.emit_run_completed(fallback_draft, 0, max(1, len(merged_state.get("rounds_history", []))))
+            else:
+                from app.services.run_errors import ERROR_CATEGORY_TEMPORARY_PROBLEM, MSG_TEMPORARY_PROBLEM
+                merged_state["status"] = "failed_error"
+                merged_state["error_code"] = merged_state.get("error_code") or "pipeline_error"
+                merged_state["error_category"] = ERROR_CATEGORY_TEMPORARY_PROBLEM
+                merged_state["failed_stage"] = merged_state.get("failed_stage") or merged_state.get("error_node") or last_node
+                merged_state["real_error"] = real_err_before or f"Pipeline stopped at {last_node} without producing a draft."
+                merged_state["error_detail"] = MSG_TEMPORARY_PROBLEM
+                if event_emitter is not None:
+                    event_emitter.emit_run_failed(MSG_TEMPORARY_PROBLEM)
 
     # Record event write overhead into internal_trace if present
     if event_emitter is not None:
@@ -1982,6 +2118,24 @@ def execute_pipeline(
         f"rewrite_rounds={final_state.get('round', 0)} | duration={pipeline_duration:.2f}s | "
         f"llm_calls={final_counters.get('llm_calls', 0)} | search_calls={final_counters.get('search_calls', 0)} | "
         f"tokens_in={final_counters.get('tokens_in', 0)} | tokens_out={final_counters.get('tokens_out', 0)}"
+    )
+    import json as _json
+
+    logger.info(
+        _json.dumps(
+            {
+                "event": "generation_run",
+                "run_id": run_id or "none",
+                "user_id": user_id,
+                "entry_point": entry_point or run_type_label,
+                "status": final_status,
+                "failed_stage": final_state.get("failed_stage"),
+                "error_category": final_state.get("error_category"),
+                "rounds": final_state.get("round", 0),
+                "duration": pipeline_duration,
+                "real_error": final_state.get("real_error"),
+            }
+        )
     )
     logger.info(
         f"[PIPELINE RUN END] run_id={run_id or 'none'} | user_id={user_id} | status={final_status} | "

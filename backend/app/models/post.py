@@ -171,6 +171,10 @@ class GenerationRun(Base):
     # Structured error code and short sanitized detail when failed
     error_code: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     error_detail: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    entry_point: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    failed_stage: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    error_category: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    real_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Audit counters for search provider and external calls
     search_provider: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

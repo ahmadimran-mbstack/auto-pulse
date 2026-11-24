@@ -314,9 +314,11 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
             search_tool=search_tool,
             step_callback=_step_callback,
             run_id=str(run.id),
+            entry_point="scheduler",
         )
 
         counters = final_state.get("counters", {})
+        run.entry_point = "scheduler"
         run.search_calls = counters.get("search_calls", 0)
         run.llm_calls = counters.get("llm_calls", 0)
         run.tokens_in = counters.get("tokens_in", 0)
@@ -333,7 +335,10 @@ def generate_draft_for_user(db: Session, profile: Profile, run_date: datetime.da
             run.status = "failed_error"
             run.current_step = "failed_error"
             run.error_code = err_code or "pipeline_error"
-            run.error_detail = final_state.get("error_detail") or "Pipeline encountered an error"
+            run.error_category = final_state.get("error_category") or "temporary_problem"
+            run.failed_stage = final_state.get("failed_stage") or final_state.get("last_node")
+            run.real_error = final_state.get("real_error") or final_state.get("error_detail")
+            run.error_detail = final_state.get("error_detail") or "Something went wrong on our side. Your quota was not used. Try again in a minute."
             run.finished_at = datetime.datetime.now(datetime.timezone.utc)
             if run.started_at:
                 run.duration = round((run.finished_at - run.started_at).total_seconds(), 2)

@@ -488,6 +488,7 @@ def execute_generate_step(db: Session, run: TestLabRun, started_at: datetime.dat
             topic_hint=run.topic_hint,
             is_manual=True,
             run_id=str(run.id),
+            entry_point="test_lab",
         )
 
         err_code = final_state.get("error_code")

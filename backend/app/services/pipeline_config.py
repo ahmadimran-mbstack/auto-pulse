@@ -6,7 +6,7 @@ from typing import Dict
 
 # Loop limits and time budgets
 MAX_ROUNDS: int = 4
-TIME_BUDGET_SECONDS: int = 90
+TIME_BUDGET_SECONDS: int = 120
 PER_MODEL_CALL_TIMEOUT_SECONDS: int = 30
 
 # Quality targets and post length bounds
@@ -56,7 +56,7 @@ ISSUE_CODE_MESSAGES: Dict[str, str] = {
 DEFAULT_REVISION_NOTE: str = "Refining the draft."
 
 # Plain message shown when a real technical failure stops a run
-PLAIN_TECH_ERROR_MESSAGE: str = "We could not write your post right now. Please try again in a moment."
+PLAIN_TECH_ERROR_MESSAGE: str = "Something went wrong on our side. Your quota was not used. Try again in a minute."
 
 
 def get_agent_label(agent_key: str) -> str:

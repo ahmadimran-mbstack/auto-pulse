@@ -120,6 +120,7 @@ class PlaygroundRunDetail(BaseModel):
     last_progress_at: Optional[str] = None
     stalled: bool = False
     error_code: Optional[str] = None
+    error_category: Optional[str] = None
     error_detail: Optional[str] = None
     error_reason: Optional[str] = None
     result: Optional[Dict[str, Any]] = None
@@ -152,6 +153,7 @@ class GenerationRunDetail(BaseModel):
     last_progress_at: Optional[str] = None
     stalled: bool = False
     error_code: Optional[str] = None
+    error_category: Optional[str] = None
     error_detail: Optional[str] = None
     error_reason: Optional[str] = None
     trace: Optional[Dict[str, Any]] = None

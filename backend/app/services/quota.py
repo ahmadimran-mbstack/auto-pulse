@@ -137,8 +137,18 @@ def get_user_usage_counts(
     }
 
 
-def _block_detail(code: str, message: str, upgrade_to: Optional[str]) -> Dict[str, Any]:
-    return {"code": code, "message": message, "upgrade_to": upgrade_to}
+def _block_detail(
+    code: str,
+    message: str,
+    upgrade_to: Optional[str],
+    error_category: Optional[str] = None,
+) -> Dict[str, Any]:
+    return {
+        "code": code,
+        "error_category": error_category or code,
+        "message": message,
+        "upgrade_to": upgrade_to,
+    }
 
 
 def raise_blocked_403(code: str, message: str, upgrade_to: Optional[str] = None) -> None:
@@ -179,23 +189,29 @@ def check_and_reserve_run(
     computed_status = compute_subscription_status(sub, now=current_utc)
 
     if computed_status == "expired":
+        from app.services.run_errors import ERROR_CATEGORY_PLAN_EXPIRED, MSG_PLAN_EXPIRED
+
         code = "trial_expired" if plan.id == "trial" else "subscription_expired"
-        msg = (
-            "Your 3-day free trial has ended. Choose a plan to continue."
-            if plan.id == "trial"
-            else "Your subscription has expired. Renew your plan to continue."
+        return None, _block_detail(
+            code,
+            MSG_PLAN_EXPIRED,
+            "starter" if plan.id == "trial" else plan.id,
+            error_category=ERROR_CATEGORY_PLAN_EXPIRED,
         )
-        return None, _block_detail(code, msg, "starter" if plan.id == "trial" else plan.id)
 
     local_date, day_start_utc, day_end_utc = get_user_local_day_bounds(db, user_id, now=current_utc)
 
     if plan.id != "internal":
-        # 1. Failed run backstop (all entry points combined)
+        from app.services.run_errors import ERROR_CATEGORY_QUOTA_REACHED, format_quota_reached_message
+
+        # 1. Failed run backstop (exclude temporary_problem so transient errors never lock out users)
         failed_today = int(
             db.scalar(
                 select(func.count(GenerationRun.id)).where(
                     GenerationRun.user_id == user_id,
                     GenerationRun.status.in_(FAILED_BACKSTOP_STATUSES),
+                    (GenerationRun.error_category.is_(None))
+                    | (GenerationRun.error_category != "temporary_problem"),
                     GenerationRun.started_at >= day_start_utc,
                     GenerationRun.started_at < day_end_utc,
                 )
@@ -205,8 +221,9 @@ def check_and_reserve_run(
         if failed_today >= MAX_FAILED_RUNS_PER_DAY:
             return None, _block_detail(
                 "failed_run_backstop",
-                "Too many failed runs today. Please try again tomorrow.",
+                format_quota_reached_message("daily"),
                 None,
+                error_category=ERROR_CATEGORY_QUOTA_REACHED,
             )
 
         # 2. Daily spend limit
@@ -225,8 +242,9 @@ def check_and_reserve_run(
             if spend_micro >= limit_micro:
                 return None, _block_detail(
                     "daily_spend_limit",
-                    "Daily usage safety limit reached. Runs will resume tomorrow.",
+                    format_quota_reached_message("daily"),
                     _next_upgrade_plan(plan.id),
+                    error_category=ERROR_CATEGORY_QUOTA_REACHED,
                 )
 
         # 3. Monthly / total period cap
@@ -247,11 +265,11 @@ def check_and_reserve_run(
                 )
             period_used = int(db.scalar(period_stmt) or 0)
             if period_used >= period_limit:
-                label = "scheduled posts" if usage_kind == "scheduled" else "Playground runs"
                 return None, _block_detail(
                     "monthly_quota_reached",
-                    f"You have used all {period_limit} {label} for your current period.",
+                    format_quota_reached_message("monthly", resets_at=win_end),
                     _next_upgrade_plan(plan.id),
+                    error_category=ERROR_CATEGORY_QUOTA_REACHED,
                 )
 
         # 4. Daily cap
@@ -271,8 +289,9 @@ def check_and_reserve_run(
             if daily_used >= plan.playground_runs_per_day:
                 return None, _block_detail(
                     "daily_limit_reached",
-                    f"Daily Playground limit ({plan.playground_runs_per_day}/day) reached. Try again tomorrow.",
+                    format_quota_reached_message("daily"),
                     _next_upgrade_plan(plan.id),
+                    error_category=ERROR_CATEGORY_QUOTA_REACHED,
                 )
         elif usage_kind == "scheduled":
             sched_today = int(
@@ -289,8 +308,9 @@ def check_and_reserve_run(
             if sched_today >= 1:
                 return None, _block_detail(
                     "daily_limit_reached",
-                    "Today's post is already generated. Use the Playground for more.",
+                    format_quota_reached_message("daily"),
                     _next_upgrade_plan(plan.id),
+                    error_category=ERROR_CATEGORY_QUOTA_REACHED,
                 )
 
     # All checks passed: insert GenerationRun (and PlaygroundRun if needed) in the same transaction

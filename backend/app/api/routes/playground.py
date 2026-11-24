@@ -213,6 +213,7 @@ def run_playground_pipeline_task(run_id: uuid.UUID, user_id: str, topic_hint: Op
                 is_manual=True,
                 run_id=str(run_id),
                 event_emitter=emitter,
+                entry_point="playground",
             )
 
             counters = final_state.get("counters", {})
@@ -292,6 +293,10 @@ def run_playground_pipeline_task(run_id: uuid.UUID, user_id: str, topic_hint: Op
                     gen_run.status = "failed_error"
                     gen_run.current_step = "failed_error"
                     gen_run.current_node = "failed_error"
+                    gen_run.entry_point = "playground"
+                    gen_run.failed_stage = final_state.get("failed_stage") or final_state.get("error_node") or final_state.get("last_node")
+                    gen_run.error_category = final_state.get("error_category") or "temporary_problem"
+                    gen_run.real_error = final_state.get("real_error") or final_state.get("error_detail")
                     gen_run.error_code = err_code or "pipeline_error"
                     gen_run.error_detail = PLAIN_TECH_ERROR_MESSAGE
                     gen_run.error_reason = PLAIN_TECH_ERROR_MESSAGE
@@ -320,6 +325,7 @@ def run_playground_pipeline_task(run_id: uuid.UUID, user_id: str, topic_hint: Op
             # Success: store clean draft and separate internal_trace
             if gen_run:
                 gen_run.status = "succeeded"
+                gen_run.entry_point = "playground"
                 gen_run.current_step = "succeeded"
                 gen_run.current_node = "succeeded"
                 gen_run.finished_at = finished_now
@@ -367,6 +373,10 @@ def run_playground_pipeline_task(run_id: uuid.UUID, user_id: str, topic_hint: Op
                     gen_run.status = "failed_error"
                     gen_run.current_step = "failed_error"
                     gen_run.current_node = "error"
+                    gen_run.entry_point = "playground"
+                    gen_run.failed_stage = gen_run.current_node or "unknown"
+                    gen_run.error_category = "temporary_problem"
+                    gen_run.real_error = f"{type(exc).__name__}: {str(exc)[:500]}"
                     gen_run.error_code = "execution_exception"
                     gen_run.error_detail = PLAIN_TECH_ERROR_MESSAGE
                     gen_run.error_reason = PLAIN_TECH_ERROR_MESSAGE
@@ -623,6 +633,7 @@ def get_playground_run(
         last_progress_at=run.last_progress_at.isoformat() if run.last_progress_at else None,
         stalled=stalled,
         error_code="run_failed" if public_error else None,
+        error_category="temporary_problem" if public_error else None,
         error_detail=public_error,
         error_reason=public_error,
         result=run.result if status_val in ("succeeded", "completed", "cancelled") else None,

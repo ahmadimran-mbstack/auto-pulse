@@ -71,13 +71,23 @@ def enforce_rate_limit(
     key: str,
     max_requests: int,
     window_seconds: int = 60,
-    error_message: str = "Rate limit exceeded. Please try again later.",
+    error_message: Optional[str] = None,
 ) -> None:
-    """
-    Enforces rate limit by raising HTTP 429 if limit is exceeded.
-    """
+    """Enforces rate limit by raising HTTP 429 with Retry-After and categorized error."""
     if is_rate_limited(key, max_requests, window_seconds):
+        from app.services.run_errors import (
+            ERROR_CATEGORY_RATE_LIMITED,
+            format_rate_limited_message,
+        )
+
+        msg = error_message or format_rate_limited_message(window_seconds)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={"code": "rate_limited", "message": error_message},
+            headers={"Retry-After": str(window_seconds)},
+            detail={
+                "code": "rate_limited",
+                "error_category": ERROR_CATEGORY_RATE_LIMITED,
+                "message": msg,
+                "retry_after": window_seconds,
+            },
         )
