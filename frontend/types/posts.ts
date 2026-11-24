@@ -190,6 +190,7 @@ export interface RunResponse {
   last_progress_at?: string | null;
   stalled?: boolean;
   error_code?: string | null;
+  error_category?: string | null;
   error_detail?: string | null;
   error_reason?: string | null;
   trace?: AgentTrace | null;

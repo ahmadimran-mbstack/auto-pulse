@@ -137,8 +137,15 @@ export function DraftsSection({
     } catch (err: unknown) {
       if (err instanceof ApiClientError && err.status === 403) {
         setUpgradeError(err);
+      } else if (err instanceof ApiClientError && err.status === 429) {
+        const secs = err.retryAfter ? Number.parseFloat(err.retryAfter) : 60;
+        const mins = Math.max(1, Math.ceil((Number.isFinite(secs) && secs > 0 ? secs : 60) / 60));
+        setGenerateError(`You are generating too fast. Try again in ${mins} ${mins === 1 ? "minute" : "minutes"}.`);
       } else {
-        const msg = err instanceof Error ? err.message : "Could not generate draft.";
+        const msg =
+          err instanceof Error && err.message
+            ? err.message
+            : "Something went wrong on our side. Your quota was not used. Try again in a minute.";
         setGenerateError(msg);
       }
       setGenerating(false);

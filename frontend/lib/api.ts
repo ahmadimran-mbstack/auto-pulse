@@ -32,6 +32,7 @@ export class ApiClientError extends Error {
   requestUrl?: string;
   isNetworkError?: boolean;
   upgrade_to?: string | null;
+  error_category?: string | null;
 
   constructor(
     status: number,
@@ -39,7 +40,8 @@ export class ApiClientError extends Error {
     retryAfter?: string | null,
     requestUrl?: string,
     isNetworkError?: boolean,
-    upgradeTo?: string | null
+    upgradeTo?: string | null,
+    errorCategory?: string | null
   ) {
     super(error.message);
     this.name = "ApiClientError";
@@ -50,6 +52,7 @@ export class ApiClientError extends Error {
     this.requestUrl = requestUrl;
     this.isNetworkError = Boolean(isNetworkError);
     this.upgrade_to = upgradeTo ?? null;
+    this.error_category = errorCategory ?? null;
   }
 }
 
@@ -345,15 +348,18 @@ export async function apiCall<T>(
   if (response.status === 429) {
     const retryAfter = response.headers.get("Retry-After");
     const json = await response.json().catch(() => ({}));
-    const errorObj = json?.error || {};
+    const errorObj = json?.error || json?.detail || {};
     throw new ApiClientError(
       429,
       {
         code: errorObj.code || "rate_limited",
-        message: errorObj.message || "Too many requests. Please try again in a moment.",
+        message: errorObj.message || "You are generating too fast. Try again in 1 minute.",
       },
-      retryAfter,
-      url
+      retryAfter || (errorObj.retry_after ? String(errorObj.retry_after) : null),
+      url,
+      false,
+      null,
+      errorObj.error_category || "rate_limited"
     );
   }
 
@@ -405,7 +411,8 @@ export async function apiCall<T>(
       null,
       url,
       false,
-      errorObj.upgrade_to ?? json?.detail?.upgrade_to ?? null
+      errorObj.upgrade_to ?? json?.detail?.upgrade_to ?? null,
+      errorObj.error_category ?? json?.detail?.error_category ?? null
     );
   }
 

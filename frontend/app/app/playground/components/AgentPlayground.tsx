@@ -56,7 +56,14 @@ interface AgentPlaygroundProps {
   onUseInComposer?: (text: string, metadata?: AgentDraftMetadata) => void;
 }
 
-const PLAIN_FAIL_MESSAGE = "We could not finish this draft. Try again.";
+const TEMPORARY_PROBLEM_MESSAGE =
+  "Something went wrong on our side. Your quota was not used. Try again in a minute.";
+
+function formatRateLimitedMessage(retryAfter?: string | null): string {
+  const secs = retryAfter ? Number.parseFloat(retryAfter) : 60;
+  const mins = Math.max(1, Math.ceil((Number.isFinite(secs) && secs > 0 ? secs : 60) / 60));
+  return `You are generating too fast. Try again in ${mins} ${mins === 1 ? "minute" : "minutes"}.`;
+}
 
 const TERMINAL_STATUSES = new Set([
   "done",
@@ -105,6 +112,7 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
   const { data: profile, isLoading: isProfileLoading } = useProfileQuery(userId);
   const { data: ent } = useEntitlements(userId);
   const [upgradeError, setUpgradeError] = React.useState<ApiClientError | null>(null);
+  const [startError, setStartError] = React.useState<string | null>(null);
   const hasNiche = Boolean(profile?.niche_description?.trim());
 
   const contextQuery = useQuery({
@@ -276,6 +284,7 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
     if (e) e.preventDefault();
     if (isRunning || createMutation.isPending || !hasNiche) return;
 
+    setStartError(null);
     try {
       const res = await createMutation.mutateAsync(topicHint.trim() || undefined);
       setEvents([]);
@@ -290,8 +299,18 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
     } catch (err: unknown) {
       if (err instanceof ApiClientError && err.status === 403) {
         setUpgradeError(err);
+        const msg =
+          err.code === "trial_expired" || err.code === "subscription_expired"
+            ? "Your plan has ended. Renew to keep generating posts."
+            : err.message || "You have used your posts for today. It resets tomorrow.";
+        setStartError(msg);
+      } else if (err instanceof ApiClientError && err.status === 429) {
+        const msg = formatRateLimitedMessage(err.retryAfter);
+        setStartError(msg);
+        toast.error(msg);
       } else {
-        toast.error(PLAIN_FAIL_MESSAGE);
+        setStartError(TEMPORARY_PROBLEM_MESSAGE);
+        toast.error(TEMPORARY_PROBLEM_MESSAGE);
       }
     }
   };
@@ -408,13 +427,25 @@ export function AgentPlayground({ userId, onUseInComposer }: AgentPlaygroundProp
         </CardContent>
       </Card>
 
-      {/* Plain error banner only for real failures */}
-      {isFailedError && (
+      {/* Categorized error banner with reference code */}
+      {(isFailedError || startError) && (
         <Alert className="border-status-danger-border bg-status-danger-bg text-status-danger-fg">
           <CircleX className="size-4 stroke-[1.75]" />
           <AlertTitle className="font-medium">Could not complete run</AlertTitle>
           <AlertDescription className="text-xs mt-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <span>{PLAIN_FAIL_MESSAGE}</span>
+            <div className="space-y-1">
+              <span>
+                {startError ||
+                  runData?.error_detail ||
+                  [...events].reverse().find((e) => e.type === "run_failed")?.message ||
+                  TEMPORARY_PROBLEM_MESSAGE}
+              </span>
+              {runId && (
+                <p className="text-[11px] text-muted-foreground font-mono">
+                  Ref: {runId.slice(0, 8)}
+                </p>
+              )}
+            </div>
             <Button
               type="button"
               variant="outline"
