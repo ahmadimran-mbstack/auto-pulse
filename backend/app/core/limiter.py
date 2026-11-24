@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 _redis_client: Optional[redis.Redis] = None
 _in_memory_fallback: Dict[str, List[float]] = {}
+_in_memory_fixed_windows: Dict[str, int] = {}
 
 
 def get_redis_client() -> Optional[redis.Redis]:
@@ -111,8 +112,8 @@ def _fixed_window_check(
 ) -> Tuple[bool, int, int, int]:
     """Increment Redis fixed-window counter rl:{bucket}:{subject_id}:{window}.
 
+    Falls back to in-memory fixed-window counting when Redis is unavailable.
     Returns (allowed, remaining, retry_after_seconds, redis_available_flag).
-    When Redis is unavailable, returns (True, max_requests, 0, False).
     """
     now = int(time.time())
     window_idx = now // window_seconds
@@ -120,19 +121,25 @@ def _fixed_window_check(
     key = f"rl:{bucket}:{subject_id}:{window_idx}"
 
     client = get_redis_client()
-    if client is None:
-        return True, max_requests, 0, 0
+    if client is not None:
+        try:
+            count = int(client.incr(key))
+            if count == 1:
+                client.expire(key, window_seconds)
+            remaining = max(0, max_requests - count)
+            allowed = count <= max_requests
+            return allowed, remaining, retry_after, 1
+        except Exception as exc:
+            logger.warning(f"Redis rate limit error for {key}: {exc}")
 
-    try:
-        count = int(client.incr(key))
-        if count == 1:
-            client.expire(key, window_seconds)
-        remaining = max(0, max_requests - count)
-        allowed = count <= max_requests
-        return allowed, remaining, retry_after, 1
-    except Exception as exc:
-        logger.warning(f"Redis rate limit error for {key}: {exc}")
-        return True, max_requests, 0, 0
+    # In-memory fixed-window fallback when Redis is disabled or unreachable
+    if len(_in_memory_fixed_windows) > 5000:
+        _in_memory_fixed_windows.clear()
+    count = _in_memory_fixed_windows.get(key, 0) + 1
+    _in_memory_fixed_windows[key] = count
+    remaining = max(0, max_requests - count)
+    allowed = count <= max_requests
+    return allowed, remaining, retry_after, 0
 
 
 def _raise_plan_429(
@@ -204,7 +211,7 @@ def rate_limit(bucket: str) -> Callable[..., None]:
 
         if not redis_ok:
             if bucket == "generate":
-                logger.warning(f"Redis down during 'generate' rate limit for {user.id}; checking DB daily limit fallback")
+                logger.warning(f"Redis down during 'generate' rate limit for {user.id}; checking DB daily limit + in-memory fallback")
                 from app.services.quota import get_user_usage_counts
                 from app.services.entitlements import ensure_trial_subscription
                 sub = ensure_trial_subscription(db, user.id)
@@ -222,13 +229,15 @@ def rate_limit(bucket: str) -> Callable[..., None]:
                         },
                     )
             else:
-                logger.warning(f"Redis down during '{bucket}' rate limit for {user.id}; failing open")
+                logger.warning(f"Redis down during '{bucket}' rate limit for {user.id}; using in-memory fallback")
             response.headers["X-RateLimit-Limit"] = str(limit)
-            response.headers["X-RateLimit-Remaining"] = str(limit)
+            response.headers["X-RateLimit-Remaining"] = str(remaining)
             request.state.rate_limit_headers = {
                 "X-RateLimit-Limit": str(limit),
-                "X-RateLimit-Remaining": str(limit),
+                "X-RateLimit-Remaining": str(remaining),
             }
+            if not allowed:
+                _raise_plan_429(plan_id, plan_cfg.name, retry_after, limit, remaining)
             return
 
         response.headers["X-RateLimit-Limit"] = str(limit)
