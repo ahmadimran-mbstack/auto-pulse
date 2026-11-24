@@ -1,12 +1,24 @@
 "use client";
 
+import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { Check, Lock } from "lucide-react";
 
 import { PageHeader } from "@/components/app/PageHeader";
 import { PlanCards } from "@/components/app/PlanCards";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { getBillingStatus } from "@/lib/api";
 import { useEntitlements } from "@/lib/queries";
 
 function UsageBar({ label, used, limit }: { label: string; used: number; limit: number | null }) {
@@ -29,38 +41,66 @@ export function BillingClient({
 }: {
   user: { id: string; name?: string | null; email: string };
 }) {
-  const { data: ent, isLoading } = useEntitlements(user.id);
+  const { data: ent, isLoading: entLoading } = useEntitlements(user.id);
+  const billingQuery = useQuery({
+    queryKey: ["billing-status"],
+    queryFn: getBillingStatus,
+    refetchInterval: (q) => (q.state.data?.pending_payment ? 15000 : false),
+    staleTime: 0,
+  });
 
-  const dateLabel =
-    ent?.plan_id === "trial"
-      ? ent.trial_ends_at
-        ? `Trial ends ${new Date(ent.trial_ends_at).toLocaleDateString()}`
-        : "Trial clock starts after setup"
-      : ent?.current_period_end
-      ? `Renews ${new Date(ent.current_period_end).toLocaleDateString()}`
-      : "Active";
+  const bStatus = billingQuery.data;
+  const hasPending = Boolean(bStatus?.pending_payment);
+
+  const badgeLabel = hasPending
+    ? "Payment pending"
+    : bStatus?.status === "trialing"
+    ? "Trial"
+    : bStatus?.status === "expired"
+    ? "Expired"
+    : "Active";
+
+  const badgeVariant =
+    bStatus?.status === "expired"
+      ? "destructive"
+      : hasPending
+      ? "outline"
+      : "secondary";
+
+  const dateLabel = bStatus?.period_end
+    ? `${bStatus.status === "expired" ? "Ended" : "Ends"} ${new Date(bStatus.period_end).toLocaleDateString()}${
+        typeof bStatus.days_left === "number" ? ` (${bStatus.days_left} days left)` : ""
+      }`
+    : ent?.plan_id === "trial"
+    ? "Trial clock starts after setup"
+    : "Active";
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-6 max-w-6xl mx-auto space-y-6">
       <PageHeader
         title="Plan & Billing"
-        description="Manage your AutoPulse plan, monthly usage, and unlocked features."
+        description="Manage your AutoPulse plan, monthly usage, and payment history."
       />
 
-      {isLoading || !ent ? (
+      {entLoading || billingQuery.isLoading || !ent ? (
         <Card className="h-44 animate-pulse bg-muted/40" />
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <Card className="lg:col-span-2">
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div>
-                  <CardTitle className="text-base">{ent.plan_name}</CardTitle>
-                  <CardDescription>{dateLabel}</CardDescription>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base">{bStatus?.plan_name || ent.plan_name}</CardTitle>
+                    <Badge variant={badgeVariant}>{badgeLabel}</Badge>
+                  </div>
+                  <CardDescription className="mt-1">{dateLabel}</CardDescription>
                 </div>
-                <Badge variant={ent.status === "expired" ? "destructive" : "secondary"}>
-                  {ent.status}
-                </Badge>
+                <Button asChild size="sm" variant={bStatus?.status === "expired" ? "destructive" : "default"}>
+                  <Link href="/pricing">
+                    {bStatus?.status === "expired" ? "Renew" : "Upgrade"}
+                  </Link>
+                </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -104,28 +144,17 @@ export function BillingClient({
                   <Lock className="size-3.5 text-muted-foreground shrink-0" />
                 )}
                 <span className={ent.features.approval_slack ? "" : "text-muted-foreground"}>
-                  Slack approvals {!ent.features.approval_slack && "(Pro)"}
+                  Slack approvals
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                {ent.features.docs_token_limit === null || ent.features.docs_token_limit > 0 ? (
+                {(ent.features.docs_token_limit ?? 0) > 0 ? (
                   <Check className="size-3.5 text-primary shrink-0" />
                 ) : (
                   <Lock className="size-3.5 text-muted-foreground shrink-0" />
                 )}
-                <span
-                  className={
-                    ent.features.docs_token_limit === null || ent.features.docs_token_limit > 0
-                      ? ""
-                      : "text-muted-foreground"
-                  }
-                >
-                  Business documents{" "}
-                  {ent.features.docs_token_limit === 0
-                    ? "(Pro)"
-                    : ent.features.docs_token_limit !== null
-                    ? `(${ent.features.docs_token_limit.toLocaleString()} tokens)`
-                    : "(Unlimited)"}
+                <span className={(ent.features.docs_token_limit ?? 0) > 0 ? "" : "text-muted-foreground"}>
+                  Business documents
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -138,20 +167,78 @@ export function BillingClient({
                   Analytics: {ent.features.analytics_level}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
-                <Check className="size-3.5 text-primary shrink-0" />
-                <span>
-                  Posting days: {ent.limits.max_post_days_per_week ?? 7} days/week
-                </span>
-              </div>
             </CardContent>
           </Card>
         </div>
       )}
 
+      {/* Payment history table */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Payment history</CardTitle>
+          <CardDescription>Your recent manual QR payments and verification status.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {billingQuery.isError ? (
+            <p className="text-xs text-destructive">Could not load payment history right now.</p>
+          ) : !bStatus?.payments || bStatus.payments.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No payments submitted yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Plan</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Method</TableHead>
+                    <TableHead>Transaction ID</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Note</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {bStatus.payments.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="text-xs whitespace-nowrap">
+                        {p.submitted_at ? new Date(p.submitted_at).toLocaleDateString() : "-"}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {p.plan_name} ({p.billing_interval})
+                      </TableCell>
+                      <TableCell className="text-xs tabular-nums">
+                        Rs {p.amount_pkr.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-xs capitalize">{p.method}</TableCell>
+                      <TableCell className="font-mono text-xs">{p.transaction_id}</TableCell>
+                      <TableCell className="text-xs">
+                        <Badge
+                          variant={
+                            p.status === "approved"
+                              ? "secondary"
+                              : p.status === "rejected"
+                              ? "destructive"
+                              : "outline"
+                          }
+                        >
+                          {p.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {p.status === "rejected" ? p.reject_reason || "Rejected" : "-"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       <div className="space-y-3">
-        <h2 className="text-sm font-medium">Available plans</h2>
-        <PlanCards currentPlanId={ent?.plan_id} excludeTrial />
+        <h2 className="text-lg font-semibold tracking-tight">Plans</h2>
+        <PlanCards currentPlanId={ent?.plan_id} />
       </div>
     </div>
   );

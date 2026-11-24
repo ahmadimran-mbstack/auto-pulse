@@ -437,6 +437,60 @@ export async function getMyEntitlements(): Promise<UserEntitlements> {
   return apiCall<UserEntitlements>("/api/me/entitlements", { method: "GET" });
 }
 
+export async function getBillingStatus(): Promise<import("@/types/plans").BillingStatusResponse> {
+  return apiCall("/api/billing/status", { method: "GET" });
+}
+
+export async function getCheckoutInfo(
+  plan: string,
+  interval: "monthly" | "annual"
+): Promise<import("@/types/plans").CheckoutInfoResponse> {
+  return apiCall(
+    `/api/billing/checkout-info?plan=${encodeURIComponent(plan)}&interval=${encodeURIComponent(interval)}`,
+    { method: "GET" }
+  );
+}
+
+export async function submitManualPayment(payload: {
+  plan_id: string;
+  billing_interval: "monthly" | "annual";
+  method: "easypaisa" | "jazzcash";
+  transaction_id: string;
+}): Promise<import("@/types/plans").BillingPaymentItem> {
+  return apiCall("/api/billing/payments", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getAdminMe(): Promise<{ is_admin: boolean; email: string }> {
+  return apiCall("/api/admin/me", { method: "GET" });
+}
+
+export async function getAdminPayments(
+  statusFilter: "pending" | "approved" | "rejected"
+): Promise<{ items: import("@/types/plans").AdminPaymentItem[] }> {
+  return apiCall(`/api/admin/payments?status=${statusFilter}`, { method: "GET" });
+}
+
+export async function approveAdminPayment(
+  paymentId: string
+): Promise<{ id: string; status: string }> {
+  return apiCall(`/api/admin/payments/${encodeURIComponent(paymentId)}/approve`, {
+    method: "POST",
+  });
+}
+
+export async function rejectAdminPayment(
+  paymentId: string,
+  reason: string
+): Promise<{ id: string; status: string; reject_reason: string }> {
+  return apiCall(`/api/admin/payments/${encodeURIComponent(paymentId)}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
 // Typed convenience helper for dashboard overview route
 export async function getDashboard(): Promise<DashboardData> {
   return apiCall<DashboardData>("/dashboard", { method: "GET" });

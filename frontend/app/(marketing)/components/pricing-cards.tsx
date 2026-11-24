@@ -10,7 +10,15 @@ import { useSessionStatus } from "./use-session-status";
 export function LandingPricingCards({ data }: { data: PublicPlansResponse }) {
   const [interval, setInterval] = React.useState<"monthly" | "annual">("monthly");
   const { isLoaded, isSignedIn } = useSessionStatus();
-  const ctaHref = isLoaded && isSignedIn ? "/app/billing" : "/auth/sign-up";
+  const getPlanHref = (planId: string) => {
+    if (planId === "trial") {
+      return isLoaded && isSignedIn ? "/app" : "/auth/sign-up";
+    }
+    const checkoutUrl = `/app/checkout?plan=${planId}&interval=${interval}`;
+    return isLoaded && isSignedIn
+      ? checkoutUrl
+      : `/auth/sign-up?returnTo=${encodeURIComponent(checkoutUrl)}`;
+  };
 
   return (
     <div className="space-y-10">
@@ -155,13 +163,15 @@ export function LandingPricingCards({ data }: { data: PublicPlansResponse }) {
 
               <div className="pt-6 mt-6 border-t border-[var(--lp-border-hairline)]">
                 <Link
-                  href={ctaHref}
+                  href={getPlanHref(plan.id)}
                   className="inline-flex w-full items-center justify-center rounded-lg border border-[var(--lp-border-hairline)] bg-[var(--lp-ice)] px-4 py-2 text-xs font-medium text-[#08090C] transition-opacity hover:opacity-90"
                 >
-                  {isSignedIn
-                    ? "Manage plan"
-                    : plan.id === "trial"
-                      ? "Start free trial"
+                  {plan.id === "trial"
+                    ? isSignedIn
+                      ? "Go to dashboard"
+                      : "Start free trial"
+                    : isSignedIn
+                      ? `Choose ${plan.name}`
                       : `Get ${plan.name}`}
                 </Link>
               </div>

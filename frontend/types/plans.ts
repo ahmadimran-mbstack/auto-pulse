@@ -69,3 +69,51 @@ export interface UserEntitlements {
     docs_token_limit: number | null;
   };
 }
+
+export type PaymentMethod = "easypaisa" | "jazzcash";
+export type PaymentStatus = "pending" | "approved" | "rejected";
+
+export interface BillingPaymentItem {
+  id: string;
+  plan_id: string;
+  plan_name: string;
+  billing_interval: "monthly" | "annual";
+  amount_usd_cents: number;
+  amount_usd: number;
+  amount_pkr: number;
+  method: PaymentMethod;
+  transaction_id: string;
+  status: PaymentStatus;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  reject_reason: string | null;
+}
+
+export interface BillingStatusResponse {
+  plan_id: PlanId;
+  plan_name: string;
+  status: SubscriptionStatus;
+  billing_interval: "monthly" | "annual" | null;
+  period_end: string | null;
+  days_left: number | null;
+  pending_payment: BillingPaymentItem | null;
+  payments: BillingPaymentItem[];
+}
+
+export interface CheckoutInfoResponse {
+  plan_id: "starter" | "pro" | "business";
+  plan_name: string;
+  billing_interval: "monthly" | "annual";
+  amount_usd_cents: number;
+  amount_usd: number;
+  amount_pkr: number;
+  account_title: string;
+  account_last4: string;
+  methods: PaymentMethod[];
+}
+
+export interface AdminPaymentItem extends BillingPaymentItem {
+  user_id: string;
+  user_email: string;
+  reviewed_by: string | null;
+}

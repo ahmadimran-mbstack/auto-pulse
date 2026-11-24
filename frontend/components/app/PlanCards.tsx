@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Check, Lock, Mail } from "lucide-react";
+import Link from "next/link";
+import { Check, Lock } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,14 +29,6 @@ interface PlanCardsProps {
 export function PlanCards({ currentPlanId, highlightPlanId, excludeTrial = false }: PlanCardsProps) {
   const { data, isLoading } = usePublicPlans();
   const [interval, setInterval] = React.useState<"monthly" | "annual">("monthly");
-  const [selectedPlan, setSelectedPlan] = React.useState<PublicPlan | null>(null);
-
-  let contactEmail = "support@autopulse.app";
-  try {
-    contactEmail = env.contactEmail;
-  } catch {
-    // Fallback if env var is unset in test/dev
-  }
 
   if (isLoading || !data) {
     return (
@@ -159,57 +152,26 @@ export function PlanCards({ currentPlanId, highlightPlanId, excludeTrial = false
                 </CardContent>
               </div>
               <CardFooter>
-                <Button
-                  className="w-full"
-                  variant={isCurrent ? "outline" : "default"}
-                  disabled={isCurrent || plan.id === "trial"}
-                  onClick={() => setSelectedPlan(plan)}
-                >
-                  {isCurrent ? "Current plan" : plan.id === "trial" ? "Included" : `Choose ${plan.name}`}
-                </Button>
+                {isCurrent || plan.id === "trial" ? (
+                  <Button
+                    className="w-full"
+                    variant={isCurrent ? "outline" : "default"}
+                    disabled
+                  >
+                    {isCurrent ? "Current plan" : "Included"}
+                  </Button>
+                ) : (
+                  <Button asChild className="w-full" variant="default">
+                    <Link href={`/app/checkout?plan=${plan.id}&interval=${interval}`}>
+                      Choose {plan.name}
+                    </Link>
+                  </Button>
+                )}
               </CardFooter>
             </Card>
           );
         })}
       </div>
-
-      {/* Manual activation placeholder dialog */}
-      <Dialog open={selectedPlan !== null} onOpenChange={(open) => !open && setSelectedPlan(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Contact us to activate your plan</DialogTitle>
-            <DialogDescription>
-              Online checkout is coming soon. To activate the{" "}
-              <span className="font-medium text-foreground">{selectedPlan?.name}</span> plan (
-              {interval}), please email us at{" "}
-              <a
-                href={`mailto:${contactEmail}?subject=Activate%20${encodeURIComponent(
-                  selectedPlan?.name || ""
-                )}%20Plan%20(${interval})`}
-                className="font-medium text-foreground underline underline-offset-4"
-              >
-                {contactEmail}
-              </a>
-              .
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSelectedPlan(null)}>
-              Close
-            </Button>
-            <Button asChild>
-              <a
-                href={`mailto:${contactEmail}?subject=Activate%20${encodeURIComponent(
-                  selectedPlan?.name || ""
-                )}%20Plan%20(${interval})`}
-              >
-                <Mail className="size-4 mr-1.5" />
-                Email {contactEmail}
-              </a>
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

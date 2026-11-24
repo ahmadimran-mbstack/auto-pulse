@@ -103,7 +103,15 @@ function renderCell(val: CellValue) {
 export function PricingPageClient({ data }: { data: PublicPlansResponse }) {
   const [interval, setInterval] = React.useState<"monthly" | "annual">("monthly");
   const { isLoaded, isSignedIn } = useSessionStatus();
-  const ctaHref = isLoaded && isSignedIn ? "/app/billing" : "/auth/sign-up";
+  const getPlanHref = (planId: string) => {
+    if (planId === "trial") {
+      return isLoaded && isSignedIn ? "/app" : "/auth/sign-up";
+    }
+    const checkoutUrl = `/app/checkout?plan=${planId}&interval=${interval}`;
+    return isLoaded && isSignedIn
+      ? checkoutUrl
+      : `/auth/sign-up?returnTo=${encodeURIComponent(checkoutUrl)}`;
+  };
 
   const plans = data.plans;
   const [openSections, setOpenSections] = React.useState<Record<string, boolean>>({
@@ -428,12 +436,12 @@ export function PricingPageClient({ data }: { data: PublicPlansResponse }) {
                                 : "bg-white text-[#08090C] hover:bg-white/90"
                             )}
                           >
-                            <Link href={ctaHref}>
-                              {isSignedIn
-                                ? "Manage plan"
-                                : plan.id === "trial"
-                                  ? "Start free trial"
-                                  : `Choose ${plan.name}`}
+                            <Link href={getPlanHref(plan.id)}>
+                              {plan.id === "trial"
+                                ? isSignedIn
+                                  ? "Go to dashboard"
+                                  : "Start free trial"
+                                : `Choose ${plan.name}`}
                             </Link>
                           </Button>
                         </div>
@@ -506,7 +514,9 @@ export function PricingPageClient({ data }: { data: PublicPlansResponse }) {
                               {price === 0 ? "Free" : `$${price?.toFixed(2)}/mo`}
                             </div>
                             <Button asChild size="sm" variant="outline" className="h-7 text-xs border-white/15">
-                              <Link href={ctaHref}>{isSignedIn ? "Manage" : "Start"}</Link>
+                              <Link href={getPlanHref(p.id)}>
+                                {p.id === "trial" ? (isSignedIn ? "Open" : "Start") : "Choose"}
+                              </Link>
                             </Button>
                           </div>
                         </th>

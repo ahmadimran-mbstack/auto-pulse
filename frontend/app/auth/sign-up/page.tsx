@@ -159,8 +159,14 @@ function SignUpForm() {
       // Clear any prior signed-out sentinel flag
       document.cookie = "autopulse_signed_out=; path=/; max-age=0; SameSite=Lax";
 
+      const returnTo = searchParams.get("returnTo");
+      const safeReturn = returnTo && returnTo.startsWith("/app/") ? returnTo : null;
       // Neon Auth sends the single verification email on signUp.email; navigate to verify page
-      router.replace("/auth/verify-otp");
+      router.replace(
+        safeReturn
+          ? `/auth/verify-otp?returnTo=${encodeURIComponent(safeReturn)}`
+          : "/auth/verify-otp"
+      );
     } catch (err: unknown) {
       const message =
         err instanceof Error

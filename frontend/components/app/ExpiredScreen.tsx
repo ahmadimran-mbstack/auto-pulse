@@ -1,9 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { AlertCircle } from "lucide-react";
 
-import { PlanCards } from "@/components/app/PlanCards";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { useEntitlements } from "@/lib/queries";
 
 export function ExpiredBanner({ userId }: { userId: string }) {
@@ -14,23 +14,14 @@ export function ExpiredBanner({ userId }: { userId: string }) {
   }
 
   return (
-    <div className="p-4 sm:p-6 border-b border-border bg-muted/20">
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="size-4 text-destructive" />
-            <CardTitle className="text-base">
-              {ent.plan_id === "trial" ? "Your free trial has ended" : "Your plan has expired"}
-            </CardTitle>
-          </div>
-          <CardDescription>
-            Your dashboard is in read-only mode. Choose a plan below to resume generating and publishing posts.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <PlanCards currentPlanId={ent.plan_id} excludeTrial />
-        </CardContent>
-      </Card>
+    <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 text-xs border-b border-destructive/30 bg-destructive/10">
+      <div className="flex items-center gap-2 text-foreground">
+        <AlertCircle className="size-3.5 text-destructive shrink-0" />
+        <span className="font-medium">Your plan has ended</span>
+      </div>
+      <Button asChild size="sm" variant="destructive" className="h-7 text-xs">
+        <Link href="/pricing">Renew</Link>
+      </Button>
     </div>
   );
 }

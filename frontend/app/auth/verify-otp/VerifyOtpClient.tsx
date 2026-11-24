@@ -143,7 +143,12 @@ export function VerifyOtpClient({ email }: VerifyOtpClientProps) {
       authToast.success("Email verified. Redirecting to setup...", {
         id: "verify-otp-verified",
       });
-      router.replace("/onboarding");
+      const returnTo =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("returnTo")
+          : null;
+      const safeReturn = returnTo && returnTo.startsWith("/app/") ? returnTo : "/onboarding";
+      router.replace(safeReturn);
     } catch (err: unknown) {
       const message =
         err instanceof Error
