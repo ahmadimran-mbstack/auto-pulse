@@ -4,6 +4,7 @@ No prices, discounts, currency rates, or plan limits should live anywhere else.
 """
 
 from dataclasses import dataclass
+import math
 from typing import Dict, Optional, Tuple
 
 
@@ -173,6 +174,45 @@ PLANS: Dict[str, PlanConfig] = {
 }
 
 PUBLIC_PLAN_ORDER: Tuple[str, ...] = ("trial", "starter", "pro", "business")
+PURCHASABLE_PLANS: Tuple[str, ...] = ("starter", "pro", "business")
+
+# Short-window burst rate limits per plan (bucket -> (window_seconds, {plan_id: max_requests}))
+RATE_LIMIT_WINDOWS: Dict[str, int] = {
+    "api": 60,
+    "generate": 3600,
+    "payment_submit": 3600,
+    "public": 60,
+}
+
+PLAN_RATE_LIMITS: Dict[str, Dict[str, Optional[int]]] = {
+    "api": {
+        "trial": 30,
+        "starter": 60,
+        "pro": 120,
+        "business": 240,
+        "internal": 1000,
+        "expired": 30,
+    },
+    "generate": {
+        "trial": 3,
+        "starter": 5,
+        "pro": 10,
+        "business": 20,
+        "internal": 200,
+        "expired": 0,
+    },
+    "payment_submit": {
+        "trial": 5,
+        "starter": 5,
+        "pro": 5,
+        "business": 5,
+        "internal": 50,
+        "expired": 5,
+    },
+    "public": {
+        "default": 60,
+    },
+}
 
 
 def get_plan(plan_id: str) -> PlanConfig:
@@ -180,3 +220,30 @@ def get_plan(plan_id: str) -> PlanConfig:
     if plan_id not in PLANS:
         raise KeyError(f"Unknown plan_id: {plan_id}")
     return PLANS[plan_id]
+
+
+def compute_plan_price(plan_id: str, interval: str) -> Tuple[int, int]:
+    """Return (amount_usd_cents, amount_pkr) for a purchasable plan and interval.
+
+    Monthly is the plan price. Annual is monthly * 12 with ANNUAL_DISCOUNT applied.
+    PKR is rounded up to the next whole rupee using PKR_PER_USD.
+    """
+    if plan_id not in PURCHASABLE_PLANS:
+        raise ValueError(f"Plan '{plan_id}' cannot be purchased.")
+    if interval not in ("monthly", "annual"):
+        raise ValueError("Billing interval must be 'monthly' or 'annual'.")
+
+    plan = PLANS[plan_id]
+    monthly_usd = float(plan.monthly_price_usd or 0.0)
+    if interval == "monthly":
+        usd_cents = round(monthly_usd * 100)
+    else:
+        annual_usd = (
+            float(plan.annual_price_usd)
+            if plan.annual_price_usd is not None
+            else round(monthly_usd * 12 * (1.0 - ANNUAL_DISCOUNT), 2)
+        )
+        usd_cents = round(annual_usd * 100)
+
+    amount_pkr = math.ceil((usd_cents / 100.0) * PKR_PER_USD)
+    return usd_cents, amount_pkr

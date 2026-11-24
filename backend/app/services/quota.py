@@ -185,8 +185,11 @@ def check_and_reserve_run(
     if sub is None:
         return None, _block_detail("trial_expired", "Subscription record missing.", "starter")
 
-    plan = get_plan(sub.plan_id) if sub.plan_id in PLANS else get_plan("trial")
-    computed_status = compute_subscription_status(sub, now=current_utc)
+    from app.services.entitlements import get_effective_plan
+
+    eff = get_effective_plan(db, user_id, now=current_utc, bypass_cache=(now is not None))
+    plan = eff["plan"]
+    computed_status = eff["status"]
 
     if computed_status == "expired":
         from app.services.run_errors import ERROR_CATEGORY_PLAN_EXPIRED, MSG_PLAN_EXPIRED

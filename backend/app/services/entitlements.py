@@ -1,6 +1,8 @@
 """Subscription entitlements, trial clock, and plan management."""
 
 import datetime
+import json
+import logging
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import select
@@ -100,6 +102,86 @@ def compute_subscription_status(
     return "active"
 
 
+EFFECTIVE_PLAN_CACHE_TTL = 60
+_effective_plan_logger = logging.getLogger(__name__)
+
+
+def _effective_plan_cache_key(user_id: str) -> str:
+    return f"effective_plan:{user_id}"
+
+
+def invalidate_effective_plan_cache(user_id: str) -> None:
+    """Delete the cached effective plan for user_id immediately after subscription changes."""
+    from app.core.limiter import get_redis_client
+
+    client = get_redis_client()
+    if client is not None:
+        try:
+            client.delete(_effective_plan_cache_key(user_id))
+        except Exception as exc:
+            _effective_plan_logger.warning(f"Failed to delete effective plan cache for {user_id}: {exc}")
+
+
+def get_effective_plan(
+    db: Session,
+    user_id: str,
+    now: Optional[datetime.datetime] = None,
+    bypass_cache: bool = False,
+) -> Dict[str, Any]:
+    """Single source of truth for a user's effective plan and status.
+
+    Thin wrapper around ensure_trial_subscription + compute_subscription_status
+    with a 60-second Redis cache per user.
+    """
+    from app.core.limiter import get_redis_client
+
+    cache_key = _effective_plan_cache_key(user_id)
+    if now is None and not bypass_cache:
+        client = get_redis_client()
+        if client is not None:
+            try:
+                raw = client.get(cache_key)
+                if raw:
+                    cached = json.loads(raw)
+                    pid = cached.get("plan_id", "trial")
+                    plan = get_plan(pid) if pid in PLANS else get_plan("trial")
+                    return {
+                        "plan_id": plan.id,
+                        "plan": plan,
+                        "status": cached.get("status", "trialing"),
+                        "billing_interval": cached.get("billing_interval"),
+                        "trial_ends_at": cached.get("trial_ends_at"),
+                        "current_period_start": cached.get("current_period_start"),
+                        "current_period_end": cached.get("current_period_end"),
+                    }
+            except Exception as exc:
+                _effective_plan_logger.warning(f"Redis read failed for {cache_key}: {exc}")
+
+    sub = ensure_trial_subscription(db, user_id)
+    apply_pending_downgrade_if_due(db, sub, now=now)
+    plan = get_plan(sub.plan_id) if sub.plan_id in PLANS else get_plan("trial")
+    computed_status = compute_subscription_status(sub, now=now)
+
+    payload = {
+        "plan_id": plan.id,
+        "status": computed_status,
+        "billing_interval": sub.billing_interval,
+        "trial_ends_at": sub.trial_ends_at.isoformat() if sub.trial_ends_at else None,
+        "current_period_start": sub.current_period_start.isoformat() if sub.current_period_start else None,
+        "current_period_end": sub.current_period_end.isoformat() if sub.current_period_end else None,
+    }
+
+    if now is None:
+        client = get_redis_client()
+        if client is not None:
+            try:
+                client.setex(cache_key, EFFECTIVE_PLAN_CACHE_TTL, json.dumps(payload))
+            except Exception as exc:
+                _effective_plan_logger.warning(f"Redis write failed for {cache_key}: {exc}")
+
+    return {**payload, "plan": plan}
+
+
 def apply_pending_downgrade_if_due(
     db: Session,
     sub: Subscription,
@@ -136,20 +218,20 @@ def get_entitlements(
     """Return the user's current plan, computed status, limits, features, and usage."""
     from app.services.quota import get_user_usage_counts
 
+    eff = get_effective_plan(db, user_id, now=now)
+    plan = eff["plan"]
+    computed_status = eff["status"]
     sub = ensure_trial_subscription(db, user_id)
-    apply_pending_downgrade_if_due(db, sub, now=now)
-    plan = get_plan(sub.plan_id) if sub.plan_id in PLANS else get_plan("trial")
-    computed_status = compute_subscription_status(sub, now=now)
     counts = get_user_usage_counts(db, user_id, sub, now=now)
 
     return {
         "plan_id": plan.id,
         "plan_name": plan.name,
         "status": computed_status,
-        "billing_interval": sub.billing_interval,
-        "trial_ends_at": sub.trial_ends_at.isoformat() if sub.trial_ends_at else None,
-        "current_period_start": sub.current_period_start.isoformat() if sub.current_period_start else None,
-        "current_period_end": sub.current_period_end.isoformat() if sub.current_period_end else None,
+        "billing_interval": eff["billing_interval"],
+        "trial_ends_at": eff["trial_ends_at"],
+        "current_period_start": eff["current_period_start"],
+        "current_period_end": eff["current_period_end"],
         "limits": {
             "linkedin_profiles": plan.linkedin_profiles,
             "scheduled_posts": plan.scheduled_posts_per_period,

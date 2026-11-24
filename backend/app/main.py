@@ -14,6 +14,8 @@ from app.api.routes.account import router as account_router
 from app.api.routes.auth_limits import router as auth_limits_router
 from app.api.routes.me import router as me_router
 from app.api.routes.plans import router as plans_router
+from app.api.routes.billing import router as billing_router
+from app.api.routes.admin_payments import router as admin_payments_router
 from app.api.routes.profile import router as profile_router
 from app.api.routes.connections import router as connections_router
 from app.api.routes.posts import router as posts_router
@@ -104,6 +106,10 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         )
 
         response.headers["X-Request-ID"] = request_id
+        rl_headers = getattr(request.state, "rate_limit_headers", None)
+        if isinstance(rl_headers, dict):
+            for k, v in rl_headers.items():
+                response.headers.setdefault(k, v)
         response.headers["Server-Timing"] = (
             f'total;dur={total_ms:.2f}, auth;dur={auth_ms:.2f}, db;dur={db_ms:.2f}, queries;dur={query_count};desc="{query_count}"'
         )
@@ -237,6 +243,8 @@ app.include_router(slack_api_router)
 app.include_router(slack_api_integrations_router)
 app.include_router(test_lab_router)  # TEST_LAB_REMOVE
 app.include_router(plans_router)
+app.include_router(billing_router)
+app.include_router(admin_payments_router)
 
 
 @app.on_event("startup")

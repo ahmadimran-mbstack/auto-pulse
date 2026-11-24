@@ -4,7 +4,7 @@ import datetime
 from typing import Optional
 import uuid
 
-from sqlalchemy import CheckConstraint, Date, DateTime, Text, UniqueConstraint, func, text
+from sqlalchemy import CheckConstraint, Date, DateTime, Index, Integer, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -71,5 +71,58 @@ class ReminderSent(Base):
             "reminder_type",
             "target_date",
             name="uq_reminders_sent_user_type_date",
+        ),
+    )
+
+
+class Payment(Base):
+    __tablename__ = "payments"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    user_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    plan_id: Mapped[str] = mapped_column(Text, nullable=False)
+    billing_interval: Mapped[str] = mapped_column(Text, nullable=False)
+    amount_usd_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    amount_pkr: Mapped[int] = mapped_column(Integer, nullable=False)
+    method: Mapped[str] = mapped_column(Text, nullable=False)
+    transaction_id: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="pending")
+    submitted_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    reviewed_by: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reviewed_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    reject_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "billing_interval IN ('monthly', 'annual')",
+            name="ck_payments_billing_interval",
+        ),
+        CheckConstraint(
+            "method IN ('easypaisa', 'jazzcash')",
+            name="ck_payments_method",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'approved', 'rejected')",
+            name="ck_payments_status",
+        ),
+        Index(
+            "uq_payments_transaction_id_active",
+            "transaction_id",
+            unique=True,
+            postgresql_where=text("status IN ('pending', 'approved')"),
+        ),
+        Index(
+            "uq_payments_user_pending",
+            "user_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
         ),
     )

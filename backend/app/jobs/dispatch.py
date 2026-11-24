@@ -558,6 +558,12 @@ def run_dispatch(db: Session) -> None:
         if not profile.timezone or not profile.post_time or not profile.post_days:
             continue
 
+        from app.services.entitlements import get_effective_plan
+        eff = get_effective_plan(db, profile.user_id)
+        if eff["status"] == "expired":
+            logger.info(f"Skipping scheduled draft for user {profile.user_id}: plan expired")
+            continue
+
         if profile.onboarding_completed_at is None:
             from app.services.entitlements import mark_onboarding_completed
             mark_onboarding_completed(db, profile)

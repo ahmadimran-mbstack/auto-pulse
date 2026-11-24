@@ -4,7 +4,7 @@ from app.models.post import Post, GenerationRun, PlaygroundRun
 from app.models.approval import Approval
 from app.models.publication import PostPublication
 from app.models.slack import SlackIntegration, SlackApprovalMessage
-from app.models.subscription import ReminderSent, Subscription
+from app.models.subscription import Payment, ReminderSent, Subscription
 from app.models.usage import LLMCallLog, SpendAlert
 from app.models.customization import (
     CustomizationDocument,
@@ -27,6 +27,7 @@ __all__ = [
     "SlackIntegration",
     "SlackApprovalMessage",
     "Subscription",
+    "Payment",
     "ReminderSent",
     "LLMCallLog",
     "SpendAlert",

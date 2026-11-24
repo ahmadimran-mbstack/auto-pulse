@@ -100,6 +100,15 @@ class Settings(BaseSettings):
     )
     TEST_LAB_ALLOWED_EMAILS: str = ""
 
+    # Billing & manual QR payment settings
+    PAYMENT_ACCOUNT_TITLE: str = "Hafiz Ahmad Ali"
+    PAYMENT_ACCOUNT_LAST4: str = "9182"
+    ADMIN_EMAILS: str = "ahmadimran@mbstack.net,ahmadimran67208@gmail.com,teammbstack@gmail.com,haris@mbstack.net"
+
+    @property
+    def admin_email_set(self) -> set[str]:
+        return {e.strip().lower() for e in (self.ADMIN_EMAILS or "").split(",") if e.strip()}
+
     # Day 5: Email delivery settings
     EMAIL_API_KEY: Optional[str] = None
     EMAIL_FROM: str = "AutoPulse <noreply@autopulse.app>"
