@@ -67,13 +67,20 @@ export function BillingClient({
       ? "outline"
       : "secondary";
 
-  const dateLabel = bStatus?.period_end
-    ? `${bStatus.status === "expired" ? "Ended" : "Ends"} ${new Date(bStatus.period_end).toLocaleDateString()}${
-        typeof bStatus.days_left === "number" ? ` (${bStatus.days_left} days left)` : ""
-      }`
-    : ent?.plan_id === "trial"
-    ? "Trial clock starts after setup"
-    : "Active";
+  const dateLabel =
+    ent?.plan_id === "internal"
+      ? "Unlimited internal access"
+      : bStatus?.period_end
+      ? `${bStatus.billing_interval ? `${bStatus.billing_interval === "annual" ? "Annual" : "Monthly"} · ` : ""}${
+          bStatus.status === "expired" ? "Ended" : "Ends"
+        } ${new Date(bStatus.period_end).toLocaleDateString()}${
+          typeof bStatus.days_left === "number" ? ` (${bStatus.days_left} days left)` : ""
+        }`
+      : ent?.plan_id === "trial"
+      ? "Trial clock starts after setup"
+      : "Active";
+
+  const hasDocs = ent ? ent.features.docs_token_limit === null || ent.features.docs_token_limit > 0 : false;
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-6 max-w-6xl mx-auto space-y-6">
@@ -148,12 +155,12 @@ export function BillingClient({
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                {(ent.features.docs_token_limit ?? 0) > 0 ? (
+                {hasDocs ? (
                   <Check className="size-3.5 text-primary shrink-0" />
                 ) : (
                   <Lock className="size-3.5 text-muted-foreground shrink-0" />
                 )}
-                <span className={(ent.features.docs_token_limit ?? 0) > 0 ? "" : "text-muted-foreground"}>
+                <span className={hasDocs ? "" : "text-muted-foreground"}>
                   Business documents
                 </span>
               </div>
