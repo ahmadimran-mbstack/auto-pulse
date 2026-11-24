@@ -56,7 +56,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("LLM_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"),
     )
     LLM_MODEL: str = "gemini-3.5-flash-lite"
-    LLM_MODEL_FAST: str = "gemini-3.1-flash-lite"
+    LLM_MODEL_FAST: str = "gemini-3.5-flash-lite"
     LLM_MODEL_DETECTOR: str = "gemini-3.5-flash-lite"
     LLM_MODEL_DRAFTER: str = "gemini-3.5-flash-lite"
     LLM_MODEL_FINDER: str = "gemini-3.5-flash-lite"
@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     PAGE_FETCH_TIMEOUT_SECONDS: int = 20
     RUN_SAFETY_CEILING_SECONDS: int = 1200
     TOTAL_RUN_DEADLINE_SECONDS: int = 1200
-    PER_NODE_TIMEOUT_SECONDS: int = 90
+    PER_NODE_TIMEOUT_SECONDS: int = 45
     REAPER_INTERVAL_SECONDS: int = 30
     STALL_SECONDS: int = 180
     STALLED_PROGRESS_TIMEOUT_SECONDS: int = 180
