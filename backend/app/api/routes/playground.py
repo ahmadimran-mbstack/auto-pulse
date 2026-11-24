@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import User, current_user
 from app.core.config import settings
-from app.core.limiter import enforce_rate_limit
+from app.core.limiter import rate_limit
 from app.db.session import SessionLocal, get_db
 from app.models.post import GenerationRun, PlaygroundRun, Post, RunEvent
 from app.models.profile import Profile
@@ -409,6 +409,7 @@ def run_playground_pipeline_task(run_id: uuid.UUID, user_id: str, topic_hint: Op
     "/runs",
     response_model=PlaygroundRunCreateResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(rate_limit("generate"))],
 )
 def create_playground_run(
     background_tasks: BackgroundTasks,
@@ -417,12 +418,10 @@ def create_playground_run(
     db: Session = Depends(get_db),
 ):
     """Enqueues an experimental playground multi-agent run without generating posts or approvals.
-    Rate-limited per user. Accepts optional topic_hint.
+    Rate-limited per user via plan-based 'generate' bucket. Accepts optional topic_hint.
     Protected against double-clicks via in-flight Redis SET NX lock.
     If the locked run is not actively running in the database, ignores the stale lock and starts fresh.
     """
-    # Rate limit: max 10 playground runs per minute per user
-    enforce_rate_limit(f"playground:{user.id}", max_requests=10, window_seconds=60)
 
     # Block playground runs when the user's profile niche description is empty
     profile = db.query(Profile).filter(Profile.user_id == user.id).first()

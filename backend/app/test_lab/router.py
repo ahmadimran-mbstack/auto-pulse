@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import User, current_user
 from app.core.config import settings
+from app.core.limiter import rate_limit
 from app.db.session import get_db
 from app.test_lab import service
 from app.test_lab.schemas import TestLabCreateRequest, TestLabRunResponse, TestLabStatusResponse
@@ -86,7 +87,7 @@ def cancel_test_lab_run(
     return service.cancel_run(db, user.id, _parse_uuid(run_id))
 
 
-@router.post("/runs/{run_id}/retry-generate", response_model=TestLabRunResponse)
+@router.post("/runs/{run_id}/retry-generate", response_model=TestLabRunResponse, dependencies=[Depends(rate_limit("generate"))])
 def retry_test_lab_generate(
     run_id: str,
     background_tasks: BackgroundTasks,

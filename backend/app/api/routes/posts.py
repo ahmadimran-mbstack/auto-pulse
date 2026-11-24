@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import User, current_user
 from app.core.config import settings
+from app.core.limiter import rate_limit
 from app.db.session import get_db
 from app.models.approval import Approval
 from app.models.post import GenerationRun, Post
@@ -434,7 +435,7 @@ def get_post_image(
 
 
 # POST /posts/generate: development-only instant generation route
-@router.post("/generate", response_model=PostDetail)
+@router.post("/generate", response_model=PostDetail, dependencies=[Depends(rate_limit("generate"))])
 def generate_draft_now(
     replace: bool = Query(default=False),
     user: User = Depends(current_user),
