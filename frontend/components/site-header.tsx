@@ -17,6 +17,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { useUser } from "@/components/providers/user-provider";
 import { useAppSidebarState } from "@/components/providers/sidebar-provider";
 import { useDashboardQuery } from "@/lib/queries";
+import { getDashboardPageTitle } from "@/lib/dashboard-routes";
 import { cn } from "@/lib/utils";
 
 const statusFilterOptions = [
@@ -39,19 +40,12 @@ export function SiteHeader() {
   const { data: dashboardData } = useDashboardQuery(user.id);
   const awaitingCount = dashboardData?.stats?.awaiting_approval ?? 0;
 
-  // Derive human-readable page title based on path
-  let pageTitle = "Overview";
-  if (pathname.startsWith("/app/analytics")) {
-    pageTitle = "Analytics";
-  } else if (pathname.startsWith("/app/posts")) {
-    pageTitle = "Posts";
-  } else if (pathname.startsWith("/app/playground")) {
-    pageTitle = "Post to LinkedIn";
-  } else if (pathname.startsWith("/app/connections")) {
-    pageTitle = "Connections";
-  } else if (pathname.startsWith("/app/settings")) {
-    pageTitle = "Settings";
-  }
+  // Derive human-readable page title from central route config and sync browser tab title
+  const pageTitle = getDashboardPageTitle(pathname, searchParams);
+
+  React.useEffect(() => {
+    document.title = `${pageTitle} | AutoPulse`;
+  }, [pageTitle]);
 
   const activeOption =
     statusFilterOptions.find((opt) => opt.value === currentStatus) ||
@@ -135,9 +129,11 @@ export function SiteHeader() {
         </DropdownMenu>
       </div>
 
-      {/* Center: Page title */}
-      <div className="absolute left-1/2 -translate-x-1/2 text-sm font-semibold text-foreground pointer-events-none hidden sm:block">
-        {pageTitle}
+      {/* Center: Page title (truncates cleanly on mobile and desktop without overlapping) */}
+      <div className="min-w-0 flex-1 px-2 text-center pointer-events-none sm:flex-none sm:px-0 sm:absolute sm:left-1/2 sm:-translate-x-1/2 sm:max-w-[200px] md:max-w-[280px]">
+        <span className="block truncate text-sm font-semibold text-foreground">
+          {pageTitle}
+        </span>
       </div>
 
       {/* Right: Action buttons */}

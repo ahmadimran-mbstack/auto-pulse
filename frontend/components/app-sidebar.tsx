@@ -26,6 +26,7 @@ import { useDashboardQuery, prefetchDashboard, prefetchPosts, prefetchConnection
 import { SidebarNoticeCard } from "@/components/app/sidebar-notice-card";
 import { SidebarUserRow } from "@/components/app/sidebar-user-row";
 import { CommandPalette } from "@/components/app/command-palette";
+import { isSidebarRouteActive } from "@/lib/dashboard-routes";
 import { cn } from "@/lib/utils";
 
 interface AppSidebarProps {
@@ -45,7 +46,7 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
   const currentTab = searchParams.get("tab") || "profile";
 
   const [commandOpen, setCommandOpen] = React.useState(false);
-  const isSettingsActive = pathname.startsWith("/app/settings");
+  const isSettingsActive = isSidebarRouteActive(pathname, "/app/settings", false);
   const [userSettingsExpanded, setUserSettingsExpanded] = React.useState<boolean | null>(null);
   const settingsExpanded = userSettingsExpanded ?? isSettingsActive;
 
@@ -158,9 +159,7 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
         <nav className="flex-1 min-h-0 mx-2 space-y-px overflow-y-auto no-scrollbar">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive = item.exact
-                ? pathname === item.url
-                : pathname === item.url || pathname.startsWith(`${item.url}/`);
+              const isActive = isSidebarRouteActive(pathname, item.url, item.exact);
 
               return (
                 <Link
