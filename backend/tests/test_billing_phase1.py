@@ -114,15 +114,18 @@ def test_checkout_info_and_payment_flow(test_users):
 
         # 8. Admin approves -> subscription active, cache invalidated, second approve -> 409
         active_user["user"] = User(id=admin_uid, email="ahmadimran@mbstack.net")
-        with patch("app.api.routes.admin_payments.invalidate_effective_plan_cache") as mock_inv:
+        with (
+            patch("app.api.routes.admin_deps.resolve_user_email_and_verified", return_value=("ahmadimran@mbstack.net", True)),
+            patch("app.api.routes.admin_payments.invalidate_effective_plan_cache") as mock_inv,
+        ):
             app_res = client.post(f"/api/admin/payments/{pay_id}/approve")
             assert app_res.status_code == 200
             assert app_res.json()["status"] == "approved"
             mock_inv.assert_called_once_with(u1)
 
-        second_app = client.post(f"/api/admin/payments/{pay_id}/approve")
-        assert second_app.status_code == 409
-        assert second_app.json()["error"]["message"] == "already reviewed"
+            second_app = client.post(f"/api/admin/payments/{pay_id}/approve")
+            assert second_app.status_code == 409
+            assert second_app.json()["error"]["message"] == "already reviewed"
 
         # 9. Verify effective plan for u1 is now starter active
         with SessionLocal() as db:
@@ -138,9 +141,10 @@ def test_checkout_info_and_payment_flow(test_users):
             json={"plan_id": "pro", "billing_interval": "monthly", "method": "easypaisa", "transaction_id": tx2},
         ).json()
         active_user["user"] = User(id=admin_uid, email="ahmadimran@mbstack.net")
-        rej = client.post(f"/api/admin/payments/{p2['id']}/reject", json={"reason": "Amount mismatch"})
-        assert rej.status_code == 200
-        assert rej.json()["reject_reason"] == "Amount mismatch"
+        with patch("app.api.routes.admin_deps.resolve_user_email_and_verified", return_value=("ahmadimran@mbstack.net", True)):
+            rej = client.post(f"/api/admin/payments/{p2['id']}/reject", json={"reason": "Amount mismatch"})
+            assert rej.status_code == 200
+            assert rej.json()["reject_reason"] == "Amount mismatch"
 
         active_user["user"] = User(id=u2, email="user2@example.com")
         resub = client.post(
