@@ -458,6 +458,14 @@ def process_next_job(db: Optional[Session] = None) -> bool:
         if job is None:
             return False
 
+        from app.services.account_status import is_user_active
+        if not is_user_active(db, job.user_id):
+            job.status = "dead"
+            job.last_error = "Account is not active"
+            job.finished_at = now
+            db.commit()
+            return True
+
         job.status = "running"
         job.locked_at = now
         job.boot_id = settings.BOOT_ID

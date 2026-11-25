@@ -77,7 +77,10 @@ def send_due_subscription_reminders(
         select(Subscription).where(Subscription.plan_id != "internal")
     ).all()
 
+    from app.services.account_status import is_user_active
     for sub in subs:
+        if not is_user_active(db, sub.user_id):
+            continue
         if sub.plan_id == "trial" and sub.trial_ends_at is not None:
             delta = sub.trial_ends_at - current_utc
             if datetime.timedelta(0) < delta <= datetime.timedelta(days=1):

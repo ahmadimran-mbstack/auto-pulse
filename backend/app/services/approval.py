@@ -210,14 +210,19 @@ def decide_approval(
     post_id: Optional[uuid.UUID] = None,
     user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    # Block approval decisions when the user's account is suspended, disabled, or deleted
+    owner_id = user_id
+    if not owner_id and token_hash:
+        owner_id = db.execute(
+            text("SELECT user_id FROM approvals WHERE token_hash = :th LIMIT 1"),
+            {"th": token_hash},
+        ).scalar_one_or_none()
+    if owner_id:
+        from app.services.account_status import ensure_user_active_or_403
+        ensure_user_active_or_403(str(owner_id), db=db)
+
     # Block approval publishing when the user's account/subscription is expired
     if decision == "approved":
-        owner_id = user_id
-        if not owner_id and token_hash:
-            owner_id = db.execute(
-                text("SELECT user_id FROM approvals WHERE token_hash = :th LIMIT 1"),
-                {"th": token_hash},
-            ).scalar_one_or_none()
         if owner_id:
             from app.services.entitlements import get_entitlements
             ent = get_entitlements(db, str(owner_id))

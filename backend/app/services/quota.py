@@ -375,6 +375,10 @@ def _send_daily_spend_alert_once(db: Session, user_id: str, local_date: datetime
         {"uid": user_id},
     ).scalar_one_or_none() or user_id
 
+    from app.services.account_status import is_user_active
+    if not is_user_active(db, user_id):
+        return
+
     try:
         send_spend_alert_email(
             to_email=ops_email,

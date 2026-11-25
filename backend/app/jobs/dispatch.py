@@ -121,7 +121,10 @@ def send_due_approvals(db: Session) -> int:
         .all()
     )
     sent = 0
+    from app.services.account_status import is_user_active
     for p in due_posts:
+        if not is_user_active(db, p.user_id):
+            continue
         if request_approval(db, p):
             sent += 1
     return sent
@@ -147,7 +150,10 @@ def send_due_reminders(db: Session) -> int:
         .all()
     )
     reminded = 0
+    from app.services.account_status import is_user_active
     for approval, post, profile in rows:
+        if not is_user_active(db, post.user_id):
+            continue
         lead = getattr(profile, "approval_lead_minutes", 180) if profile else 180
         if (lead or 180) < 60:
             continue
@@ -216,9 +222,10 @@ def retry_unsent_approvals(db: Session) -> int:
     )
 
     retried_count = 0
+    from app.services.account_status import is_user_active
     for approval in unsent_approvals:
         post = db.query(Post).filter(Post.id == approval.post_id).first()
-        if post and post.status == "draft":
+        if post and post.status == "draft" and is_user_active(db, post.user_id):
             success = request_approval(db, post)
             if success:
                 retried_count += 1
@@ -548,8 +555,11 @@ def run_dispatch(db: Session) -> None:
     )
 
     for profile in active_profiles:
-        # Skip users pending deletion or with an empty niche description
+        # Skip suspended, disabled, deleted, or deletion-pending users
         from app.api.routes.account import is_user_deletion_pending
+        from app.services.account_status import is_user_active
+        if getattr(profile, "account_status", "active") != "active" or not is_user_active(db, profile.user_id):
+            continue
         if getattr(profile, "deletion_pending", False) or is_user_deletion_pending(profile.user_id):
             continue
         if not (profile.niche_description or "").strip():

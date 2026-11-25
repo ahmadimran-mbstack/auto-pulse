@@ -82,7 +82,9 @@ def find_eligible_publications(db: Session, target_post_id: Optional[uuid.UUID] 
         "  AND p.is_test IS FALSE "  # TEST_LAB_REMOVE
         "  AND p.publish_at <= now() "
         "  AND p.publish_at >= now() - interval '6 hours' "
-        "  AND (pub.not_before IS NULL OR pub.not_before <= now())"
+        "  AND (pub.not_before IS NULL OR pub.not_before <= now()) "
+        "  AND NOT EXISTS (SELECT 1 FROM profiles pr WHERE pr.user_id = p.user_id AND pr.account_status != 'active') "
+        "  AND NOT EXISTS (SELECT 1 FROM deleted_accounts da WHERE da.user_id = p.user_id)"
     )
     params = {}
     if target_post_id:
@@ -93,13 +95,15 @@ def find_eligible_publications(db: Session, target_post_id: Optional[uuid.UUID] 
     return [{"pub_id": r.pub_id, "post_id": r.post_id, "publish_at": r.publish_at} for r in rows]
 
 
-# Atomic claim for a publication row
+# Atomic claim for a publication row (enforces active account status inside the same UPDATE)
 def claim_publication(db: Session, pub_id: uuid.UUID) -> bool:
     stmt = text(
         "UPDATE post_publications "
         "SET status = 'publishing', attempts = attempts + 1, claimed_at = now(), "
         "    error_code = NULL, error_detail = NULL, updated_at = now() "
         "WHERE id = :id AND status = 'pending' "
+        "  AND NOT EXISTS (SELECT 1 FROM profiles pr WHERE pr.user_id = post_publications.user_id AND pr.account_status != 'active') "
+        "  AND NOT EXISTS (SELECT 1 FROM deleted_accounts da WHERE da.user_id = post_publications.user_id) "
         "RETURNING id, post_id"
     )
     claimed = db.execute(stmt, {"id": pub_id}).fetchone()
