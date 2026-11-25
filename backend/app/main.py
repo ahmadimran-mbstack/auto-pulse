@@ -16,6 +16,8 @@ from app.api.routes.me import router as me_router
 from app.api.routes.plans import router as plans_router
 from app.api.routes.billing import router as billing_router
 from app.api.routes.admin_payments import router as admin_payments_router
+from app.api.routes.admin_users import router as admin_users_router
+from app.api.routes.admin_subscribers import router as admin_subscribers_router
 from app.api.routes.profile import router as profile_router
 from app.api.routes.connections import router as connections_router
 from app.api.routes.posts import router as posts_router
@@ -245,6 +247,8 @@ app.include_router(test_lab_router)  # TEST_LAB_REMOVE
 app.include_router(plans_router)
 app.include_router(billing_router)
 app.include_router(admin_payments_router)
+app.include_router(admin_users_router)
+app.include_router(admin_subscribers_router)
 
 
 @app.on_event("startup")

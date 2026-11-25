@@ -1,48 +1,34 @@
-"""Admin payment verification routes (protected by ADMIN_EMAILS)."""
+"""Admin payment verification routes (protected by verified ADMIN_EMAILS)."""
 
 import datetime
 import logging
-import uuid
 from typing import Any, Dict, List, Optional
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import desc, text
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.core.auth import User, current_user
-from app.core.config import settings
-from app.core.plans import ANNUAL_PERIOD_DAYS, MONTHLY_WINDOW_DAYS, PLANS
+from app.api.routes.admin_deps import (
+    AdminCaller,
+    rate_limit_admin_mutation,
+    require_admin,
+    require_admin_caller,
+)
+from app.core.plans import PLANS, PURCHASABLE_PLANS
 from app.db.session import get_db
-from app.models.subscription import Payment
-from app.services.entitlements import ensure_trial_subscription, invalidate_effective_plan_cache
+from app.models.admin import AdminAuditLog
+from app.services.entitlements import (
+    activate_paid_subscription,
+    invalidate_effective_plan_cache,
+)
+from app.services.admin_overview import invalidate_admin_overview_cache
+from app.services.notifications import send_user_notification
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
-
-
-def _resolve_user_email(db: Session, user: User) -> str:
-    if user.email:
-        return user.email.strip().lower()
-    row = db.execute(
-        text("SELECT email FROM neon_auth.user WHERE id::text = :uid LIMIT 1"),
-        {"uid": user.id},
-    ).scalar()
-    return str(row).strip().lower() if row else ""
-
-
-def require_admin(
-    user: User = Depends(current_user),
-    db: Session = Depends(get_db),
-) -> str:
-    """Confirm the authenticated caller's email is in ADMIN_EMAILS (403 otherwise)."""
-    caller_email = _resolve_user_email(db, user)
-    if not caller_email or caller_email not in settings.admin_email_set:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": "forbidden", "message": "Admin access required."},
-        )
-    return caller_email
 
 
 class RejectPaymentRequest(BaseModel):
@@ -60,6 +46,25 @@ def _parse_payment_id(raw_id: str) -> uuid.UUID:
         )
 
 
+def _resolve_payment_recipient(db: Session, user_id: str, fallback_email: Optional[str]) -> tuple[Optional[str], str]:
+    row = db.execute(
+        text(
+            'SELECT u.email, COALESCE(NULLIF(TRIM(pr.display_name), \'\'), u.name) AS display_name '
+            'FROM neon_auth."user" u '
+            'LEFT JOIN profiles pr ON pr.user_id = u.id::text '
+            'WHERE u.id::text = :uid LIMIT 1'
+        ),
+        {"uid": user_id},
+    ).fetchone()
+    if row and row.email:
+        email = str(row.email).strip()
+        name = str(row.display_name or email.split("@")[0])
+        return email, name
+    if fallback_email:
+        return fallback_email, fallback_email.split("@")[0]
+    return None, "Creator"
+
+
 @router.get("/me")
 def admin_me(admin_email: str = Depends(require_admin)) -> Dict[str, Any]:
     return {"is_admin": True, "email": admin_email}
@@ -68,7 +73,12 @@ def admin_me(admin_email: str = Depends(require_admin)) -> Dict[str, Any]:
 @router.get("/payments")
 def list_admin_payments(
     status_filter: str = Query("pending", alias="status"),
-    admin_email: str = Depends(require_admin),
+    search: Optional[str] = Query(None),
+    method: Optional[str] = Query(None),
+    plan: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    admin: AdminCaller = Depends(require_admin_caller),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     if status_filter not in ("pending", "approved", "rejected"):
@@ -77,18 +87,64 @@ def list_admin_payments(
             detail={"code": "invalid_status", "message": "Status must be pending, approved, or rejected."},
         )
 
+    where_clauses = ["p.status = :status"]
+    params: Dict[str, Any] = {
+        "status": status_filter,
+        "limit": page_size,
+        "offset": (page - 1) * page_size,
+    }
+
+    if search and search.strip():
+        params["q"] = f"%{search.strip()}%"
+        where_clauses.append(
+            "(p.transaction_id ILIKE :q OR COALESCE(u.email, p.user_email, '') ILIKE :q)"
+        )
+
+    if method and method.strip():
+        m = method.strip().lower()
+        if m not in ("easypaisa", "jazzcash"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "invalid_method", "message": "Method must be easypaisa or jazzcash."},
+            )
+        params["method"] = m
+        where_clauses.append("p.method = :method")
+
+    if plan and plan.strip():
+        pl = plan.strip().lower()
+        if pl not in PURCHASABLE_PLANS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "invalid_plan", "message": "Invalid plan filter."},
+            )
+        params["plan_id"] = pl
+        where_clauses.append("p.plan_id = :plan_id")
+
+    where_sql = " AND ".join(where_clauses)
+    base_from = (
+        "FROM payments p "
+        'LEFT JOIN neon_auth."user" u ON u.id::text = p.user_id '
+    )
+
+    total = int(
+        db.execute(text(f"SELECT COUNT(*) {base_from} WHERE {where_sql}"), params).scalar() or 0
+    )
+    pending_count = int(
+        db.execute(text("SELECT COUNT(*) FROM payments WHERE status = 'pending'")).scalar() or 0
+    )
+
     rows = db.execute(
         text(
             "SELECT p.id, p.user_id, p.plan_id, p.billing_interval, p.amount_usd_cents, "
             "       p.amount_pkr, p.method, p.transaction_id, p.status, p.submitted_at, "
-            "       p.reviewed_by, p.reviewed_at, p.reject_reason, u.email AS user_email "
-            "FROM payments p "
-            "LEFT JOIN neon_auth.user u ON u.id::text = p.user_id "
-            "WHERE p.status = :status "
+            "       p.reviewed_by, p.reviewed_at, p.reject_reason, "
+            "       COALESCE(u.email, p.user_email) AS user_email "
+            f"{base_from} "
+            f"WHERE {where_sql} "
             "ORDER BY p.submitted_at DESC "
-            "LIMIT 200"
+            "LIMIT :limit OFFSET :offset"
         ),
-        {"status": status_filter},
+        params,
     ).fetchall()
 
     items: List[Dict[str, Any]] = []
@@ -114,13 +170,20 @@ def list_admin_payments(
                 "reject_reason": r.reject_reason,
             }
         )
-    return {"items": items}
+    return {
+        "items": items,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": max(1, (total + page_size - 1) // page_size),
+        "pending_count": pending_count,
+    }
 
 
 @router.post("/payments/{payment_id}/approve")
 def approve_payment(
     payment_id: str,
-    admin_email: str = Depends(require_admin),
+    admin: AdminCaller = Depends(rate_limit_admin_mutation),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     pid = _parse_payment_id(payment_id)
@@ -132,9 +195,10 @@ def approve_payment(
             "UPDATE payments "
             "SET status = 'approved', reviewed_by = :admin_email, reviewed_at = :now_utc "
             "WHERE id = :id AND status = 'pending' "
-            "RETURNING id, user_id, plan_id, billing_interval, status, reviewed_by, reviewed_at"
+            "RETURNING id, user_id, user_email, plan_id, billing_interval, amount_usd_cents, "
+            "          amount_pkr, method, transaction_id, status, reviewed_by, reviewed_at"
         ),
-        {"id": pid, "admin_email": admin_email, "now_utc": now_utc},
+        {"id": pid, "admin_email": admin.email, "now_utc": now_utc},
     ).fetchone()
 
     if not row:
@@ -149,36 +213,67 @@ def approve_payment(
             detail={"code": "already_reviewed", "message": "already reviewed"},
         )
 
-    sub = ensure_trial_subscription(db, row.user_id)
-    days = ANNUAL_PERIOD_DAYS if row.billing_interval == "annual" else MONTHLY_WINDOW_DAYS
+    sub, before_sub = activate_paid_subscription(
+        db=db,
+        user_id=row.user_id,
+        plan_id=row.plan_id,
+        billing_interval=row.billing_interval,
+        provider="manual_qr",
+        provider_ref=str(row.id),
+        now=now_utc,
+    )
+    new_end = sub.current_period_end or now_utc
 
-    existing_end = sub.current_period_end
-    if existing_end is not None and existing_end.tzinfo is None:
-        existing_end = existing_end.replace(tzinfo=datetime.timezone.utc)
-
-    if (
-        sub.status == "active"
-        and sub.plan_id == row.plan_id
-        and existing_end is not None
-        and existing_end > now_utc
-    ):
-        new_start = sub.current_period_start or now_utc
-        new_end = existing_end + datetime.timedelta(days=days)
-    else:
-        new_start = now_utc
-        new_end = now_utc + datetime.timedelta(days=days)
-
-    sub.plan_id = row.plan_id
-    sub.status = "active"
-    sub.billing_interval = row.billing_interval
-    sub.current_period_start = new_start
-    sub.current_period_end = new_end
-    sub.provider = "manual_qr"
-    sub.provider_ref = str(row.id)
-    sub.updated_at = now_utc
-
+    user_email, display_name = _resolve_payment_recipient(db, row.user_id, row.user_email)
+    audit = AdminAuditLog(
+        actor_id=admin.id,
+        actor_email=admin.email,
+        action="payment.approved",
+        target_type="payment",
+        target_id=str(row.id),
+        target_email=user_email,
+        reason=f"Approved {row.method} payment {row.transaction_id}",
+        before_state={"payment_status": "pending", "subscription": before_sub},
+        after_state={
+            "payment_status": "approved",
+            "plan_id": row.plan_id,
+            "billing_interval": row.billing_interval,
+            "current_period_end": new_end.isoformat(),
+        },
+        email_status="pending" if user_email else "not_sent",
+    )
+    db.add(audit)
     db.commit()
+    db.refresh(audit)
+
     invalidate_effective_plan_cache(row.user_id)
+    invalidate_admin_overview_cache()
+
+    email_status = "not_sent"
+    email_error: Optional[str] = None
+    if user_email:
+        plan_cfg = PLANS.get(row.plan_id)
+        plan_name = plan_cfg.name if plan_cfg else row.plan_id
+        amount_str = f"${row.amount_usd_cents / 100.0:.2f} (Rs {row.amount_pkr:,})"
+        email_res = send_user_notification(
+            user_id=row.user_id,
+            to_email=user_email,
+            notification_type="payment_approved",
+            payload={
+                "display_name": display_name,
+                "amount": amount_str,
+                "plan_name": plan_name,
+                "billing_interval": row.billing_interval,
+                "paid_until": new_end.astimezone(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+                "transaction_id": row.transaction_id,
+            },
+            idempotency_key=f"payment_approved:{row.id}",
+            db=db,
+        )
+        email_status = email_res["status"]
+        email_error = email_res.get("error")
+        audit.email_status = email_status
+        db.commit()
 
     return {
         "id": str(row.id),
@@ -187,6 +282,8 @@ def approve_payment(
         "plan_id": row.plan_id,
         "billing_interval": row.billing_interval,
         "current_period_end": new_end.isoformat(),
+        "email_status": email_status,
+        "email_error": email_error,
     }
 
 
@@ -194,7 +291,7 @@ def approve_payment(
 def reject_payment(
     payment_id: str,
     payload: RejectPaymentRequest,
-    admin_email: str = Depends(require_admin),
+    admin: AdminCaller = Depends(rate_limit_admin_mutation),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     pid = _parse_payment_id(payment_id)
@@ -211,9 +308,10 @@ def reject_payment(
             "UPDATE payments "
             "SET status = 'rejected', reviewed_by = :admin_email, reviewed_at = :now_utc, reject_reason = :reason "
             "WHERE id = :id AND status = 'pending' "
-            "RETURNING id, user_id, status, reject_reason, reviewed_by, reviewed_at"
+            "RETURNING id, user_id, user_email, amount_usd_cents, amount_pkr, method, transaction_id, "
+            "          status, reject_reason, reviewed_by, reviewed_at"
         ),
-        {"id": pid, "admin_email": admin_email, "now_utc": now_utc, "reason": reason_clean},
+        {"id": pid, "admin_email": admin.email, "now_utc": now_utc, "reason": reason_clean},
     ).fetchone()
 
     if not row:
@@ -228,9 +326,51 @@ def reject_payment(
             detail={"code": "already_reviewed", "message": "already reviewed"},
         )
 
+    user_email, display_name = _resolve_payment_recipient(db, row.user_id, row.user_email)
+    audit = AdminAuditLog(
+        actor_id=admin.id,
+        actor_email=admin.email,
+        action="payment.rejected",
+        target_type="payment",
+        target_id=str(row.id),
+        target_email=user_email,
+        reason=reason_clean,
+        before_state={"payment_status": "pending"},
+        after_state={"payment_status": "rejected", "reject_reason": reason_clean},
+        email_status="pending" if user_email else "not_sent",
+    )
+    db.add(audit)
     db.commit()
+    db.refresh(audit)
+    invalidate_admin_overview_cache()
+
+    email_status = "not_sent"
+    email_error: Optional[str] = None
+    if user_email:
+        amount_str = f"${row.amount_usd_cents / 100.0:.2f} (Rs {row.amount_pkr:,})"
+        email_res = send_user_notification(
+            user_id=row.user_id,
+            to_email=user_email,
+            notification_type="payment_rejected",
+            payload={
+                "display_name": display_name,
+                "amount": amount_str,
+                "transaction_id": row.transaction_id,
+                "reason": reason_clean,
+            },
+            idempotency_key=f"payment_rejected:{row.id}",
+            db=db,
+        )
+        email_status = email_res["status"]
+        email_error = email_res.get("error")
+        audit.email_status = email_status
+        db.commit()
+
     return {
         "id": str(row.id),
         "status": "rejected",
+        "user_id": row.user_id,
         "reject_reason": row.reject_reason,
+        "email_status": email_status,
+        "email_error": email_error,
     }

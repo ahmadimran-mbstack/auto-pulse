@@ -308,6 +308,68 @@ def set_user_plan(
     return sub
 
 
+def activate_paid_subscription(
+    db: Session,
+    user_id: str,
+    plan_id: str,
+    billing_interval: str,
+    provider: str = "manual_qr",
+    provider_ref: Optional[str] = None,
+    now: Optional[datetime.datetime] = None,
+) -> tuple[Subscription, dict]:
+    """Activate or extend a paid subscription using set_user_plan, returning (sub, before_snapshot)."""
+    current_time = _utc_now(now)
+    sub = ensure_trial_subscription(db, user_id)
+    before_snapshot = {
+        "plan_id": sub.plan_id,
+        "status": sub.status,
+        "billing_interval": sub.billing_interval,
+        "current_period_end": sub.current_period_end.isoformat() if sub.current_period_end else None,
+    }
+
+    existing_end = sub.current_period_end
+    if existing_end is not None and existing_end.tzinfo is None:
+        existing_end = existing_end.replace(tzinfo=datetime.timezone.utc)
+
+    days = ANNUAL_PERIOD_DAYS if billing_interval == "annual" else MONTHLY_WINDOW_DAYS
+
+    if (
+        sub.status == "active"
+        and sub.plan_id == plan_id
+        and existing_end is not None
+        and existing_end > current_time
+    ):
+        existing_start = sub.current_period_start or current_time
+        set_user_plan(
+            db,
+            user_id=user_id,
+            plan_id=plan_id,
+            interval=billing_interval,
+            now=current_time,
+            provider=provider,
+            provider_ref=provider_ref,
+        )
+        sub.current_period_start = existing_start
+        sub.current_period_end = existing_end + datetime.timedelta(days=days)
+        sub.pending_plan_id = None
+        sub.pending_billing_interval = None
+        db.flush()
+        return sub, before_snapshot
+
+    sub.pending_plan_id = None
+    sub.pending_billing_interval = None
+    sub = set_user_plan(
+        db,
+        user_id=user_id,
+        plan_id=plan_id,
+        interval=billing_interval,
+        now=current_time,
+        provider=provider,
+        provider_ref=provider_ref,
+    )
+    return sub, before_snapshot
+
+
 def get_public_plans_payload() -> Dict[str, Any]:
     """Return public plans payload for GET /api/plans (excludes internal)."""
     items: List[Dict[str, Any]] = []

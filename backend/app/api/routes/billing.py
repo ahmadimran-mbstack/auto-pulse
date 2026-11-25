@@ -172,6 +172,7 @@ def submit_payment(
     usd_cents, amount_pkr = compute_plan_price(plan_id, interval)
     payment = Payment(
         user_id=user.id,
+        user_email=user.email,
         plan_id=plan_id,
         billing_interval=interval,
         amount_usd_cents=usd_cents,
