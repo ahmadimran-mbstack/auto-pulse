@@ -396,16 +396,48 @@ export async function apiCall<T>(
   if (!response.ok) {
     const json = await response.json().catch(() => ({}));
     const errorObj = json?.error || {};
+    const errorCode = errorObj.code || json?.detail?.code || "api_error";
     const detailMsg =
       typeof json?.detail === "string"
         ? json.detail
         : typeof json?.detail?.message === "string"
           ? json.detail.message
           : undefined;
+
+    if (
+      response.status === 403 &&
+      (errorCode === "ACCOUNT_SUSPENDED" ||
+        errorCode === "ACCOUNT_DISABLED" ||
+        errorCode === "ACCOUNT_DELETED")
+    ) {
+      clearCachedToken();
+      if (!_signOutInProgress) {
+        _signOutInProgress = true;
+        try {
+          await authClient.signOut();
+        } catch {
+          // Ignore cleanup error
+        }
+        if (typeof window !== "undefined") {
+          try {
+            const theme = localStorage.getItem("theme");
+            const nextTheme = localStorage.getItem("next-theme");
+            localStorage.clear();
+            sessionStorage.clear();
+            if (theme) localStorage.setItem("theme", theme);
+            if (nextTheme) localStorage.setItem("next-theme", nextTheme);
+          } catch {
+            // Storage access may be restricted
+          }
+          window.location.replace(`/auth/sign-in?error=${encodeURIComponent(errorCode)}`);
+        }
+      }
+    }
+
     throw new ApiClientError(
       response.status,
       {
-        code: errorObj.code || json?.detail?.code || "api_error",
+        code: errorCode,
         message: errorObj.message || detailMsg || "An unexpected error occurred.",
       },
       null,
@@ -467,15 +499,51 @@ export async function getAdminMe(): Promise<{ is_admin: boolean; email: string }
   return apiCall("/api/admin/me", { method: "GET" });
 }
 
+export interface GetAdminPaymentsParams {
+  status: "pending" | "approved" | "rejected";
+  search?: string;
+  method?: string;
+  plan?: string;
+  page?: number;
+  page_size?: number;
+}
+
 export async function getAdminPayments(
-  statusFilter: "pending" | "approved" | "rejected"
-): Promise<{ items: import("@/types/plans").AdminPaymentItem[] }> {
-  return apiCall(`/api/admin/payments?status=${statusFilter}`, { method: "GET" });
+  paramsOrStatus: "pending" | "approved" | "rejected" | GetAdminPaymentsParams
+): Promise<{
+  items: import("@/types/plans").AdminPaymentItem[];
+  total?: number;
+  page?: number;
+  page_size?: number;
+  total_pages?: number;
+  pending_count?: number;
+}> {
+  const params: GetAdminPaymentsParams =
+    typeof paramsOrStatus === "string"
+      ? { status: paramsOrStatus }
+      : paramsOrStatus;
+  const qs = new URLSearchParams();
+  qs.set("status", params.status);
+  if (params.search) qs.set("search", params.search);
+  if (params.method && params.method !== "all") qs.set("method", params.method);
+  if (params.plan && params.plan !== "all") qs.set("plan", params.plan);
+  if (params.page) qs.set("page", String(params.page));
+  if (params.page_size) qs.set("page_size", String(params.page_size));
+  return apiCall(`/api/admin/payments?${qs.toString()}`, {
+    method: "GET",
+    cache: "no-store",
+  });
 }
 
 export async function approveAdminPayment(
   paymentId: string
-): Promise<{ id: string; status: string }> {
+): Promise<{
+  id: string;
+  status: string;
+  user_id?: string;
+  email_status?: string;
+  email_error?: string | null;
+}> {
   return apiCall(`/api/admin/payments/${encodeURIComponent(paymentId)}/approve`, {
     method: "POST",
   });
@@ -484,7 +552,14 @@ export async function approveAdminPayment(
 export async function rejectAdminPayment(
   paymentId: string,
   reason: string
-): Promise<{ id: string; status: string; reject_reason: string }> {
+): Promise<{
+  id: string;
+  status: string;
+  user_id?: string;
+  reject_reason: string;
+  email_status?: string;
+  email_error?: string | null;
+}> {
   return apiCall(`/api/admin/payments/${encodeURIComponent(paymentId)}/reject`, {
     method: "POST",
     body: JSON.stringify({ reason }),
@@ -864,6 +939,241 @@ export async function getAnalytics(
     }
   );
 }
+
+// ---------------------------------------------------------------------------
+// Super Admin Users Endpoints
+// ---------------------------------------------------------------------------
+
+export interface GetAdminUsersParams {
+  search?: string;
+  plan?: string;
+  status?: string;
+  payment_state?: string;
+  sort?: "created_at" | "name" | "usage";
+  order?: "asc" | "desc";
+  page?: number;
+}
+
+export async function getAdminUsers(
+  params: GetAdminUsersParams = {}
+): Promise<import("@/types/admin").AdminUsersResponse> {
+  const qs = new URLSearchParams();
+  if (params.search) qs.set("search", params.search);
+  if (params.plan && params.plan !== "all") qs.set("plan", params.plan);
+  if (params.status && params.status !== "all") qs.set("status", params.status);
+  if (params.payment_state && params.payment_state !== "all")
+    qs.set("payment_state", params.payment_state);
+  if (params.sort) qs.set("sort", params.sort);
+  if (params.order) qs.set("order", params.order);
+  qs.set("page", String(params.page || 1));
+  return apiCall<import("@/types/admin").AdminUsersResponse>(
+    `/api/admin/users?${qs.toString()}`,
+    { method: "GET", cache: "no-store" }
+  );
+}
+
+export async function getAdminUserDetail(
+  userId: string
+): Promise<import("@/types/admin").AdminUserDetailResponse> {
+  return apiCall<import("@/types/admin").AdminUserDetailResponse>(
+    `/api/admin/users/${encodeURIComponent(userId)}`,
+    { method: "GET", cache: "no-store" }
+  );
+}
+
+export async function updateAdminUserStatus(
+  userId: string,
+  payload: {
+    status: "active" | "suspended" | "disabled";
+    expected_status: "active" | "suspended" | "disabled";
+    reason: string;
+    send_email: boolean;
+    admin_message?: string;
+  }
+): Promise<{
+  id: string;
+  account_status: string;
+  email_status: string;
+  email_error?: string | null;
+}> {
+  return apiCall(`/api/admin/users/${encodeURIComponent(userId)}/status`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteAdminUser(
+  userId: string,
+  payload: {
+    confirm_email: string;
+    reason: string;
+    send_email: boolean;
+    admin_message?: string;
+  }
+): Promise<{
+  deleted: boolean;
+  id: string;
+  email: string;
+  email_status: string;
+  email_error?: string | null;
+}> {
+  return apiCall(`/api/admin/users/${encodeURIComponent(userId)}`, {
+    method: "DELETE",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getDeletedAccounts(
+  search?: string,
+  page: number = 1
+): Promise<import("@/types/admin").DeletedAccountsResponse> {
+  const qs = new URLSearchParams();
+  if (search) qs.set("search", search);
+  qs.set("page", String(page));
+  return apiCall<import("@/types/admin").DeletedAccountsResponse>(
+    `/api/admin/deleted-accounts?${qs.toString()}`,
+    { method: "GET", cache: "no-store" }
+  );
+}
+
+export async function allowDeletedAccountResignup(
+  email: string
+): Promise<{ removed: boolean; email: string }> {
+  return apiCall(`/api/admin/deleted-accounts`, {
+    method: "DELETE",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function resendUserNotification(
+  userId: string,
+  logId: string
+): Promise<{
+  id: string;
+  status: string;
+  attempts: number;
+  provider_message_id?: string | null;
+  error?: string | null;
+}> {
+  return apiCall(
+    `/api/admin/users/${encodeURIComponent(userId)}/notifications/${encodeURIComponent(logId)}/resend`,
+    { method: "POST" }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Super Admin Phase 4 Endpoints (Plan, Subscribers, Usage, Plans)
+// ---------------------------------------------------------------------------
+
+export async function changeAdminUserPlan(
+  userId: string,
+  payload: {
+    plan_id: string;
+    billing_interval: string | null;
+    expected_plan_id: string;
+    reset_quota_cycle: boolean;
+    reason: string;
+    send_email: boolean;
+    admin_message?: string;
+  }
+): Promise<{
+  id: string;
+  plan_id: string;
+  plan_name: string;
+  billing_interval: string | null;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  email_status: string;
+  email_error?: string | null;
+}> {
+  return apiCall(`/api/admin/users/${encodeURIComponent(userId)}/plan`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function setAdminUserSubscriptionEnd(
+  userId: string,
+  payload: {
+    current_period_end: string;
+    reason: string;
+    force?: boolean;
+  }
+): Promise<{
+  id: string;
+  plan_id: string;
+  subscription_status: string;
+  trial_ends_at: string | null;
+  current_period_end: string | null;
+}> {
+  return apiCall(`/api/admin/users/${encodeURIComponent(userId)}/subscription-end`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface GetAdminSubscribersParams {
+  search?: string;
+  plan?: string;
+  interval?: string;
+  effective_status?: string;
+  sort?: "period_end" | "usage";
+  order?: "asc" | "desc";
+  page?: number;
+}
+
+export async function getAdminSubscribers(
+  params: GetAdminSubscribersParams = {}
+): Promise<import("@/types/admin").AdminSubscribersResponse> {
+  const qs = new URLSearchParams();
+  if (params.search) qs.set("search", params.search);
+  if (params.plan && params.plan !== "all") qs.set("plan", params.plan);
+  if (params.interval && params.interval !== "all") qs.set("interval", params.interval);
+  if (params.effective_status && params.effective_status !== "all")
+    qs.set("effective_status", params.effective_status);
+  if (params.sort) qs.set("sort", params.sort);
+  if (params.order) qs.set("order", params.order);
+  qs.set("page", String(params.page || 1));
+  return apiCall<import("@/types/admin").AdminSubscribersResponse>(
+    `/api/admin/subscribers?${qs.toString()}`,
+    { method: "GET", cache: "no-store" }
+  );
+}
+
+export async function getAdminUsage(params: {
+  view: "paid" | "trial";
+  search?: string;
+  page?: number;
+}): Promise<import("@/types/admin").AdminUsageResponse> {
+  const qs = new URLSearchParams();
+  qs.set("view", params.view);
+  if (params.search) qs.set("search", params.search);
+  qs.set("page", String(params.page || 1));
+  return apiCall<import("@/types/admin").AdminUsageResponse>(
+    `/api/admin/usage?${qs.toString()}`,
+    { method: "GET", cache: "no-store" }
+  );
+}
+
+export async function getAdminPlansOverview(): Promise<
+  import("@/types/admin").AdminPlansOverviewResponse
+> {
+  return apiCall<import("@/types/admin").AdminPlansOverviewResponse>(`/api/admin/plans`, {
+    method: "GET",
+    cache: "no-store",
+  });
+}
+
+export async function getAdminOverview(
+  refresh: boolean = false
+): Promise<import("@/types/admin").AdminOverviewResponse> {
+  const qs = refresh ? "?refresh=true" : "";
+  return apiCall<import("@/types/admin").AdminOverviewResponse>(`/api/admin/overview${qs}`, {
+    method: "GET",
+    cache: "no-store",
+  });
+}
+
 
 
 

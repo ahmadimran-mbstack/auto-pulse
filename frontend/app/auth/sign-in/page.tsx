@@ -33,7 +33,19 @@ function SignInForm() {
 
   // Shows URL-based OAuth errors or password reset success notices as toasts
   useEffect(() => {
-    if (urlError === "account_not_linked") {
+    if (urlError === "ACCOUNT_SUSPENDED") {
+      authToast.error("Your account has been suspended. Please contact support.", {
+        id: "sign-in-account-suspended",
+      });
+    } else if (urlError === "ACCOUNT_DISABLED") {
+      authToast.error("Your account has been disabled. Please contact support.", {
+        id: "sign-in-account-disabled",
+      });
+    } else if (urlError === "ACCOUNT_DELETED") {
+      authToast.error("This account has been deleted. Please contact support.", {
+        id: "sign-in-account-deleted",
+      });
+    } else if (urlError === "account_not_linked") {
       authToast.warning("Account already exists", {
         id: "sign-in-account-not-linked",
         description:

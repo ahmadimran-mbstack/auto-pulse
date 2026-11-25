@@ -22,6 +22,8 @@ import {
   CreditCard,
 } from "lucide-react";
 
+import { useQuery } from "@tanstack/react-query";
+import { getAdminMe } from "@/lib/api";
 import { useDashboardQuery, prefetchDashboard, prefetchPosts, prefetchConnections, prefetchProfile, prefetchAnalytics } from "@/lib/queries";
 import { SidebarNoticeCard } from "@/components/app/sidebar-notice-card";
 import { SidebarUserRow } from "@/components/app/sidebar-user-row";
@@ -52,6 +54,14 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
 
   // Fetch dashboard connections to pass to notice card
   const { data: dashboardData, isLoading, isError } = useDashboardQuery(user.id);
+
+  // Check admin status for showing the Admin link (real enforcement is on the backend)
+  const { data: adminMe } = useQuery({
+    queryKey: ["admin-me"],
+    queryFn: getAdminMe,
+    retry: false,
+    staleTime: 60_000,
+  });
 
   // Global keyboard shortcut for 'F' to open command palette
   React.useEffect(() => {
@@ -255,6 +265,22 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
                 </div>
               </div>
             </div>
+
+            {adminMe?.is_admin && (
+              <Link
+                href="/admin"
+                onClick={() => onNavigate?.()}
+                className={cn(
+                  "flex h-9 items-center gap-3 rounded-lg px-3 text-sm transition-colors",
+                  pathname.startsWith("/admin")
+                    ? "bg-accent text-foreground font-normal"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                )}
+              >
+                <Shield className="size-4 shrink-0" strokeWidth={1.5} />
+                <span>Admin</span>
+              </Link>
+            )}
           </nav>
 
         {/* Pinned Bottom Notice Card and User Row */}
