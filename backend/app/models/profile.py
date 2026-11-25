@@ -59,6 +59,16 @@ class Profile(Base):
         SmallInteger, nullable=False, server_default="180"
     )
 
+    # Account status controlled by admin (active, suspended, disabled)
+    account_status: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default="active"
+    )
+    status_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status_changed_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    status_changed_by: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     # Onboarding tracking
     onboarding_step: Mapped[int] = mapped_column(
         SmallInteger, nullable=False, server_default="0"
@@ -109,5 +119,9 @@ class Profile(Base):
         CheckConstraint(
             "post_days <@ ARRAY[0, 1, 2, 3, 4, 5, 6]::smallint[]",
             name="ck_profiles_post_days",
+        ),
+        CheckConstraint(
+            "account_status IN ('active', 'suspended', 'disabled')",
+            name="ck_profiles_account_status",
         ),
     )

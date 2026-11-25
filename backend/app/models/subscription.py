@@ -84,6 +84,7 @@ class Payment(Base):
         server_default=text("gen_random_uuid()"),
     )
     user_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    user_email: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     plan_id: Mapped[str] = mapped_column(Text, nullable=False)
     billing_interval: Mapped[str] = mapped_column(Text, nullable=False)
     amount_usd_cents: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -115,6 +116,13 @@ class Payment(Base):
         ),
         Index(
             "uq_payments_transaction_id_active",
+            "transaction_id",
+            unique=True,
+            postgresql_where=text("status IN ('pending', 'approved')"),
+        ),
+        Index(
+            "uq_payments_method_transaction_id_active",
+            "method",
             "transaction_id",
             unique=True,
             postgresql_where=text("status IN ('pending', 'approved')"),

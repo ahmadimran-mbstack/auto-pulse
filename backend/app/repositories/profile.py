@@ -84,7 +84,40 @@ def get_or_create_profile(
     db: Session,
     user_id: str,
     display_name: Optional[str] = None,
+    email: Optional[str] = None,
 ) -> Profile:
+    # Block recreating a profile if the user or their email is in deleted_accounts
+    from fastapi import HTTPException, status
+    from sqlalchemy import text
+    clean_email = email.strip().lower() if email else None
+    if not clean_email:
+        row_email = db.execute(
+            text('SELECT email FROM neon_auth."user" WHERE id::text = :uid LIMIT 1'),
+            {"uid": user_id},
+        ).scalar()
+        if row_email:
+            clean_email = str(row_email).strip().lower()
+
+    if clean_email:
+        deleted = db.execute(
+            text("SELECT 1 FROM deleted_accounts WHERE lower(email) = :email LIMIT 1"),
+            {"email": clean_email},
+        ).scalar()
+    else:
+        deleted = db.execute(
+            text("SELECT 1 FROM deleted_accounts WHERE user_id = :uid LIMIT 1"),
+            {"uid": user_id},
+        ).scalar()
+
+    if deleted:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "ACCOUNT_DELETED",
+                "message": "This account has been deleted. Please contact support.",
+            },
+        )
+
     # 1. Read first to save a database round trip for existing profiles
     profile = get_profile(db, user_id=user_id)
     if profile is not None:

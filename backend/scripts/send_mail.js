@@ -23,15 +23,18 @@ async function main() {
     subject: payload.subject,
     text: payload.text,
     html: payload.html,
-    headers: payload.headers || {}
+    headers: payload.headers || {},
+    messageId: payload.messageId || undefined,
   };
 
-  // Helper to send using a specific secure setting
   async function trySend(isSecure) {
     const transportConfig = {
       host: smtp.host,
       port: Number(smtp.port) || 587,
       secure: isSecure,
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 15000,
       auth: (smtp.user && smtp.pass) ? {
         user: smtp.user,
         pass: smtp.pass
@@ -45,20 +48,33 @@ async function main() {
     return await transporter.sendMail(mailOptions);
   }
 
+  let info;
   try {
-    // Try standard STARTTLS first (secure: false)
-    await trySend(false);
-    console.log("Email dispatched successfully via nodemailer SMTP");
+    info = await trySend(false);
   } catch (firstErr) {
-    // If standard fails, try immediate SSL (secure: true)
     try {
-      await trySend(true);
-      console.log("Email dispatched successfully via nodemailer SMTP (SSL)");
+      info = await trySend(true);
     } catch (secondErr) {
-      console.error("Nodemailer SMTP dispatch error:", firstErr.message || secondErr.message);
+      console.error("Nodemailer SMTP dispatch error:", secondErr.message || firstErr.message);
       process.exit(1);
     }
   }
+
+  const accepted = Array.isArray(info && info.accepted) ? info.accepted : [];
+  const rejected = Array.isArray(info && info.rejected) ? info.rejected : [];
+  if (accepted.length === 0 || rejected.length > 0) {
+    console.error(
+      `SMTP server rejected recipient(s): accepted=${JSON.stringify(accepted)} rejected=${JSON.stringify(rejected)}`
+    );
+    process.exit(1);
+  }
+
+  console.log(JSON.stringify({
+    ok: true,
+    messageId: (info && info.messageId) || payload.messageId || null,
+    accepted,
+    rejected,
+  }));
 }
 
 main().catch((err) => {

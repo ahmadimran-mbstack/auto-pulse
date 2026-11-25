@@ -2,6 +2,7 @@ import html
 import logging
 import smtplib
 from email.message import EmailMessage
+from email.utils import make_msgid
 from typing import Optional
 from app.core.config import settings
 
@@ -12,8 +13,10 @@ import json
 from pathlib import Path
 import subprocess
 
-# Low-level helper to dispatch an email via nodemailer SMTP with smtplib fallback
-def send_smtp_message(msg: EmailMessage) -> None:
+# Low-level helper to dispatch an email via nodemailer SMTP with smtplib fallback.
+# Raises RuntimeError if SMTP is unconfigured or the server rejects/fails the message.
+# Returns the SMTP Message-ID when accepted by the server.
+def send_smtp_message(msg: EmailMessage) -> str:
     host = settings.SMTP_HOST
     port = settings.SMTP_PORT
     user = settings.SMTP_USER
@@ -21,8 +24,14 @@ def send_smtp_message(msg: EmailMessage) -> None:
     use_tls = settings.SMTP_USE_TLS
 
     if not host:
-        logger.warning("SMTP_HOST is not set; skipping email dispatch")
-        return
+        raise RuntimeError("SMTP_HOST is not configured")
+
+    if "Message-ID" not in msg:
+        domain = None
+        if settings.EMAIL_FROM and "@" in settings.EMAIL_FROM:
+            domain = settings.EMAIL_FROM.split("@", 1)[1].rstrip("> ").strip()
+        msg["Message-ID"] = make_msgid(domain=domain or None)
+    message_id = str(msg["Message-ID"])
 
     # First attempt dispatch via nodemailer SMTP helper script
     script_path = Path(__file__).resolve().parent.parent.parent / "scripts" / "send_mail.js"
@@ -55,6 +64,7 @@ def send_smtp_message(msg: EmailMessage) -> None:
                 "text": body_text,
                 "html": body_html,
                 "headers": headers,
+                "messageId": message_id,
                 "smtp": {
                     "host": host,
                     "port": port,
@@ -73,10 +83,18 @@ def send_smtp_message(msg: EmailMessage) -> None:
                 timeout=20,
             )
             if result.returncode == 0:
-                logger.info("Email dispatched successfully via nodemailer SMTP")
-                return
+                stdout = (result.stdout or "").strip()
+                try:
+                    parsed = json.loads(stdout.splitlines()[-1]) if stdout else {}
+                    if parsed.get("messageId"):
+                        message_id = str(parsed["messageId"])
+                except Exception:
+                    pass
+                logger.info(f"Email dispatched successfully via nodemailer SMTP (message_id={message_id})")
+                return message_id
             else:
-                logger.warning(f"nodemailer SMTP helper exited with code {result.returncode}, falling back to smtplib")
+                err_msg = (result.stderr or result.stdout or "").strip() or f"exit code {result.returncode}"
+                logger.warning(f"nodemailer SMTP helper failed ({err_msg}), falling back to smtplib")
         except Exception as exc:
             logger.warning(f"nodemailer SMTP helper error ({exc}), falling back to smtplib")
 
@@ -103,7 +121,10 @@ def send_smtp_message(msg: EmailMessage) -> None:
     try:
         if user and password:
             server.login(user, password)
-        server.send_message(msg)
+        refused = server.send_message(msg)
+        if refused:
+            raise RuntimeError(f"SMTP server refused recipient(s): {refused}")
+        return message_id
     finally:
         try:
             server.quit()

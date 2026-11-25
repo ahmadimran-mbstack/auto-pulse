@@ -104,6 +104,7 @@ class Settings(BaseSettings):
     PAYMENT_ACCOUNT_TITLE: str = "Hafiz Ahmad Ali"
     PAYMENT_ACCOUNT_LAST4: str = "9182"
     ADMIN_EMAILS: str = "ahmadimran@mbstack.net,ahmadimran67208@gmail.com,teammbstack@gmail.com,haris@mbstack.net"
+    SUPPORT_EMAIL: str = "contact@mbstack.net"
 
     @property
     def admin_email_set(self) -> set[str]:

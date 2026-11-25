@@ -27,6 +27,7 @@ def get_caller_profile(
         db=db,
         user_id=user.id,
         display_name=user.name,
+        email=user.email,
     )
     return profile_repo.format_profile_response(profile, db=db)
 
@@ -42,6 +43,7 @@ def patch_caller_profile(
         db=db,
         user_id=user.id,
         display_name=user.name,
+        email=user.email,
     )
 
     if payload.approval is not None and payload.approval.slack_enabled is not None:

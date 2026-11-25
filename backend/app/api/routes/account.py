@@ -1,24 +1,12 @@
-import datetime
 import logging
 from typing import Set
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import text
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.auth import User, current_user
 from app.core.limiter import get_redis_client
 from app.db.session import get_db
-from app.models.approval import Approval
-from app.models.post import GenerationRun, PlaygroundRun, Post, RunEvent
-from app.models.profile import Profile
-from app.models.publication import PostPublication
-from app.models.slack import SlackApprovalMessage, SlackIntegration
-from app.models.social_connection import OAuthState, SocialConnection
-from app.repositories import connection as connection_repo
-from app.repositories import slack as slack_repo
-from app.services.analytics import invalidate_analytics_cache
-from app.services.content_profile import invalidate_content_profile_cache
-from app.services.run_lock import force_release_manual_run_lock
+from app.services.account_deletion import delete_user_account
 
 logger = logging.getLogger(__name__)
 
@@ -63,163 +51,23 @@ def is_user_deletion_pending(user_id: str) -> bool:
     return False
 
 
-# Clear all per-user Redis keys and in-memory caches
-def _clear_user_redis_keys(user_id: str) -> None:
-    invalidate_content_profile_cache(user_id)
-    invalidate_analytics_cache(user_id)
-    client = get_redis_client()
-    if client is None:
-        return
-    try:
-        exact_keys = [
-            f"rate_limit:slack_connect:{user_id}",
-            f"rate_limit:slack_test:{user_id}",
-            f"playground:{user_id}",
-            f"manual_run_lock:{user_id}",
-            f"content_profile:{user_id}",
-            f"customization_ctx:{user_id}",
-        ]
-        # Remove any analytics range keys for this user
-        for key in client.scan_iter(match=f"analytics:{user_id}:*"):
-            exact_keys.append(key)
-        if exact_keys:
-            client.delete(*exact_keys)
-    except Exception as exc:
-        logger.warning(f"Redis cleanup warning during account deletion: {exc}")
-
-
 # Permanently delete the signed-in user's account, tokens, app data, and auth record
 @router.delete("/account")
 def delete_my_account(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
-    uid = user.id
-    now_utc = datetime.datetime.now(datetime.timezone.utc)
-
-    # 1. Stop any running or queued jobs for this user
     try:
-        db.query(GenerationRun).filter(
-            GenerationRun.user_id == uid,
-            GenerationRun.status.in_(["queued", "running", "started"]),
-        ).update(
-            {
-                "status": "cancelled",
-                "cancel_requested": True,
-                "finished_at": now_utc,
-            },
-            synchronize_session=False,
+        delete_user_account(
+            db=db,
+            user_id=user.id,
+            user_email=user.email,
+            deleted_by=user.email or user.id,
+            reason="self_delete",
+            record_deleted_account=False,
         )
-        db.query(PlaygroundRun).filter(
-            PlaygroundRun.user_id == uid,
-            PlaygroundRun.status.in_(["queued", "running", "started"]),
-        ).update(
-            {
-                "status": "cancelled",
-                "cancel_requested": True,
-                "finished_at": now_utc,
-            },
-            synchronize_session=False,
-        )
-        db.commit()
-    except Exception as exc:
-        db.rollback()
-        logger.warning(f"Failed stopping active runs during account delete: {exc}")
-    force_release_manual_run_lock(uid)
-
-    # 2. Best-effort revoke and delete Slack and LinkedIn tokens
-    try:
-        slack_repo.disconnect_slack_integration(db, user_id=uid)
-    except Exception as exc:
-        db.rollback()
-        logger.warning(f"Best-effort Slack revoke failed during account delete: {exc}")
-
-    try:
-        connection_repo.disconnect_linkedin_connection(db, user_id=uid)
-    except Exception as exc:
-        db.rollback()
-        logger.warning(f"Best-effort LinkedIn revoke failed during account delete: {exc}")
-
-    # 3. Delete all app data for this user in one transaction
-    try:
-        db.query(SlackApprovalMessage).filter(SlackApprovalMessage.user_id == uid).delete(synchronize_session=False)
-        db.query(SlackIntegration).filter(SlackIntegration.user_id == uid).delete(synchronize_session=False)
-        db.query(OAuthState).filter(OAuthState.user_id == uid).delete(synchronize_session=False)
-        db.query(SocialConnection).filter(SocialConnection.user_id == uid).delete(synchronize_session=False)
-        db.query(PostPublication).filter(PostPublication.user_id == uid).delete(synchronize_session=False)
-        db.query(Approval).filter(Approval.user_id == uid).delete(synchronize_session=False)
-        db.query(RunEvent).filter(RunEvent.user_id == uid).delete(synchronize_session=False)
-        db.query(PlaygroundRun).filter(PlaygroundRun.user_id == uid).delete(synchronize_session=False)
-        db.query(GenerationRun).filter(GenerationRun.user_id == uid).delete(synchronize_session=False)
-        db.query(Post).filter(Post.user_id == uid).delete(synchronize_session=False)
-        from app.models.customization import (
-            CustomizationDocument,
-            CustomizationFact,
-            CustomizationJob,
-            CustomizationPostSample,
-            CustomizationSettings,
-            CustomizationVersion,
-        )
-
-        db.query(CustomizationJob).filter(CustomizationJob.user_id == uid).delete(synchronize_session=False)
-        db.query(CustomizationFact).filter(CustomizationFact.user_id == uid).delete(synchronize_session=False)
-        db.query(CustomizationPostSample).filter(CustomizationPostSample.user_id == uid).delete(synchronize_session=False)
-        db.query(CustomizationSettings).filter(CustomizationSettings.user_id == uid).delete(synchronize_session=False)
-        db.query(CustomizationVersion).filter(CustomizationVersion.user_id == uid).delete(synchronize_session=False)
-        db.query(CustomizationDocument).filter(CustomizationDocument.user_id == uid).delete(synchronize_session=False)
-        db.query(Profile).filter(Profile.user_id == uid).delete(synchronize_session=False)
-        db.commit()
-    except Exception as exc:
-        db.rollback()
-        logger.error(f"Failed deleting app data during account delete: {exc}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "code": "delete_data_failed",
-                "message": "Could not delete your account data. Please try again.",
-            },
-        )
-
-    # 4. Clear Redis keys, in-memory caches, and customization object storage
-    _clear_user_redis_keys(uid)
-    try:
-        from app.services.customization.context import invalidate_customization_context_cache
-
-        invalidate_customization_context_cache(uid)
+        _clear_deletion_pending(user.id)
+        return {"deleted": True}
     except Exception:
-        pass
-    try:
-        from app.services.storage import get_storage_backend
-
-        get_storage_backend().delete_prefix(f"customization/{uid}/")
-    except Exception as exc:
-        logger.warning(f"Best-effort customization storage cleanup failed for {uid}: {exc}")
-
-    # 5. Delete the Neon Auth user, sessions, accounts, and verification records
-    try:
-        if user.email:
-            db.execute(
-                text("DELETE FROM neon_auth.verification WHERE identifier LIKE :pat"),
-                {"pat": f"%{user.email.strip().lower()}%"},
-            )
-        db.execute(text('DELETE FROM neon_auth.invitation WHERE "inviterId"::text = :uid'), {"uid": uid})
-        db.execute(text('DELETE FROM neon_auth.member WHERE "userId"::text = :uid'), {"uid": uid})
-        db.execute(text('DELETE FROM neon_auth.session WHERE "userId"::text = :uid'), {"uid": uid})
-        db.execute(text('DELETE FROM neon_auth.account WHERE "userId"::text = :uid'), {"uid": uid})
-        db.execute(text('DELETE FROM neon_auth."user" WHERE id::text = :uid'), {"uid": uid})
-        db.commit()
-        _clear_deletion_pending(uid)
-    except Exception as exc:
-        db.rollback()
-        _mark_deletion_pending(uid)
-        logger.error(f"Failed deleting auth user after app data removal: {exc}")
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail={
-                "code": "auth_delete_failed",
-                "message": "Your app data was removed, but we could not finish deleting your sign-in record. Please click Delete account again to retry.",
-            },
-        )
-
-    return {"deleted": True}
-
+        _mark_deletion_pending(user.id)
+        raise

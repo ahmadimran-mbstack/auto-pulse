@@ -158,9 +158,15 @@ def current_user(authorization: Optional[str] = Header(None)) -> User:
             logger.warning("Authentication failed: Token payload missing subject id")
             _raise_unauthorized()
 
+        user_email = payload.get("email")
+
+        # Enforce account status (active, suspended, disabled, deleted) on every authenticated request
+        from app.services.account_status import ensure_user_active_or_403
+        ensure_user_active_or_403(user_id=str(user_id), email=user_email)
+
         return User(
             id=str(user_id),
-            email=payload.get("email"),
+            email=user_email,
             name=payload.get("name"),
         )
     finally:
