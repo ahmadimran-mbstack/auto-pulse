@@ -98,55 +98,62 @@ export function StatCard({
   const inner = (
     <Card
       className={cn(
-        "rounded-lg border-border bg-card shadow-xs transition-colors duration-150",
+        "h-full flex flex-col rounded-lg border-border bg-card shadow-xs transition-colors duration-150",
         href && "hover:border-border-hover cursor-pointer",
         className
       )}
     >
-      <CardContent className="p-5 flex items-start justify-between gap-3">
-        <div className="space-y-1.5 min-w-0">
-          <p className="text-xs font-medium text-muted-foreground">{label}</p>
-          <div className="flex flex-wrap items-baseline gap-2">
-            <span className="text-2xl font-semibold tracking-tight tabular-nums text-foreground">
-              {value}
-            </span>
-            {delta && (
-              <span
-                className={cn(
-                  "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums",
-                  delta.positive
-                    ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                    : "bg-red-500/10 text-red-700 dark:text-red-300"
-                )}
-              >
-                {delta.positive ? (
-                  <ArrowUpRight className="size-3" />
-                ) : (
-                  <ArrowDownRight className="size-3" />
-                )}
-                {delta.value}
+      <CardContent className="p-5 flex-1 flex flex-col justify-between gap-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1.5 min-w-0 flex-1">
+            <p className="text-xs font-medium text-muted-foreground truncate">{label}</p>
+            <div className="flex items-baseline gap-2 min-w-0 flex-nowrap">
+              <span className="text-2xl font-semibold tracking-tight tabular-nums text-foreground leading-none">
+                {value}
               </span>
-            )}
+              {delta && (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-medium tabular-nums shrink-0 leading-none",
+                    delta.positive
+                      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                      : "bg-red-500/10 text-red-700 dark:text-red-300"
+                  )}
+                >
+                  {delta.positive ? (
+                    <ArrowUpRight className="size-3" />
+                  ) : (
+                    <ArrowDownRight className="size-3" />
+                  )}
+                  {delta.value}
+                </span>
+              )}
+            </div>
           </div>
-          {subline && (
-            <div className="text-xs text-muted-foreground leading-relaxed">{subline}</div>
-          )}
+          <div
+            className={cn(
+              "flex size-9 shrink-0 items-center justify-center rounded-lg",
+              STAT_TONES[tone]
+            )}
+          >
+            <Icon className="size-4" strokeWidth={1.75} aria-hidden="true" />
+          </div>
         </div>
-        <div
-          className={cn(
-            "flex size-9 shrink-0 items-center justify-center rounded-lg",
-            STAT_TONES[tone]
-          )}
-        >
-          <Icon className="size-4" strokeWidth={1.75} aria-hidden="true" />
-        </div>
+        {subline && (
+          <div className="mt-auto text-xs text-muted-foreground leading-snug truncate">
+            {subline}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
 
   if (href) {
     return (
-      <Link href={href} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg">
+      <Link
+        href={href}
+        className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
+      >
         {inner}
       </Link>
     );
