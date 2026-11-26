@@ -225,6 +225,18 @@ export interface AdminPlanOverviewItem {
   id: string;
   name: string;
   is_public: boolean;
+  is_active?: boolean;
+  is_popular?: boolean;
+  is_system?: boolean;
+  is_purchasable?: boolean;
+  sort_order?: number;
+  version?: number;
+  rate_limit_tier?: string;
+  extra_features?: string[];
+  monthly_price_cents?: number | null;
+  annual_price_cents?: number | null;
+  annual_monthly_equivalent_cents?: number | null;
+  daily_spend_limit_cents?: number | null;
   monthly_price_usd: number | null;
   monthly_price_pkr_approx: number | null;
   annual_price_usd: number | null;
@@ -254,14 +266,20 @@ export interface AdminPlanOverviewItem {
   subscribers: {
     total: number;
     active: number;
+    paid?: number;
   };
+  references_count?: number;
+  updated_at?: string | null;
+  updated_by?: string | null;
 }
 
 export interface AdminPlansOverviewResponse {
   currency: string;
   pkr_per_usd: number;
   annual_discount: number;
+  trial_days?: number;
   rate_limit_windows: Record<string, number>;
+  rate_limit_tiers?: string[];
   plans: AdminPlanOverviewItem[];
 }
 

@@ -223,7 +223,8 @@ export function usePublicPlans() {
   return useQuery<PublicPlansResponse>({
     queryKey: ["public", "plans"],
     queryFn: () => getPublicPlans(),
-    staleTime: 5 * 60_000,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
   });
 }
 

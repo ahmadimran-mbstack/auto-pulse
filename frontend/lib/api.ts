@@ -488,6 +488,7 @@ export async function submitManualPayment(payload: {
   billing_interval: "monthly" | "annual";
   method: "easypaisa" | "jazzcash";
   transaction_id: string;
+  expected_amount_usd_cents?: number;
 }): Promise<import("@/types/plans").BillingPaymentItem> {
   return apiCall("/api/billing/payments", {
     method: "POST",
@@ -500,7 +501,7 @@ export async function getAdminMe(): Promise<{ is_admin: boolean; email: string }
 }
 
 export interface GetAdminPaymentsParams {
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "approved" | "rejected" | "voided" | "all";
   search?: string;
   method?: string;
   plan?: string;
@@ -509,7 +510,7 @@ export interface GetAdminPaymentsParams {
 }
 
 export async function getAdminPayments(
-  paramsOrStatus: "pending" | "approved" | "rejected" | GetAdminPaymentsParams
+  paramsOrStatus: "pending" | "approved" | "rejected" | "voided" | "all" | GetAdminPaymentsParams
 ): Promise<{
   items: import("@/types/plans").AdminPaymentItem[];
   total?: number;
@@ -532,6 +533,57 @@ export async function getAdminPayments(
   return apiCall(`/api/admin/payments?${qs.toString()}`, {
     method: "GET",
     cache: "no-store",
+  });
+}
+
+export async function recordAdminPayment(payload: {
+  user_id: string;
+  plan_id: string;
+  billing_interval: "monthly" | "annual";
+  amount_usd?: number;
+  method: string;
+  transaction_id?: string;
+  paid_at?: string;
+  subscription_ends_at?: string;
+  activate_plan: boolean;
+  send_email: boolean;
+  note?: string;
+}): Promise<{
+  id: string;
+  status: string;
+  transaction_id: string;
+  user_id: string;
+  plan_id: string;
+  current_period_end: string | null;
+  email_status: string;
+  email_error?: string | null;
+}> {
+  return apiCall("/api/admin/payments/record", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function voidAdminPayment(
+  paymentId: string,
+  payload: {
+    reason: string;
+    revoke_access: boolean;
+    send_email: boolean;
+    user_message?: string;
+  }
+): Promise<{
+  id: string;
+  status: string;
+  user_id: string;
+  revoke_access: boolean;
+  new_current_period_end: string | null;
+  email_status: string;
+  email_error?: string | null;
+}> {
+  return apiCall(`/api/admin/payments/${encodeURIComponent(paymentId)}/void`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
   });
 }
 
@@ -952,6 +1004,7 @@ export interface GetAdminUsersParams {
   sort?: "created_at" | "name" | "usage";
   order?: "asc" | "desc";
   page?: number;
+  page_size?: number;
 }
 
 export async function getAdminUsers(
@@ -966,6 +1019,7 @@ export async function getAdminUsers(
   if (params.sort) qs.set("sort", params.sort);
   if (params.order) qs.set("order", params.order);
   qs.set("page", String(params.page || 1));
+  if (params.page_size) qs.set("page_size", String(params.page_size));
   return apiCall<import("@/types/admin").AdminUsersResponse>(
     `/api/admin/users?${qs.toString()}`,
     { method: "GET", cache: "no-store" }
@@ -1164,6 +1218,39 @@ export async function getAdminPlansOverview(): Promise<
   });
 }
 
+export async function createAdminPlan(payload: Record<string, unknown>): Promise<{
+  plan: import("@/types/admin").AdminPlanOverviewItem;
+  revalidate_warning?: string | null;
+}> {
+  return apiCall(`/api/admin/plans`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateAdminPlan(
+  planId: string,
+  payload: Record<string, unknown>
+): Promise<{
+  plan: import("@/types/admin").AdminPlanOverviewItem | null;
+  revalidate_warning?: string | null;
+}> {
+  return apiCall(`/api/admin/plans/${encodeURIComponent(planId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteAdminPlan(
+  planId: string,
+  payload: { reason: string; confirm_slug?: string; expected_version?: number }
+): Promise<{ deleted: boolean; id: string; revalidate_warning?: string | null }> {
+  return apiCall(`/api/admin/plans/${encodeURIComponent(planId)}`, {
+    method: "DELETE",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function getAdminOverview(
   refresh: boolean = false
 ): Promise<import("@/types/admin").AdminOverviewResponse> {
@@ -1172,6 +1259,211 @@ export async function getAdminOverview(
     method: "GET",
     cache: "no-store",
   });
+}
+
+export async function fetchAuthenticatedBlob(path: string): Promise<{ blob: Blob; headers: Headers }> {
+  const baseUrl = env.apiUrl.replace(/\/$/, "");
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+  const url = `${baseUrl}${cleanPath}`;
+  const token = await getFreshToken();
+  if (!token) {
+    throw new ApiClientError(401, {
+      code: "unauthorized",
+      message: "Your session is no longer valid. Please sign in again.",
+    });
+  }
+  const response = await fetch(url, {
+    method: "GET",
+    cache: "no-store",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!response.ok) {
+    const errJson = await response.json().catch(() => ({}));
+    const errObj = errJson?.error || errJson?.detail || {};
+    throw new ApiClientError(response.status, {
+      code: errObj.code || "request_failed",
+      message: errObj.message || `Request failed with status ${response.status}`,
+    });
+  }
+  return { blob: await response.blob(), headers: response.headers };
+}
+
+export async function fetchAuthenticatedObjectUrl(path: string): Promise<string> {
+  const { blob } = await fetchAuthenticatedBlob(path);
+  return URL.createObjectURL(blob);
+}
+
+export async function getMySupportTickets(params: {
+  status?: string;
+  page?: number;
+  page_size?: number;
+} = {}): Promise<import("@/types/support").UserSupportTicketsResponse> {
+  const qs = new URLSearchParams();
+  if (params.status && params.status !== "all") qs.set("status", params.status);
+  qs.set("page", String(params.page || 1));
+  if (params.page_size) qs.set("page_size", String(params.page_size));
+  return apiCall(`/api/support/tickets?${qs.toString()}`, { method: "GET", cache: "no-store" });
+}
+
+export async function createSupportTicket(payload: {
+  subject: string;
+  category: string;
+  priority: string;
+  description: string;
+  attachment?: File | null;
+}): Promise<import("@/types/support").UserSupportTicketDetailResponse> {
+  const fd = new FormData();
+  fd.set("subject", payload.subject);
+  fd.set("category", payload.category);
+  fd.set("priority", payload.priority);
+  fd.set("description", payload.description);
+  if (payload.attachment) {
+    fd.set("attachment", payload.attachment);
+  }
+  return apiCall(`/api/support/tickets`, {
+    method: "POST",
+    body: fd,
+  });
+}
+
+export async function getMySupportTicket(
+  ticketId: string
+): Promise<import("@/types/support").UserSupportTicketDetailResponse> {
+  return apiCall(`/api/support/tickets/${encodeURIComponent(ticketId)}`, {
+    method: "GET",
+    cache: "no-store",
+  });
+}
+
+export async function replyMySupportTicket(
+  ticketId: string,
+  payload: { body: string; attachment?: File | null }
+): Promise<{
+  ticket: import("@/types/support").SupportTicketSummary;
+  message: import("@/types/support").SupportTicketMessage;
+  reopened: boolean;
+}> {
+  const fd = new FormData();
+  fd.set("body", payload.body);
+  if (payload.attachment) {
+    fd.set("attachment", payload.attachment);
+  }
+  return apiCall(`/api/support/tickets/${encodeURIComponent(ticketId)}/reply`, {
+    method: "POST",
+    body: fd,
+  });
+}
+
+export async function getAdminBadgeCounts(): Promise<
+  import("@/types/support").AdminBadgeCountsResponse
+> {
+  return apiCall(`/api/admin/badge-counts`, { method: "GET", cache: "no-store" });
+}
+
+export async function getAdminSupportTickets(params: {
+  status?: string;
+  priority?: string;
+  category?: string;
+  search?: string;
+  page?: number;
+  page_size?: number;
+} = {}): Promise<import("@/types/support").AdminSupportTicketsResponse> {
+  const qs = new URLSearchParams();
+  if (params.status && params.status !== "all") qs.set("status", params.status);
+  if (params.priority && params.priority !== "all") qs.set("priority", params.priority);
+  if (params.category && params.category !== "all") qs.set("category", params.category);
+  if (params.search) qs.set("search", params.search);
+  qs.set("page", String(params.page || 1));
+  if (params.page_size) qs.set("page_size", String(params.page_size));
+  return apiCall(`/api/admin/support/tickets?${qs.toString()}`, {
+    method: "GET",
+    cache: "no-store",
+  });
+}
+
+export async function getAdminSupportTicket(
+  ticketId: string
+): Promise<import("@/types/support").AdminSupportTicketDetailResponse> {
+  return apiCall(`/api/admin/support/tickets/${encodeURIComponent(ticketId)}`, {
+    method: "GET",
+    cache: "no-store",
+  });
+}
+
+export async function replyAdminSupportTicket(
+  ticketId: string,
+  payload: { body: string; is_internal: boolean }
+): Promise<{
+  ticket: import("@/types/support").SupportTicketSummary;
+  message: import("@/types/support").SupportTicketMessage;
+  email_status: string;
+  email_error?: string | null;
+}> {
+  return apiCall(`/api/admin/support/tickets/${encodeURIComponent(ticketId)}/reply`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateAdminSupportTicketStatus(
+  ticketId: string,
+  payload: { status: "open" | "in_progress" | "resolved"; send_email?: boolean }
+): Promise<{
+  ticket: import("@/types/support").SupportTicketSummary;
+  email_status: string;
+  email_error?: string | null;
+}> {
+  return apiCall(`/api/admin/support/tickets/${encodeURIComponent(ticketId)}/status`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function downloadAdminCsv(
+  kind: "users" | "payments" | "subscribers" | "usage" | "support-tickets",
+  params: Record<string, string | number | undefined | null> = {}
+): Promise<{ truncated: boolean; filename: string }> {
+  const qs = new URLSearchParams();
+  for (const [key, val] of Object.entries(params)) {
+    if (val !== undefined && val !== null && String(val).trim() !== "" && val !== "all") {
+      qs.set(key, String(val));
+    }
+  }
+  const queryStr = qs.toString();
+  const path = `/api/admin/export/${kind}.csv${queryStr ? `?${queryStr}` : ""}`;
+  const { blob, headers } = await fetchAuthenticatedBlob(path);
+  const truncated = headers.get("X-Export-Truncated") === "true";
+  const disp = headers.get("Content-Disposition") || "";
+  const match = disp.match(/filename="?([^"]+)"?/i);
+  const filename = match?.[1] || `${kind}.csv`;
+  const objUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = objUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
+  return { truncated, filename };
+}
+
+export async function downloadAdminUserExport(userId: string): Promise<void> {
+  const { blob, headers } = await fetchAuthenticatedBlob(
+    `/api/admin/users/${encodeURIComponent(userId)}/export`
+  );
+  const disp = headers.get("Content-Disposition") || "";
+  const match = disp.match(/filename="?([^"]+)"?/i);
+  const filename = match?.[1] || `user-${userId}.json`;
+  const objUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = objUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
 }
 
 

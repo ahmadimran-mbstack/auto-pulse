@@ -3,13 +3,25 @@
 import * as React from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, Search } from "lucide-react";
+import { Activity } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import { AdminExportButton } from "@/components/admin/export-button";
+import {
+  DataTableShell,
+  DaysLeftChip,
+  EmptyState,
+  ErrorState,
+  PageHeader,
+  PaginationFooter,
+  PlanBadge,
+  StatusBadge,
+  TableSkeleton,
+  Toolbar,
+  UsageBar,
+  UserAvatar,
+} from "@/components/admin/shared";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -53,12 +65,19 @@ export default function AdminUsagePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Usage</h1>
-        <p className="text-sm text-muted-foreground">
-          Current quota-window generation activity, token consumption, real LLM/search cost, and daily spend caps.
-        </p>
-      </div>
+      <PageHeader
+        title="Usage"
+        description="Current quota-window generation activity, token consumption, real LLM/search cost, and daily spend caps."
+        actions={
+          <AdminExportButton
+            kind="usage"
+            params={{
+              view,
+              search: debouncedSearch || undefined,
+            }}
+          />
+        }
+      />
 
       <Tabs
         value={view}
@@ -73,142 +92,178 @@ export default function AdminUsagePage() {
         </TabsList>
 
         <TabsContent value={view} className="mt-4 space-y-4">
-          <Card className="border-border bg-card">
-            <CardContent className="pt-6">
-              <div className="relative max-w-sm">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search name or email..."
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  className="pl-9"
+          {usageQuery.isError ? (
+            <ErrorState
+              title="Could not load usage"
+              message="Failed to fetch usage statistics."
+              onRetry={() => usageQuery.refetch()}
+            />
+          ) : (
+            <DataTableShell
+              title={view === "paid" ? "Paid user usage" : "Trial and unpaid user usage"}
+              description={`${total} user${total === 1 ? "" : "s"} in this view`}
+              toolbar={
+                <Toolbar
+                  searchValue={searchInput}
+                  onSearchChange={setSearchInput}
+                  searchPlaceholder="Search name or email..."
+                  activeFilterCount={debouncedSearch ? 1 : 0}
+                  onClearAll={() => {
+                    setSearchInput("");
+                    setDebouncedSearch("");
+                    setPage(1);
+                  }}
                 />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-border bg-card">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">
-                {view === "paid" ? "Paid user usage" : "Trial and unpaid user usage"}
-              </CardTitle>
-              <CardDescription>{total} user{total === 1 ? "" : "s"} in this view</CardDescription>
-            </CardHeader>
-            <CardContent className="p-0 overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>User</TableHead>
-                    <TableHead>Plan</TableHead>
-                    {view === "trial" && <TableHead>Trial days left</TableHead>}
-                    <TableHead>Generated / Pub / Failed</TableHead>
-                    <TableHead>Tokens (in / out)</TableHead>
-                    <TableHead>Window cost</TableHead>
-                    <TableHead className="min-w-[150px]">Quota used</TableHead>
-                    <TableHead>Today spend / limit</TableHead>
-                    <TableHead>Playground today</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {usageQuery.isLoading ? (
+              }
+              pagination={
+                !usageQuery.isLoading && items.length > 0 ? (
+                  <PaginationFooter
+                    page={page}
+                    totalPages={totalPages}
+                    total={total}
+                    pageSize={12}
+                    onPageChange={setPage}
+                  />
+                ) : undefined
+              }
+            >
+              {usageQuery.isLoading ? (
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell
-                        colSpan={view === "trial" ? 9 : 8}
-                        className="py-10 text-center text-sm text-muted-foreground"
-                      >
-                        <Loader2 className="inline size-4 animate-spin mr-2" />
-                        Loading usage...
-                      </TableCell>
+                      <TableHead>User</TableHead>
+                      <TableHead>Plan</TableHead>
+                      {view === "trial" && <TableHead>Trial</TableHead>}
+                      <TableHead className="text-right">Gen / Pub / Fail</TableHead>
+                      <TableHead className="text-right">Tokens (in / out)</TableHead>
+                      <TableHead className="text-right">Window cost</TableHead>
+                      <TableHead>Quota used</TableHead>
+                      <TableHead>Today spend / cap</TableHead>
+                      <TableHead className="text-right">Playground today</TableHead>
                     </TableRow>
-                  ) : items.length === 0 ? (
+                  </TableHeader>
+                  <TableSkeleton columns={view === "trial" ? 9 : 8} rows={6} />
+                </Table>
+              ) : items.length === 0 ? (
+                <EmptyState
+                  icon={Activity}
+                  title="No users found"
+                  description="No usage rows match your search."
+                  action={
+                    debouncedSearch ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setSearchInput("");
+                          setDebouncedSearch("");
+                        }}
+                      >
+                        Clear search
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              ) : (
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell
-                        colSpan={view === "trial" ? 9 : 8}
-                        className="py-10 text-center text-sm text-muted-foreground"
-                      >
-                        No users found.
-                      </TableCell>
+                      <TableHead>User</TableHead>
+                      <TableHead>Plan</TableHead>
+                      {view === "trial" && <TableHead>Trial</TableHead>}
+                      <TableHead className="text-right">Gen / Pub / Fail</TableHead>
+                      <TableHead className="text-right">Tokens (in / out)</TableHead>
+                      <TableHead className="text-right">Window cost</TableHead>
+                      <TableHead className="min-w-[160px]">Quota used</TableHead>
+                      <TableHead className="min-w-[150px]">Daily spend</TableHead>
+                      <TableHead className="text-right">Playground today</TableHead>
                     </TableRow>
-                  ) : (
-                    items.map((u) => (
+                  </TableHeader>
+                  <TableBody>
+                    {items.map((u) => (
                       <TableRow key={u.id}>
                         <TableCell>
-                          <Link href={`/admin/users/${u.id}`} className="font-medium text-sm hover:underline">
-                            {u.name}
-                          </Link>
-                          <div className="text-xs text-muted-foreground">{u.email}</div>
+                          <div className="flex items-center gap-2.5 min-w-[180px]">
+                            <UserAvatar userId={u.id} name={u.name} email={u.email} size="sm" />
+                            <div className="min-w-0">
+                              <Link
+                                href={`/admin/users/${u.id}`}
+                                className="font-medium text-sm hover:underline block truncate max-w-[150px]"
+                              >
+                                {u.name}
+                              </Link>
+                              <div className="text-xs text-muted-foreground truncate max-w-[180px]">
+                                {u.email}
+                              </div>
+                            </div>
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1.5">
-                            <span className="text-sm font-medium">{u.plan_name}</span>
-                            <Badge variant="outline" className="text-xs">{u.effective_status}</Badge>
+                            <PlanBadge planId={u.plan_id} planName={u.plan_name} />
+                            <StatusBadge kind="subscription" value={u.effective_status} />
                           </div>
                         </TableCell>
                         {view === "trial" && (
-                          <TableCell className="text-xs tabular-nums">
-                            {u.trial_days_left !== null ? `${u.trial_days_left}d` : "-"}
+                          <TableCell>
+                            {u.trial_days_left !== null ? (
+                              <DaysLeftChip daysLeft={u.trial_days_left} />
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
                           </TableCell>
                         )}
-                        <TableCell className="text-xs tabular-nums whitespace-nowrap">
+                        <TableCell className="text-xs text-right tabular-nums whitespace-nowrap">
                           {u.posts_generated} / {u.posts_published} /{" "}
-                          <span className={u.failed_runs > 0 ? "text-destructive font-medium" : ""}>
+                          <span
+                            className={
+                              u.failed_runs > 0
+                                ? "text-red-700 dark:text-red-300 font-semibold"
+                                : ""
+                            }
+                          >
                             {u.failed_runs}
                           </span>
                         </TableCell>
-                        <TableCell className="text-xs tabular-nums whitespace-nowrap">
+                        <TableCell className="text-xs text-right tabular-nums whitespace-nowrap">
                           {u.tokens_in.toLocaleString()} / {u.tokens_out.toLocaleString()}
                         </TableCell>
-                        <TableCell className="text-xs font-mono tabular-nums whitespace-nowrap">
+                        <TableCell className="text-xs font-mono text-right tabular-nums whitespace-nowrap">
                           ${u.cost_usd.toFixed(4)}
                         </TableCell>
                         <TableCell>
-                          <div className="space-y-1">
-                            <div className="flex justify-between text-xs text-muted-foreground">
-                              <span>
-                                {u.quota_used}
-                                {u.quota_limit !== null ? ` / ${u.quota_limit}` : " (unlimited)"}
-                              </span>
-                              {u.quota_limit !== null && <span>{u.quota_percent}%</span>}
-                            </div>
-                            {u.quota_limit !== null && (
-                              <Progress value={u.quota_percent} className="h-1.5" />
-                            )}
-                          </div>
+                          <UsageBar used={u.quota_used} limit={u.quota_limit} compact />
                         </TableCell>
-                        <TableCell className="text-xs font-mono tabular-nums whitespace-nowrap">
-                          ${u.today_spend_usd.toFixed(4)}
-                          {u.daily_spend_limit_usd !== null
-                            ? ` / $${u.daily_spend_limit_usd.toFixed(2)}`
-                            : " / -"}
+                        <TableCell>
+                          {u.daily_spend_limit_usd !== null ? (
+                            <UsageBar
+                              used={Number(u.today_spend_usd.toFixed(4))}
+                              limit={u.daily_spend_limit_usd}
+                              compact
+                              tooltip={`Today $${u.today_spend_usd.toFixed(4)} / Cap $${u.daily_spend_limit_usd.toFixed(2)}`}
+                            />
+                          ) : (
+                            <span className="text-xs font-mono tabular-nums text-muted-foreground">
+                              ${u.today_spend_usd.toFixed(4)} / ∞
+                            </span>
+                          )}
                         </TableCell>
-                        <TableCell className="text-xs tabular-nums whitespace-nowrap">
+                        <TableCell className="text-xs text-right tabular-nums whitespace-nowrap">
                           {u.playground_today_used}
                           {u.playground_daily_limit !== null ? ` / ${u.playground_daily_limit}` : ""}
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">Page {page} of {totalPages}</p>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-                Previous
-              </Button>
-              <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
-                Next
-              </Button>
-            </div>
-          </div>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </DataTableShell>
+          )}
 
           {sourcesNote && (
-            <Card className="border-border bg-card">
+            <Card className="rounded-lg border-border bg-card shadow-xs">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Data Sources</CardTitle>
+                <CardTitle className="text-sm font-semibold">Data Sources</CardTitle>
               </CardHeader>
               <CardContent className="grid grid-cols-1 gap-1.5 text-xs text-muted-foreground md:grid-cols-2">
                 {Object.entries(sourcesNote).map(([k, desc]) => (
