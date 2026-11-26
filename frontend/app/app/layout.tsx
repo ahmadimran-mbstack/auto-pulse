@@ -6,6 +6,7 @@ import {
   verifyOnboardingCookie,
   ONBOARDING_COMPLETED_COOKIE,
 } from "@/lib/onboarding-cookie";
+import { isServerAdmin } from "@/lib/admin-server";
 import { AppQueryProvider } from "@/components/providers/query-provider";
 import { UserProvider, type AppUser } from "@/components/providers/user-provider";
 import { AppSidebarProvider } from "@/components/providers/sidebar-provider";
@@ -36,15 +37,16 @@ export default async function AppShellLayout({
     redirect("/auth/sign-in");
   }
 
-  // Guard: Users who have not finished onboarding are redirected to /onboarding
+  // Guard: Users who have not finished onboarding are redirected to /onboarding (admins bypass onboarding)
   // Check the signed httpOnly cookie first to avoid hitting the database on every visit
+  const token = (session as any)?.session?.token;
+  const isAdmin = await isServerAdmin(token);
   const completedCookie = cookieStore.get(ONBOARDING_COMPLETED_COOKIE)?.value;
   const isCompletedByCookie = verifyOnboardingCookie(session.user.id, completedCookie);
 
-  if (!isCompletedByCookie) {
+  if (!isAdmin && !isCompletedByCookie) {
     // If the cookie is not present, check profile via backend to handle users switching devices
     let backendComplete: boolean | null = null;
-    const token = (session as any)?.session?.token;
 
     if (token) {
       try {

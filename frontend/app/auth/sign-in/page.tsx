@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AuthShell } from "../components/AuthShell";
 import { GoogleSignInButton } from "../components/GoogleSignInButton";
 import { authToast } from "@/lib/auth-toast";
+import { getAdminMe } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -168,7 +169,16 @@ function SignInForm() {
       // Clear any prior signed-out sentinel flag upon authenticating
       document.cookie = "autopulse_signed_out=; path=/; max-age=0; SameSite=Lax";
 
-      // Verified users with the right password go straight to the app
+      // Route admins straight to /admin and everyone else to /app
+      try {
+        const adminRes = await getAdminMe();
+        if (adminRes?.is_admin) {
+          router.replace("/admin");
+          return;
+        }
+      } catch {
+        // Non-admin or lookup failed; fall through to /app
+      }
       router.replace("/app");
     } catch {
       authToast.error(

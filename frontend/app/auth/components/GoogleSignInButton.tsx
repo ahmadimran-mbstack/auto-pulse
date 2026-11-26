@@ -25,8 +25,8 @@ export function GoogleSignInButton({
       document.cookie = "autopulse_signed_out=; path=/; max-age=0; SameSite=Lax";
       const result = await authClient.signIn.social({
         provider: "google",
-        callbackURL: "/app",
-        newUserCallbackURL: "/onboarding",
+        callbackURL: "/auth/post-login",
+        newUserCallbackURL: "/auth/post-login",
         errorCallbackURL: "/auth/sign-in",
       });
 

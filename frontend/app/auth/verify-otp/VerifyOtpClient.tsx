@@ -148,6 +148,18 @@ export function VerifyOtpClient({ email }: VerifyOtpClientProps) {
           ? new URLSearchParams(window.location.search).get("returnTo")
           : null;
       const safeReturn = returnTo && returnTo.startsWith("/app/") ? returnTo : "/onboarding";
+      if (safeReturn === "/onboarding") {
+        try {
+          const { getAdminMe } = await import("@/lib/api");
+          const adminRes = await getAdminMe();
+          if (adminRes?.is_admin) {
+            router.replace("/admin");
+            return;
+          }
+        } catch {
+          // Non-admin user proceeds to onboarding
+        }
+      }
       router.replace(safeReturn);
     } catch (err: unknown) {
       const message =

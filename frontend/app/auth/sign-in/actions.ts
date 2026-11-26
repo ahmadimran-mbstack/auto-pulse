@@ -37,6 +37,6 @@ export async function signInWithEmail(
     };
   }
 
-  // Verified users with the right password go straight to the app
-  redirect("/app");
+  // Route verified users through server-side post-login check (admins -> /admin, others -> /app)
+  redirect("/auth/post-login");
 }

@@ -94,15 +94,30 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
     else if (url === "/app/settings") prefetchProfile(user.id);
   };
 
-  const navItems = [
-    { title: "Overview", url: "/app", icon: LayoutDashboard, exact: true },
-    { title: "Analytics", url: "/app/analytics", icon: BarChart3, exact: false },
-    { title: "Posts", url: "/app/posts", icon: FileText, exact: false },
-    { title: "Playground", url: "/app/playground", icon: PenSquare, exact: false },
-    { title: "Customize", url: "/app/customize", icon: Sparkles, exact: false },
-    { title: "Connections", url: "/app/connections", icon: Share2, exact: false },
-    { title: "Billing", url: "/app/billing", icon: CreditCard, exact: false },
-    { title: "Support", url: "/app/support", icon: LifeBuoy, exact: false },
+  const navGroups = [
+    {
+      label: "Main",
+      items: [
+        { title: "Overview", url: "/app", icon: LayoutDashboard, exact: true },
+        { title: "Analytics", url: "/app/analytics", icon: BarChart3, exact: false },
+        { title: "Posts", url: "/app/posts", icon: FileText, exact: false },
+      ],
+    },
+    {
+      label: "Create",
+      items: [
+        { title: "Playground", url: "/app/playground", icon: PenSquare, exact: false },
+        { title: "Customize", url: "/app/customize", icon: Sparkles, exact: false },
+      ],
+    },
+    {
+      label: "Account",
+      items: [
+        { title: "Connections", url: "/app/connections", icon: Share2, exact: false },
+        { title: "Billing", url: "/app/billing", icon: CreditCard, exact: false },
+        { title: "Support", url: "/app/support", icon: LifeBuoy, exact: false },
+      ],
+    },
   ];
 
 
@@ -169,110 +184,124 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
         </div>
 
         {/* Navigation Items List */}
-        <nav className="flex-1 min-h-0 mx-2 space-y-px overflow-y-auto no-scrollbar">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = isSidebarRouteActive(pathname, item.url, item.exact);
+        <nav className="flex-1 min-h-0 mx-2 flex flex-col overflow-y-auto no-scrollbar pb-2">
+          <div className="space-y-4">
+            {navGroups.map((group) => (
+              <div key={group.label} className="space-y-0.5">
+                <p className="px-3 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                  {group.label}
+                </p>
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = isSidebarRouteActive(pathname, item.url, item.exact);
 
-              return (
-                <Link
-                  key={item.title}
-                  href={item.url}
-                  data-slot="sidebar-nav-item"
-                  data-active={isActive}
-                  aria-current={isActive ? "page" : undefined}
-                  onClick={() => onNavigate?.()}
-                  onMouseEnter={() => handlePrefetch(item.url)}
-                  onFocus={() => handlePrefetch(item.url)}
-                  className={cn(
-                    "flex h-9 items-center gap-3 rounded-lg px-3 text-sm",
-                    SIDEBAR_NAV_ITEM_CLASSES
-                  )}
-                >
-                  <Icon className="size-4 shrink-0" strokeWidth={1.5} />
-                  <span>{item.title}</span>
-                </Link>
-              );
-            })}
+                  return (
+                    <Link
+                      key={item.title}
+                      href={item.url}
+                      data-slot="sidebar-nav-item"
+                      data-active={isActive}
+                      aria-current={isActive ? "page" : undefined}
+                      onClick={() => onNavigate?.()}
+                      onMouseEnter={() => handlePrefetch(item.url)}
+                      onFocus={() => handlePrefetch(item.url)}
+                      className={cn(
+                        "flex h-9 items-center gap-3 rounded-lg px-3 text-sm",
+                        SIDEBAR_NAV_ITEM_CLASSES
+                      )}
+                    >
+                      <Icon className="size-4 shrink-0" strokeWidth={1.5} />
+                      <span className="truncate">{item.title}</span>
+                    </Link>
+                  );
+                })}
 
-            {/* Expandable Settings Item */}
-            <div>
-              <div
-                data-slot="sidebar-nav-item"
-                data-active={isSettingsActive && !settingsExpanded}
-                className={cn(
-                  "flex h-9 items-center justify-between rounded-lg px-3 text-sm cursor-pointer",
-                  SIDEBAR_NAV_ITEM_CLASSES
-                )}
-                onClick={() => setUserSettingsExpanded(!settingsExpanded)}
-              >
-                <Link
-                  href="/app/settings"
-                  aria-current={isSettingsActive && !settingsExpanded ? "page" : undefined}
-                  className="flex items-center gap-3 flex-1 outline-hidden"
-                  onClick={() => {
-                    // Let row toggle expand or navigate
-                    setUserSettingsExpanded(true);
-                    onNavigate?.();
-                  }}
-                >
-                  <Settings className="size-4 shrink-0" strokeWidth={1.5} />
-                  <span>Settings</span>
-                </Link>
-                <button
-                  type="button"
-                  aria-label={settingsExpanded ? "Collapse settings" : "Expand settings"}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setUserSettingsExpanded(!settingsExpanded);
-                  }}
-                  className="p-1 text-muted-foreground hover:text-foreground"
-                >
-                  <ChevronDown
-                    className={cn(
-                      "size-3.5 transition-transform duration-300 ease-in-out",
-                      settingsExpanded && "rotate-180"
-                    )}
-                  />
-                </button>
-              </div>
-
-              {/* Sub-items in place with smooth ease-in-out height animation */}
-              <div
-                className={cn(
-                  "grid transition-all duration-300 ease-in-out overflow-hidden",
-                  settingsExpanded
-                    ? "grid-rows-[1fr] opacity-100 mt-1"
-                    : "grid-rows-[0fr] opacity-0 mt-0"
-                )}
-              >
-                <div className="min-h-0 ml-4 pl-2 space-y-px border-l border-border">
-                  {settingsSubItems.map((sub) => {
-                    const isSubActive = isSettingsActive && currentTab === sub.tab;
-                    const SubIcon = sub.icon;
-                    return (
+                {/* Settings lives inside the Account group */}
+                {group.label === "Account" && (
+                  <div>
+                    <div
+                      data-slot="sidebar-nav-item"
+                      data-active={isSettingsActive}
+                      className={cn(
+                        "flex h-9 items-center justify-between rounded-lg px-3 text-sm cursor-pointer",
+                        SIDEBAR_NAV_ITEM_CLASSES
+                      )}
+                      onClick={() => setUserSettingsExpanded(!settingsExpanded)}
+                    >
                       <Link
-                        key={sub.tab}
-                        href={`/app/settings?tab=${sub.tab}`}
-                        data-slot="sidebar-nav-item"
-                        data-active={isSubActive}
-                        aria-current={isSubActive ? "page" : undefined}
-                        onClick={() => onNavigate?.()}
-                        className={cn(
-                          "flex h-8 items-center gap-2.5 rounded-md px-2.5 text-xs",
-                          SIDEBAR_NAV_ITEM_CLASSES
-                        )}
+                        href="/app/settings"
+                        aria-current={isSettingsActive && !settingsExpanded ? "page" : undefined}
+                        className="flex items-center gap-3 flex-1 min-w-0 outline-hidden"
+                        onClick={() => {
+                          setUserSettingsExpanded(true);
+                          onNavigate?.();
+                        }}
                       >
-                        <SubIcon className="size-3.5 shrink-0" strokeWidth={1.5} />
-                        <span>{sub.title}</span>
+                        <Settings className="size-4 shrink-0" strokeWidth={1.5} />
+                        <span className="truncate">Settings</span>
                       </Link>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
+                      <button
+                        type="button"
+                        aria-label={settingsExpanded ? "Collapse settings" : "Expand settings"}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setUserSettingsExpanded(!settingsExpanded);
+                        }}
+                        className="p-1 text-muted-foreground hover:text-foreground shrink-0"
+                      >
+                        <ChevronDown
+                          className={cn(
+                            "size-3.5 transition-transform duration-300 ease-in-out",
+                            settingsExpanded && "rotate-180"
+                          )}
+                        />
+                      </button>
+                    </div>
 
-            {adminMe?.is_admin && (
+                    {/* Sub-items in place with smooth ease-in-out height animation */}
+                    <div
+                      className={cn(
+                        "grid transition-all duration-300 ease-in-out overflow-hidden",
+                        settingsExpanded
+                          ? "grid-rows-[1fr] opacity-100 mt-1"
+                          : "grid-rows-[0fr] opacity-0 mt-0"
+                      )}
+                    >
+                      <div className="min-h-0 ml-4 pl-2 space-y-px border-l border-border">
+                        {settingsSubItems.map((sub) => {
+                          const isSubActive = isSettingsActive && currentTab === sub.tab;
+                          const SubIcon = sub.icon;
+                          return (
+                            <Link
+                              key={sub.tab}
+                              href={`/app/settings?tab=${sub.tab}`}
+                              data-slot="sidebar-nav-item"
+                              data-active={isSubActive}
+                              aria-current={isSubActive ? "page" : undefined}
+                              onClick={() => onNavigate?.()}
+                              className={cn(
+                                "flex h-8 items-center gap-2.5 rounded-md px-2.5 text-xs",
+                                SIDEBAR_NAV_ITEM_CLASSES
+                              )}
+                            >
+                              <SubIcon className="size-3.5 shrink-0" strokeWidth={1.5} />
+                              <span className="truncate">{sub.title}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {adminMe?.is_admin && (
+            <div className="mt-auto pt-3 border-t border-sidebar-border space-y-0.5">
+              <p className="px-3 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                Admin
+              </p>
               <Link
                 href="/admin"
                 data-slot="sidebar-nav-item"
@@ -285,10 +314,11 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
                 )}
               >
                 <Shield className="size-4 shrink-0" strokeWidth={1.5} />
-                <span>Admin</span>
+                <span className="truncate">Admin</span>
               </Link>
-            )}
-          </nav>
+            </div>
+          )}
+        </nav>
 
         {/* Pinned Bottom Notice Card and User Row */}
         <div className="shrink-0 mt-auto">
