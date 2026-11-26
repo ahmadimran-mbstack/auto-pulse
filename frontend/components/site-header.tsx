@@ -42,6 +42,11 @@ export function SiteHeader() {
 
   // Derive human-readable page title from central route config and sync browser tab title
   const pageTitle = getDashboardPageTitle(pathname, searchParams);
+  const showPostControls =
+    pathname === "/app" ||
+    pathname === "/dashboard" ||
+    pathname === "/app/posts" ||
+    pathname === "/dashboard/posts";
 
   React.useEffect(() => {
     document.title = `${pageTitle} | AutoPulse`;
@@ -99,34 +104,36 @@ export function SiteHeader() {
           </SheetContent>
         </Sheet>
 
-        {/* Status filter dropdown: All posts, Needs approval, Scheduled, Published, Problems */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-foreground hover:bg-accent transition-colors"
-            >
-              <span>{activeOption.label}</span>
-              <ChevronsUpDown className="size-3.5 text-muted-foreground" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-44 p-1">
-            {statusFilterOptions.map((opt) => (
-              <DropdownMenuItem
-                key={opt.value}
-                onClick={() => handleSelectStatus(opt.value)}
-                className={cn(
-                  "cursor-pointer text-sm rounded-md px-2.5 py-1.5",
-                  currentStatus === opt.value
-                    ? "bg-accent font-medium text-foreground"
-                    : "text-foreground hover:bg-accent/60"
-                )}
+        {/* Status filter dropdown: only on Overview and Posts pages */}
+        {showPostControls && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-foreground hover:bg-accent transition-colors"
               >
-                {opt.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+                <span>{activeOption.label}</span>
+                <ChevronsUpDown className="size-3.5 text-muted-foreground" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-44 p-1">
+              {statusFilterOptions.map((opt) => (
+                <DropdownMenuItem
+                  key={opt.value}
+                  onClick={() => handleSelectStatus(opt.value)}
+                  className={cn(
+                    "cursor-pointer text-sm rounded-md px-2.5 py-1.5",
+                    currentStatus === opt.value
+                      ? "bg-accent font-medium text-foreground"
+                      : "text-foreground hover:bg-accent/60"
+                  )}
+                >
+                  {opt.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       {/* Center: Page title (truncates cleanly on mobile and desktop without overlapping) */}
@@ -136,9 +143,9 @@ export function SiteHeader() {
         </span>
       </div>
 
-      {/* Right: Action buttons */}
+      {/* Right: Action buttons (only on Overview and Posts pages) */}
       <div className="flex items-center gap-2">
-        {awaitingCount > 0 && (
+        {showPostControls && awaitingCount > 0 && (
           <Button
             variant="ghost"
             size="sm"
@@ -149,17 +156,19 @@ export function SiteHeader() {
             <span>Review draft</span>
           </Button>
         )}
-        <Button
-          variant="ghost"
-          size="sm"
-          asChild
-          className="h-8 gap-1.5 text-sm font-medium text-foreground hover:bg-accent"
-        >
-          <Link href="/app/playground">
-            <Plus className="size-4" />
-            <span>Generate draft</span>
-          </Link>
-        </Button>
+        {showPostControls && (
+          <Button
+            variant="ghost"
+            size="sm"
+            asChild
+            className="h-8 gap-1.5 text-sm font-medium text-foreground hover:bg-accent"
+          >
+            <Link href="/app/playground">
+              <Plus className="size-4" />
+              <span>Generate draft</span>
+            </Link>
+          </Button>
+        )}
       </div>
     </header>
   );

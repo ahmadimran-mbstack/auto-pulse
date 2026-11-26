@@ -25,6 +25,8 @@ export const DASHBOARD_ROUTES: DashboardRouteEntry[] = [
   { prefix: "/dashboard/connections", title: "Connections" },
   { prefix: "/app/billing", title: "Billing" },
   { prefix: "/dashboard/billing", title: "Billing" },
+  { prefix: "/app/support", title: "Support" },
+  { prefix: "/dashboard/support", title: "Support" },
   { prefix: "/app/settings", title: "Settings" },
   { prefix: "/dashboard/settings", title: "Settings" },
   { prefix: "/app/onboarding", title: "Onboarding" },
