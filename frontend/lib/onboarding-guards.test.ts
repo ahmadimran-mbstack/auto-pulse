@@ -41,7 +41,7 @@ describe("Onboarding Guards and Redirect Logic", () => {
     const STEP_ROUTES: Record<number, string> = {
       0: "/onboarding/topics",
       1: "/onboarding/voice",
-      2: "/onboarding/brand",
+      2: "/onboarding/approvals",
       3: "/onboarding/approvals",
       4: "/onboarding/schedule",
     };
@@ -54,7 +54,7 @@ describe("Onboarding Guards and Redirect Logic", () => {
 
     function canAccessStep(currentStep: number, targetStep: number): boolean {
       // Users can access their current step and any previous step
-      // Step indices: topics=0, voice=1, brand=2, approvals=3, schedule=4
+      // Step indices: topics=0, voice=1, approvals=2, schedule=4
       return targetStep <= currentStep;
     }
 
@@ -72,8 +72,8 @@ describe("Onboarding Guards and Redirect Logic", () => {
       expect(getResumeRoute(1, false)).toBe("/onboarding/voice");
     });
 
-    it("routes user with step 2 saved to brand", () => {
-      expect(getResumeRoute(2, false)).toBe("/onboarding/brand");
+    it("routes user with step 2 saved to approvals", () => {
+      expect(getResumeRoute(2, false)).toBe("/onboarding/approvals");
     });
 
     it("routes user with step 3 saved to approvals", () => {

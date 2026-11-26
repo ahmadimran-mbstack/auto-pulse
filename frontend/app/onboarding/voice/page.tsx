@@ -147,8 +147,8 @@ export default function OnboardingVoicePage() {
         sample_posts: samplePosts.trim() || null,
       });
 
-      // Navigate to Step 3 upon successful save
-      router.push("/onboarding/brand");
+      // Navigate to Step 3 (Approvals) upon successful save
+      router.push("/onboarding/approvals");
     } catch (err: unknown) {
       if (err instanceof ApiClientError) {
         if (err.status === 422 && err.fields) {
@@ -199,11 +199,10 @@ export default function OnboardingVoicePage() {
               <label
                 key={opt.value}
                 htmlFor={`tone-${opt.value}`}
-                className={`flex items-start gap-3 p-3.5 rounded-md border cursor-pointer transition-colors ${
-                  isSelected
-                    ? "border-primary bg-signal-soft/40"
-                    : "border-border bg-card hover:bg-secondary/40"
-                }`}
+                className={`flex items-start gap-3 p-3.5 rounded-md border cursor-pointer transition-colors ${isSelected
+                  ? "border-primary bg-signal-soft/40"
+                  : "border-border bg-card hover:bg-secondary/40"
+                  }`}
               >
                 <input
                   type="radio"
@@ -246,9 +245,8 @@ export default function OnboardingVoicePage() {
             Notes about your voice <span className="text-muted-foreground font-normal">(optional)</span>
           </label>
           <span
-            className={`text-caption font-mono tabular-nums ${
-              voiceNotes.length > 500 ? "text-destructive" : "text-muted-foreground"
-            }`}
+            className={`text-caption font-mono tabular-nums ${voiceNotes.length > 500 ? "text-destructive" : "text-muted-foreground"
+              }`}
           >
             {voiceNotes.length} / 500 characters
           </span>
@@ -264,9 +262,8 @@ export default function OnboardingVoicePage() {
           value={voiceNotes}
           onChange={(e) => setVoiceNotes(e.target.value)}
           placeholder="For example: Avoid buzzwords and hype. Use concise sentences. Keep takeaways practical and backed by data."
-          aria-describedby={`voice_notes-hint ${
-            fieldErrors.voice_notes ? "voice_notes-error" : ""
-          }`.trim()}
+          aria-describedby={`voice_notes-hint ${fieldErrors.voice_notes ? "voice_notes-error" : ""
+            }`.trim()}
           className={fieldErrors.voice_notes ? "border-destructive" : ""}
         />
         {fieldErrors.voice_notes && (
@@ -283,9 +280,8 @@ export default function OnboardingVoicePage() {
             Sample posts <span className="text-muted-foreground font-normal">(optional)</span>
           </label>
           <span
-            className={`text-caption font-mono tabular-nums ${
-              samplePosts.length > 3000 ? "text-destructive" : "text-muted-foreground"
-            }`}
+            className={`text-caption font-mono tabular-nums ${samplePosts.length > 3000 ? "text-destructive" : "text-muted-foreground"
+              }`}
           >
             {samplePosts.length} / 3000 characters
           </span>
@@ -301,9 +297,8 @@ export default function OnboardingVoicePage() {
           value={samplePosts}
           onChange={(e) => setSamplePosts(e.target.value)}
           placeholder="Paste high-performing past posts or text excerpts that best reflect your natural voice and formatting preference."
-          aria-describedby={`sample_posts-hint ${
-            fieldErrors.sample_posts ? "sample_posts-error" : ""
-          }`.trim()}
+          aria-describedby={`sample_posts-hint ${fieldErrors.sample_posts ? "sample_posts-error" : ""
+            }`.trim()}
           className={fieldErrors.sample_posts ? "border-destructive" : ""}
         />
         {fieldErrors.sample_posts && (

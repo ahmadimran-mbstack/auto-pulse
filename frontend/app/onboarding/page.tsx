@@ -12,7 +12,7 @@ import { Card } from "@/components/ui/card";
 const STEP_ROUTES: Record<number, string> = {
   0: "/onboarding/topics",
   1: "/onboarding/voice",
-  2: "/onboarding/brand",
+  2: "/onboarding/approvals",
   3: "/onboarding/approvals",
   4: "/onboarding/schedule",
 };

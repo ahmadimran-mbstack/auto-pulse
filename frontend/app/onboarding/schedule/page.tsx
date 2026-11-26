@@ -76,11 +76,6 @@ export default function OnboardingSchedulePage() {
           return;
         }
 
-        if (!profile.brand_name || (profile.onboarding_step ?? 0) < 3) {
-          router.replace("/onboarding/brand");
-          return;
-        }
-
         if (profile.timezone) setTimezone(profile.timezone);
         if (profile.post_time) setPostTime(profile.post_time);
         if (Array.isArray(profile.post_days) && profile.post_days.length > 0) {
@@ -151,7 +146,6 @@ export default function OnboardingSchedulePage() {
   const handleCompleteFailure = (fields: Record<string, string>) => {
     const step1Fields = ["role_title", "industry", "niche_description", "audience", "topics_include", "topics_avoid"];
     const step2Fields = ["tone", "voice_notes", "sample_posts"];
-    const step3Fields = ["brand_name", "brand_primary_hex", "brand_accent_hex"];
 
     if (Object.keys(fields).some((f) => step1Fields.includes(f))) {
       router.push("/onboarding/topics");
@@ -159,10 +153,6 @@ export default function OnboardingSchedulePage() {
     }
     if (Object.keys(fields).some((f) => step2Fields.includes(f))) {
       router.push("/onboarding/voice");
-      return;
-    }
-    if (Object.keys(fields).some((f) => step3Fields.includes(f))) {
-      router.push("/onboarding/brand");
       return;
     }
 
@@ -231,7 +221,7 @@ export default function OnboardingSchedulePage() {
 
   return (
     <OnboardingShell
-      step={5}
+      step={4}
       title="When should we draft your posts?"
       subtitle="Set your preferred publishing rhythm and review schedule for daily LinkedIn drafts."
       backHref="/onboarding/approvals"

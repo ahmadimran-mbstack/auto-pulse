@@ -47,11 +47,6 @@ export default function OnboardingApprovalsPage() {
           router.replace("/onboarding/voice");
           return;
         }
-
-        if (!profile.brand_name || (profile.onboarding_step ?? 0) < 3) {
-          router.replace("/onboarding/brand");
-          return;
-        }
       } catch (err: unknown) {
         if (!isMounted) return;
         const msg = err instanceof Error ? err.message : "Failed to load profile";
@@ -121,10 +116,10 @@ export default function OnboardingApprovalsPage() {
 
   return (
     <OnboardingShell
-      step={4}
+      step={3}
       title="How would you like to approve posts?"
       subtitle="Choose how you review drafts before publishing."
-      backHref="/onboarding/brand"
+      backHref="/onboarding/voice"
       onSubmit={handleContinue}
       isSaving={false}
       saveButtonText="Continue"

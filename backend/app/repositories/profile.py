@@ -256,12 +256,6 @@ def complete_onboarding(
         missing_fields["niche_description"] = "Niche description is required to complete onboarding."
     if not profile.tone:
         missing_fields["tone"] = "Tone is required to complete onboarding."
-    if not profile.brand_name:
-        missing_fields["brand_name"] = "Brand name is required to complete onboarding."
-    if not profile.brand_primary_hex:
-        missing_fields["brand_primary_hex"] = "Brand primary color is required to complete onboarding."
-    if not profile.brand_accent_hex:
-        missing_fields["brand_accent_hex"] = "Brand accent color is required to complete onboarding."
     if not profile.timezone:
         missing_fields["timezone"] = "Timezone is required to complete onboarding."
     if not profile.post_time:
@@ -271,6 +265,14 @@ def complete_onboarding(
 
     if missing_fields:
         return None, missing_fields
+
+    # Apply safe defaults for optional brand fields if not set
+    if not profile.brand_name:
+        profile.brand_name = "AutoPulse"
+    if not profile.brand_primary_hex:
+        profile.brand_primary_hex = "#0B7F70"
+    if not profile.brand_accent_hex:
+        profile.brand_accent_hex = "#14B8A6"
 
     # Set completion timestamp only once; subsequent calls keep the original timestamp
     if profile.onboarding_completed_at is None:

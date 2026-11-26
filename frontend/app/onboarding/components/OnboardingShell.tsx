@@ -9,7 +9,7 @@ import { AlertCircle, Loader2 } from "lucide-react";
 
 // Properties passed into each onboarding step page
 interface OnboardingShellProps {
-  step: 1 | 2 | 3 | 4 | 5;
+  step: 1 | 2 | 3 | 4;
   title: string;
   subtitle: string;
   children: React.ReactNode;
@@ -52,25 +52,24 @@ export function OnboardingShell({
 
   return (
     <div className="w-full text-left">
-      {/* Five-part segmented progress bar */}
-      <div className="mb-8" aria-label={`Step ${step} of 5`}>
+      {/* Four-part segmented progress bar */}
+      <div className="mb-8" aria-label={`Step ${step} of 4`}>
         <div className="flex items-center justify-between text-caption font-medium text-muted-foreground mb-2 font-mono">
-          <span>Step {step} of 5</span>
-          <span className="tabular-nums">{step * 20}% complete</span>
+          <span>Step {step} of 4</span>
+          <span className="tabular-nums">{step * 25}% complete</span>
         </div>
         <div
-          className="grid grid-cols-5 gap-2 h-1.5 w-full"
+          className="grid grid-cols-4 gap-2 h-1.5 w-full"
           role="progressbar"
           aria-valuenow={step}
           aria-valuemin={1}
-          aria-valuemax={5}
+          aria-valuemax={4}
         >
-          {[1, 2, 3, 4, 5].map((seg) => (
+          {[1, 2, 3, 4].map((seg) => (
             <div
               key={seg}
-              className={`h-full rounded-full transition-colors duration-200 ${
-                seg <= step ? "bg-primary" : "bg-secondary"
-              }`}
+              className={`h-full rounded-full transition-colors duration-200 ${seg <= step ? "bg-primary" : "bg-secondary"
+                }`}
             />
           ))}
         </div>
@@ -144,8 +143,7 @@ export function OnboardingSkeleton() {
   return (
     <div className="w-full space-y-6">
       <Skeleton className="h-4 w-24 mb-2" />
-      <div className="grid grid-cols-5 gap-2 h-1.5 w-full">
-        <Skeleton className="h-full rounded-full" />
+      <div className="grid grid-cols-4 gap-2 h-1.5 w-full">
         <Skeleton className="h-full rounded-full" />
         <Skeleton className="h-full rounded-full" />
         <Skeleton className="h-full rounded-full" />
