@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 // Loading placeholder matching the Settings layout
 export function SettingsSkeleton() {
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-3xl w-full min-w-0 animate-pulse">
+    <div className="space-y-6 w-full min-w-0 animate-pulse">
       {/* Page Header skeleton */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-border">
         <div className="space-y-2">

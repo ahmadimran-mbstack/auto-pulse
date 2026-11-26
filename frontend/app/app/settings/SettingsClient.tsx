@@ -14,6 +14,8 @@ import {
   ShieldAlertIcon,
   LogOutIcon,
   Loader2Icon,
+  CheckIcon,
+  CopyIcon,
 } from "lucide-react";
 
 import { useUser } from "@/components/providers/user-provider";
@@ -45,6 +47,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -169,7 +172,7 @@ export function SettingsClient() {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-3xl w-full min-w-0">
+    <div className="space-y-6 w-full min-w-0">
       <PageHeader
         title="Settings"
         description="Manage your profile, content preferences, brand styling, schedule, and account."
@@ -834,14 +837,8 @@ function ScheduleTabForm({
   const defaultSlackEnabled = Boolean(
     profile.approval?.slack?.enabled ?? profile.slack_approval_enabled
   );
-  const defaultEmailEnabled =
-    profile.approval_method !== "slack" || !defaultSlackEnabled;
-  const defaultMethod: "email" | "slack" | "both" =
-    defaultEmailEnabled && defaultSlackEnabled
-      ? "both"
-      : defaultSlackEnabled
-      ? "slack"
-      : "email";
+  const defaultEmailEnabled = true;
+  const defaultMethod: "email" | "slack" | "both" = defaultSlackEnabled ? "both" : "email";
 
   const form = useForm<ScheduleFormValues>({
     resolver: zodResolver(scheduleFormSchema),
@@ -911,16 +908,14 @@ function ScheduleTabForm({
 
   const onSubmit = async (values: ScheduleFormValues) => {
     try {
-      const emailOn = values.email_approval_enabled;
       const slackOn = values.slack_approval_enabled;
-      const resolvedMethod = emailOn ? "email" : "slack";
 
       const updated = await patchProfileMutation.mutateAsync({
         timezone: values.timezone,
         post_time: values.post_time,
         post_days: values.post_days,
         approval_lead_minutes: values.approval_lead_minutes,
-        approval_method: resolvedMethod,
+        approval_method: "email",
         slack_approval_enabled: slackOn,
         approval: {
           slack_enabled: slackOn,
@@ -931,7 +926,11 @@ function ScheduleTabForm({
       if (updated?.schedule_notice) {
         toast.info(updated.schedule_notice);
       }
-      form.reset(values);
+      form.reset({
+        ...values,
+        email_approval_enabled: true,
+        approval_method: slackOn ? "both" : "email",
+      });
     } catch (err: unknown) {
       if (err instanceof ApiClientError && err.fields) {
         Object.entries(err.fields).forEach(([f, msg]) => {
@@ -1063,11 +1062,10 @@ function ScheduleTabForm({
                       key={opt.day}
                       type="button"
                       onClick={() => toggleDay(opt.day)}
-                      className={`inline-flex items-center justify-center px-4 py-2 rounded-md border text-caption font-medium cursor-pointer transition-colors select-none ${
-                        isSelected
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "bg-card text-foreground border-border hover:bg-secondary/40"
-                      }`}
+                      className={`inline-flex items-center justify-center px-4 py-2 rounded-md border text-caption font-medium cursor-pointer transition-colors select-none ${isSelected
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-card text-foreground border-border hover:bg-secondary/40"
+                        }`}
                       aria-pressed={isSelected}
                     >
                       {opt.label}
@@ -1092,77 +1090,50 @@ function ScheduleTabForm({
               </div>
 
               <div className="space-y-3 pt-1">
-                {/* 1. Email Approval Option Card */}
-                <div
-                  onClick={() => {
-                    const nextVal = !emailApprovalEnabled;
-                    if (!nextVal && !slackApprovalEnabled) {
-                      toast.error("At least one approval method must remain active.");
-                      return;
-                    }
-                    form.setValue("email_approval_enabled", nextVal, {
-                      shouldDirty: true,
-                      shouldValidate: true,
-                    });
-                    const nextMethod: "email" | "slack" | "both" =
-                      nextVal && slackApprovalEnabled
-                        ? "both"
-                        : nextVal
-                        ? "email"
-                        : "slack";
-                    form.setValue("approval_method", nextMethod, {
-                      shouldDirty: true,
-                    });
-                  }}
-                  className={cn(
-                    "p-4 rounded-lg border transition-colors cursor-pointer flex items-start gap-3.5 select-none",
-                    emailApprovalEnabled
-                      ? "border-border bg-transparent shadow-2xs"
-                      : "border-border/60 bg-transparent hover:bg-muted/15"
-                  )}
-                >
-                  <Checkbox
-                    id="sched-approval-email"
-                    checked={emailApprovalEnabled}
-                    onCheckedChange={(checked) => {
-                      const nextVal = Boolean(checked);
-                      if (!nextVal && !slackApprovalEnabled) {
-                        toast.error("At least one approval method must remain active.");
-                        return;
-                      }
-                      form.setValue("email_approval_enabled", nextVal, {
-                        shouldDirty: true,
-                        shouldValidate: true,
-                      });
-                      const nextMethod: "email" | "slack" | "both" =
-                        nextVal && slackApprovalEnabled
-                          ? "both"
-                          : nextVal
-                          ? "email"
-                          : "slack";
-                      form.setValue("approval_method", nextMethod, {
-                        shouldDirty: true,
-                      });
-                    }}
-                    className="mt-0.5"
-                    aria-label="Email approval notifications"
-                  />
+                {/* 1. Email Approval Option Card (always enabled & required) */}
+                <div className="p-4 rounded-lg border border-border bg-transparent shadow-2xs flex items-start gap-3.5 select-none">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex mt-0.5 cursor-not-allowed">
+                        <Checkbox
+                          id="sched-approval-email"
+                          checked={true}
+                          disabled
+                          className="cursor-not-allowed disabled:opacity-100"
+                          aria-label="Email approval notifications (required)"
+                        />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">
+                      Email approval is always on so you never miss a draft.
+                    </TooltipContent>
+                  </Tooltip>
                   <div className="flex-1 space-y-1">
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
                       <div className="flex items-center gap-2">
                         <PlatformLabel platform="email" size="sm" />
                       </div>
-                      {emailApprovalEnabled ? (
+                      <div className="flex items-center gap-1.5">
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200/80 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-700/50">
                           <span className="size-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 shrink-0" />
                           Active
                         </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40">
-                          <span className="size-1.5 rounded-full bg-amber-500 dark:bg-amber-400 shrink-0" />
-                          Disabled
-                        </span>
-                      )}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span>
+                              <Badge
+                                variant="secondary"
+                                className="rounded-full px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+                              >
+                                Required
+                              </Badge>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">
+                            Email approval is always on so you never miss a draft.
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
                     </div>
                     <p className="text-caption text-muted-foreground leading-relaxed">
                       You receive an email notification each morning with an instant one-click approval link.
@@ -1190,8 +1161,8 @@ function ScheduleTabForm({
                       emailApprovalEnabled && nextVal
                         ? "both"
                         : nextVal
-                        ? "slack"
-                        : "email";
+                          ? "slack"
+                          : "email";
                     form.setValue("approval_method", nextMethod, {
                       shouldDirty: true,
                     });
@@ -1222,8 +1193,8 @@ function ScheduleTabForm({
                         emailApprovalEnabled && nextVal
                           ? "both"
                           : nextVal
-                          ? "slack"
-                          : "email";
+                            ? "slack"
+                            : "email";
                       form.setValue("approval_method", nextMethod, {
                         shouldDirty: true,
                       });
@@ -1335,6 +1306,59 @@ function AccountTabPanel({
   const [deleteConfirmText, setDeleteConfirmText] = React.useState("");
   const [showDeleteDialog, setShowDeleteDialog] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
+  const [emailCopied, setEmailCopied] = React.useState(false);
+  const copyTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) {
+        clearTimeout(copyTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleCopyEmail = async () => {
+    let copied = false;
+    try {
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(email);
+        copied = true;
+      }
+    } catch {
+      copied = false;
+    }
+
+    if (!copied && typeof document !== "undefined") {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = email;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        ta.style.pointerEvents = "none";
+        document.body.appendChild(ta);
+        ta.select();
+        copied = document.execCommand("copy");
+        document.body.removeChild(ta);
+      } catch {
+        copied = false;
+      }
+    }
+
+    if (copied) {
+      setEmailCopied(true);
+      toast.success("Email copied");
+      if (copyTimerRef.current) {
+        clearTimeout(copyTimerRef.current);
+      }
+      copyTimerRef.current = setTimeout(() => {
+        setEmailCopied(false);
+        copyTimerRef.current = null;
+      }, 2000);
+    } else {
+      toast.error("Could not copy email");
+    }
+  };
 
   // Change Password Form using Neon Auth changePassword
   const passwordForm = useForm<ChangePasswordValues>({
@@ -1379,7 +1403,7 @@ function AccountTabPanel({
 
     try {
       await deleteAccount();
-      await signOutAction().catch(() => {});
+      await signOutAction().catch(() => { });
       clearAllAppCaches();
       toast.success("Your account was deleted for good.");
       setShowDeleteDialog(false);
@@ -1561,32 +1585,75 @@ function AccountTabPanel({
       </Card>
 
       {/* Delete Account Confirmation AlertDialog */}
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
+      <AlertDialog
+        open={showDeleteDialog}
+        onOpenChange={(open) => {
+          setShowDeleteDialog(open);
+          if (!open) {
+            setDeleteConfirmText("");
+            setEmailCopied(false);
+            if (copyTimerRef.current) {
+              clearTimeout(copyTimerRef.current);
+              copyTimerRef.current = null;
+            }
+          }
+        }}
+      >
+        <AlertDialogContent className="p-4 sm:p-6">
+          <AlertDialogHeader className="text-left">
             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-            <AlertDialogDescription className="space-y-2 text-left">
-              <span>
-                Your AutoPulse data will be deleted for good, and LinkedIn posts already published will stay on LinkedIn.
-              </span>
+            <AlertDialogDescription className="mt-2 text-left">
+              Your AutoPulse data will be deleted for good, and LinkedIn posts already published will stay on LinkedIn.
             </AlertDialogDescription>
           </AlertDialogHeader>
 
-          <div className="space-y-2 py-2 text-left">
-            <Label htmlFor="delete-confirm-input" className="text-xs text-foreground font-medium">
-              To confirm deletion, type your email <span className="font-mono font-semibold text-destructive">{email}</span> below:
+          <div className="mt-6 text-left">
+            <Label
+              htmlFor="delete-confirm-input"
+              className="block text-sm font-normal text-foreground"
+            >
+              To confirm deletion, type your email below:
             </Label>
+
+            <div className="mt-2 flex w-full items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 dark:border-red-500/30 dark:bg-red-500/10">
+              <span className="min-w-0 font-mono text-sm text-red-600 dark:text-red-400 break-all select-all">
+                {email}
+              </span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Copy email"
+                    onClick={handleCopyEmail}
+                    className="size-8 shrink-0 text-red-600 hover:bg-red-100 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-500/20 dark:hover:text-red-300"
+                  >
+                    {emailCopied ? (
+                      <CheckIcon className="size-4 text-emerald-600 dark:text-emerald-400" />
+                    ) : (
+                      <CopyIcon className="size-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">Copy email</TooltipContent>
+              </Tooltip>
+            </div>
+
             <Input
               id="delete-confirm-input"
               value={deleteConfirmText}
               onChange={(e) => setDeleteConfirmText(e.target.value)}
-              placeholder={email}
-              className="font-mono"
+              placeholder="Type your email here"
+              autoComplete="off"
+              spellCheck={false}
+              autoCapitalize="off"
+              className="mt-3 w-full font-mono"
               autoFocus
             />
           </div>
 
-          <AlertDialogFooter>
+          <AlertDialogFooter className="flex-row flex-wrap justify-end gap-2">
             <AlertDialogCancel
               disabled={isDeleting}
               onClick={() => setShowDeleteDialog(false)}
@@ -1597,6 +1664,7 @@ function AccountTabPanel({
               variant="destructive"
               disabled={deleteConfirmText.trim().toLowerCase() !== email.trim().toLowerCase() || isDeleting}
               onClick={handleDeleteAccount}
+              className="disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isDeleting ? (
                 <>

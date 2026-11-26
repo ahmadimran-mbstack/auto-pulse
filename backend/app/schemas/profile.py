@@ -306,11 +306,13 @@ class ProfileResponse(BaseModel):
 
 
 class PatchApprovalRequest(BaseModel):
+    email: Optional[bool] = None
     slack_enabled: Optional[bool] = None
 
 
 class PatchProfileRequest(BaseModel):
     approval: Optional[PatchApprovalRequest] = None
+    email_approval_enabled: Optional[bool] = None
     slack_approval_enabled: Optional[bool] = None
     approval_method: Optional[str] = None
     display_name: Optional[str] = None
