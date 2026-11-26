@@ -17,7 +17,8 @@ import { mapTabToStatusFilter, type PostsTabFilter } from "@/lib/posts";
 import { Globe } from "lucide-react";
 import { ErrorState } from "@/components/app/ErrorState";
 import { toast } from "sonner";
-import { patchProfile } from "@/lib/api";
+import { useQuery } from "@tanstack/react-query";
+import { getAdminMe, patchProfile } from "@/lib/api";
 import { SlackDisconnectedBanner } from "@/components/app/SlackDisconnectedBanner";
 import { setOnboardingCompletedCookieAction } from "@/app/onboarding/actions";
 
@@ -45,16 +46,23 @@ export function AppDashboardClient({ user }: AppDashboardClientProps) {
     refetch: refetchDash,
   } = useDashboardQuery(user.id);
 
-  // Guard: If profile has not completed onboarding, route to onboarding wizard; otherwise persist completion cookie
+  const { data: adminMe } = useQuery({
+    queryKey: ["admin-me"],
+    queryFn: getAdminMe,
+    retry: false,
+    staleTime: 60_000,
+  });
+
+  // Guard: If profile has not completed onboarding, route to onboarding wizard; otherwise persist completion cookie (admins bypass onboarding)
   React.useEffect(() => {
     if (dashboardData?.profile) {
-      if (dashboardData.profile.onboarding_complete === false) {
+      if (dashboardData.profile.onboarding_complete === false && !adminMe?.is_admin) {
         router.replace("/onboarding");
       } else if (dashboardData.profile.onboarding_complete === true) {
         setOnboardingCompletedCookieAction().catch(() => {});
       }
     }
-  }, [dashboardData, router]);
+  }, [dashboardData, adminMe?.is_admin, router]);
 
   // 2. TanStack Query: Fetch posts with status filter
   const [limit, setLimit] = React.useState(20);
@@ -238,9 +246,9 @@ export function AppDashboardClient({ user }: AppDashboardClientProps) {
       />
 
       {/* 2. Responsive Grid: 5fr 7fr on desktop (xl), stacked on mobile/tablet */}
-      <div className="flex flex-col xl:grid xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] xl:items-start gap-6 w-full min-w-0 max-w-full">
+      <div className="flex flex-col xl:grid xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] xl:grid-rows-[auto_auto_1fr] xl:items-start gap-5 w-full min-w-0 max-w-full">
         {/* Section: Alerts (Mobile order 1, Desktop left column row 2) */}
-        <section className="order-1 xl:order-none xl:col-start-1 xl:row-start-2 space-y-4 min-w-0 w-full overflow-hidden">
+        <section className="order-1 xl:order-none xl:col-start-1 xl:row-start-2 space-y-3 min-w-0 w-full overflow-hidden">
           <h2 className="font-sans text-base font-normal tracking-tight text-foreground">
             Alerts
           </h2>
@@ -248,7 +256,7 @@ export function AppDashboardClient({ user }: AppDashboardClientProps) {
         </section>
 
         {/* Section: Today (Mobile order 2, Desktop left column row 3) */}
-        <section className="order-2 xl:order-none xl:col-start-1 xl:row-start-3 space-y-4 min-w-0 w-full overflow-hidden">
+        <section className="order-2 xl:order-none xl:col-start-1 xl:row-start-3 space-y-3 min-w-0 w-full overflow-hidden">
           <h2 className="font-sans text-base font-normal tracking-tight text-foreground">
             Today
           </h2>
@@ -260,7 +268,7 @@ export function AppDashboardClient({ user }: AppDashboardClientProps) {
         </section>
 
         {/* Section: Last 30 days (Mobile order 4, Desktop left column row 1) */}
-        <section className="order-4 xl:order-none xl:col-start-1 xl:row-start-1 space-y-4 min-w-0 w-full overflow-hidden">
+        <section className="order-4 xl:order-none xl:col-start-1 xl:row-start-1 space-y-3 min-w-0 w-full overflow-hidden">
           <h2 className="font-sans text-base font-normal tracking-tight text-foreground">
             Analytics
           </h2>
@@ -271,7 +279,7 @@ export function AppDashboardClient({ user }: AppDashboardClientProps) {
         </section>
 
         {/* Section: Posts (Mobile order 3, Desktop right column spanning rows 1-3) */}
-        <section className="order-3 xl:order-none xl:col-start-2 xl:row-start-1 xl:row-span-3 space-y-4 min-w-0 w-full overflow-hidden">
+        <section className="order-3 xl:order-none xl:col-start-2 xl:row-start-1 xl:row-span-3 space-y-3 min-w-0 w-full overflow-hidden">
           <h2 className="font-sans text-base font-normal tracking-tight text-foreground">
             Posts / Drafts
           </h2>

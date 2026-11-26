@@ -72,7 +72,13 @@ export function Last30DaysCard({ stats, connections }: Last30DaysCardProps) {
   });
 
   return (
-    <div data-slot="card" className="relative w-full min-w-0 rounded-lg border border-card-border bg-card pb-4">
+    <div
+      data-slot="card"
+      className={cn(
+        "relative w-full min-w-0 rounded-lg border border-card-border bg-card overflow-hidden",
+        rows.length <= 3 && "pb-3"
+      )}
+    >
       {/* Header row: 56px high */}
       <div className="flex h-14 items-center justify-between px-4 border-b border-border">
         <h3 className="font-sans text-base font-semibold tracking-tight text-foreground">
@@ -175,20 +181,21 @@ export function Last30DaysCard({ stats, connections }: Last30DaysCardProps) {
         </div>
       )}
 
-      {/* Expansion chevron button overlapping bottom border */}
+      {/* Full-width footer row inside the card for expanding/collapsing */}
       {rows.length > 3 && (
         <button
           type="button"
           aria-expanded={expanded}
-          aria-label={expanded ? "Collapse metrics card" : "Expand metrics card"}
+          aria-label={expanded ? "Show less" : "Show more"}
           onClick={() => setExpanded((prev) => !prev)}
-          className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex size-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-accent transition-colors duration-200 ease-in-out"
+          className="mt-2 flex h-10 w-full items-center justify-center border-t border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors duration-150 cursor-pointer"
         >
           <ChevronDown
             className={cn(
-              "size-3.5 transition-transform duration-300 ease-in-out",
+              "size-4 transition-transform duration-300 ease-in-out",
               expanded && "rotate-180"
             )}
+            aria-hidden="true"
           />
         </button>
       )}

@@ -80,7 +80,7 @@ export function AlertsCard({ data }: AlertsCardProps) {
     <div data-slot="card" className="w-full min-w-0 overflow-hidden rounded-lg border border-card-border bg-card p-4">
       {alerts.length === 0 ? (
         // Empty state: centered in card with 32px bordered square bell icon
-        <div className="py-8 px-4 flex flex-col items-center justify-center text-center">
+        <div className="py-5 px-4 flex flex-col items-center justify-center text-center">
           <div className="flex size-8 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground mb-3">
             <Bell className="size-4" />
           </div>
