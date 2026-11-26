@@ -4,7 +4,7 @@ import datetime
 import uuid
 from typing import Any, Dict, Optional
 
-from sqlalchemy import CheckConstraint, DateTime, Index, SmallInteger, Text, func, text
+from sqlalchemy import CheckConstraint, DateTime, Index, SmallInteger, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -85,4 +85,24 @@ class EmailLog(Base):
         ),
         Index("ix_email_logs_user_created", "user_id", "created_at"),
         Index("ix_email_logs_status", "status"),
+    )
+
+
+class AdminAlertDismissal(Base):
+    __tablename__ = "admin_alert_dismissals"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    admin_user_id: Mapped[str] = mapped_column(Text, nullable=False)
+    alert_type: Mapped[str] = mapped_column(Text, nullable=False)
+    dismissed_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("admin_user_id", "alert_type", name="uq_admin_alert_dismissal_user_type"),
+        Index("ix_admin_alert_dismissals_user_type", "admin_user_id", "alert_type"),
     )

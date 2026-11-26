@@ -3,7 +3,7 @@
 import datetime
 import json
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -32,7 +32,105 @@ def invalidate_admin_overview_cache() -> None:
             logger.warning(f"Failed to invalidate admin overview cache: {exc}")
 
 
-def get_admin_overview(db: Session, refresh: bool = False) -> Dict[str, Any]:
+def _get_admin_dismissals(db: Session, admin_user_id: Optional[str]) -> Dict[str, datetime.datetime]:
+    if not admin_user_id:
+        return {}
+    rows = db.execute(
+        text(
+            "SELECT alert_type, dismissed_at FROM admin_alert_dismissals WHERE admin_user_id = :uid"
+        ),
+        {"uid": admin_user_id},
+    ).fetchall()
+    return {str(r.alert_type): r.dismissed_at for r in rows if r.dismissed_at is not None}
+
+
+def _apply_per_admin_alerts(
+    db: Session,
+    payload: Dict[str, Any],
+    admin_user_id: Optional[str],
+) -> Dict[str, Any]:
+    dismissals = _get_admin_dismissals(db, admin_user_id)
+    failed_dismissed_at = dismissals.get("failed_emails")
+    pending_dismissed_at = dismissals.get("pending_payments")
+
+    # Count only unresolved failed notification emails in the last 24h after dismissal
+    failed_emails_count = int(
+        db.execute(
+            text(
+                """
+                SELECT COUNT(*)::int
+                FROM email_logs f
+                WHERE f.status = 'failed'
+                  AND f.created_at >= now() - interval '24 hours'
+                  AND (CAST(:dismissed_at AS timestamptz) IS NULL OR f.created_at > CAST(:dismissed_at AS timestamptz))
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM email_logs s
+                      WHERE s.status = 'sent'
+                        AND s.created_at > f.created_at
+                        AND (
+                            (f.idempotency_key IS NOT NULL AND s.idempotency_key = f.idempotency_key)
+                            OR (s.to_email = f.to_email AND s.type = f.type)
+                        )
+                  )
+                """
+            ),
+            {"dismissed_at": failed_dismissed_at},
+        ).scalar()
+        or 0
+    )
+
+    pending_alert_row = db.execute(
+        text(
+            """
+            SELECT
+                COUNT(*)::int AS cnt,
+                COALESCE(SUM(amount_usd_cents), 0)::bigint AS usd_cents
+            FROM payments
+            WHERE status = 'pending'
+              AND (CAST(:dismissed_at AS timestamptz) IS NULL OR submitted_at > CAST(:dismissed_at AS timestamptz))
+            """
+        ),
+        {"dismissed_at": pending_dismissed_at},
+    ).fetchone()
+
+    kpis = dict(payload.get("kpis") or {})
+    kpis["failed_emails_count"] = failed_emails_count
+    kpis["pending_payments_alert_count"] = int(pending_alert_row.cnt or 0) if pending_alert_row else 0
+    kpis["pending_payments_alert_usd"] = (
+        round(int(pending_alert_row.usd_cents or 0) / 100.0, 2) if pending_alert_row else 0.0
+    )
+    payload["kpis"] = kpis
+    return payload
+
+
+def dismiss_admin_alert(
+    db: Session,
+    admin_user_id: str,
+    alert_type: str,
+) -> datetime.datetime:
+    """Persist per-admin dismissal timestamp for an overview alert banner."""
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    db.execute(
+        text(
+            """
+            INSERT INTO admin_alert_dismissals (admin_user_id, alert_type, dismissed_at)
+            VALUES (:uid, :atype, :ts)
+            ON CONFLICT (admin_user_id, alert_type)
+            DO UPDATE SET dismissed_at = EXCLUDED.dismissed_at
+            """
+        ),
+        {"uid": admin_user_id, "atype": alert_type, "ts": now_utc},
+    )
+    db.commit()
+    return now_utc
+
+
+def get_admin_overview(
+    db: Session,
+    refresh: bool = False,
+    admin_user_id: Optional[str] = None,
+) -> Dict[str, Any]:
     """Return cached or freshly computed UTC-based overview metrics, series, and queues."""
     client = get_redis_client()
     if not refresh and client is not None:
@@ -41,7 +139,7 @@ def get_admin_overview(db: Session, refresh: bool = False) -> Dict[str, Any]:
             if raw:
                 cached = json.loads(raw)
                 cached["cached"] = True
-                return cached
+                return _apply_per_admin_alerts(db, cached, admin_user_id)
         except Exception as exc:
             logger.warning(f"Redis read failed for {ADMIN_OVERVIEW_CACHE_KEY}: {exc}")
 
@@ -388,4 +486,4 @@ def get_admin_overview(db: Session, refresh: bool = False) -> Dict[str, Any]:
         except Exception as exc:
             logger.warning(f"Redis write failed for {ADMIN_OVERVIEW_CACHE_KEY}: {exc}")
 
-    return payload
+    return _apply_per_admin_alerts(db, payload, admin_user_id)

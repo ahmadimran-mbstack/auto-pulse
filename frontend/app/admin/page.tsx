@@ -13,6 +13,7 @@ import {
   TrendingUp,
   Users,
   Wallet,
+  X,
 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
@@ -53,7 +54,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getAdminOverview } from "@/lib/api";
+import { dismissAdminAlert, getAdminOverview } from "@/lib/api";
+import type { AdminOverviewResponse } from "@/types/admin";
 
 export default function AdminOverviewPage() {
   const qc = useQueryClient();
@@ -75,8 +77,30 @@ export default function AdminOverviewPage() {
     }
   };
 
+  const handleDismissAlert = async (alertType: "failed_emails" | "pending_payments") => {
+    qc.setQueryData<AdminOverviewResponse>(["admin-overview"], (prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        kpis: {
+          ...prev.kpis,
+          ...(alertType === "failed_emails"
+            ? { failed_emails_count: 0 }
+            : { pending_payments_alert_count: 0, pending_payments_alert_usd: 0 }),
+        },
+      };
+    });
+    try {
+      await dismissAdminAlert(alertType);
+    } catch {
+      qc.invalidateQueries({ queryKey: ["admin-overview"] });
+    }
+  };
+
   const data = overviewQuery.data;
   const k = data?.kpis;
+  const pendingAlertCount = k ? (k.pending_payments_alert_count ?? k.pending_payments_count) : 0;
+  const pendingAlertUsd = k ? (k.pending_payments_alert_usd ?? k.pending_payments_usd) : 0;
 
   const hasRevCostData = Boolean(
     data?.daily_series?.some((d) => (d.revenue_usd || 0) > 0 || (d.cost_usd || 0) > 0)
@@ -119,47 +143,71 @@ export default function AdminOverviewPage() {
         }
       />
 
-      {k && k.pending_payments_count > 0 && (
-        <Alert className="border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200">
-          <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400" />
-          <AlertDescription className="flex flex-wrap items-center justify-between gap-3 text-sm">
-            <span>
-              <strong>{k.pending_payments_count}</strong> pending payment
-              {k.pending_payments_count === 1 ? "" : "s"} (${k.pending_payments_usd.toFixed(2)})
-              awaiting manual verification.
-            </span>
+      {k && pendingAlertCount > 0 && (
+        <Alert className="flex items-center justify-between gap-4 px-4 py-3 border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <AlertTriangle className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <AlertDescription className="text-sm text-inherit">
+              <strong>{pendingAlertCount}</strong> pending payment
+              {pendingAlertCount === 1 ? "" : "s"} (${pendingAlertUsd.toFixed(2)})
+              {" "}awaiting manual verification.
+            </AlertDescription>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
             <Link
               href="/admin/payments"
-              className="inline-flex items-center gap-1 font-medium underline underline-offset-4 hover:opacity-80"
+              className="inline-flex items-center gap-1 text-sm font-medium underline underline-offset-4 hover:opacity-80 whitespace-nowrap"
             >
               Review payments
               <ArrowRight className="size-3.5" />
             </Link>
-          </AlertDescription>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Dismiss warning"
+              onClick={() => handleDismissAlert("pending_payments")}
+              className="size-7 shrink-0 text-amber-800 hover:bg-amber-500/20 hover:text-amber-950 dark:text-amber-200 dark:hover:text-amber-100"
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
         </Alert>
       )}
 
       {k && k.failed_emails_count > 0 && (
-        <Alert className="border-red-500/35 bg-red-500/10 text-red-900 dark:text-red-200">
-          <AlertTriangle className="size-4 text-red-600 dark:text-red-400" />
-          <AlertDescription className="flex flex-wrap items-center justify-between gap-3 text-sm">
-            <span>
+        <Alert className="flex items-center justify-between gap-4 px-4 py-3 border-red-500/35 bg-red-500/10 text-red-900 dark:text-red-200">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <AlertTriangle className="size-4 shrink-0 text-red-600 dark:text-red-400" />
+            <AlertDescription className="text-sm text-inherit">
               <strong>{k.failed_emails_count}</strong> failed notification email
               {k.failed_emails_count === 1 ? "" : "s"} logged.
-            </span>
+            </AlertDescription>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
             <Link
               href="/admin/users"
-              className="inline-flex items-center gap-1 font-medium underline underline-offset-4 hover:opacity-80"
+              className="inline-flex items-center gap-1 text-sm font-medium underline underline-offset-4 hover:opacity-80 whitespace-nowrap"
             >
               Inspect users
               <ArrowRight className="size-3.5" />
             </Link>
-          </AlertDescription>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label="Dismiss warning"
+              onClick={() => handleDismissAlert("failed_emails")}
+              className="size-7 shrink-0 text-red-800 hover:bg-red-500/20 hover:text-red-950 dark:text-red-200 dark:hover:text-red-100"
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
         </Alert>
       )}
 
       {overviewQuery.isLoading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 items-stretch">
           {[0, 1, 2, 3].map((idx) => (
             <StatCardSkeleton key={idx} />
           ))}
@@ -172,7 +220,7 @@ export default function AdminOverviewPage() {
         />
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 items-stretch">
             <StatCard
               label="Total users"
               value={k.total_users.toLocaleString()}
@@ -183,7 +231,11 @@ export default function AdminOverviewPage() {
                   ? { value: `+${k.new_users_month} this mo`, positive: true }
                   : undefined
               }
-              subline={`${k.active_users} active · ${k.suspended_users} suspended · ${k.disabled_users} disabled`}
+              subline={
+                k.disabled_users > 0
+                  ? `${k.active_users} active · ${k.suspended_users} suspended · ${k.disabled_users} disabled`
+                  : `${k.active_users} active · ${k.suspended_users} suspended`
+              }
               href="/admin/users"
             />
             <StatCard
@@ -191,7 +243,11 @@ export default function AdminOverviewPage() {
               value={`$${k.estimated_mrr_usd.toFixed(2)}`}
               icon={TrendingUp}
               tone="violet"
-              subline={`${k.paid_subscribers} paid active · ${k.trial_users} trialing · ${k.expiring_7d} expiring`}
+              subline={
+                k.expiring_7d > 0
+                  ? `${k.paid_subscribers} paid active · ${k.trial_users} trialing · ${k.expiring_7d} expiring`
+                  : `${k.paid_subscribers} paid active · ${k.trial_users} trialing`
+              }
               href="/admin/subscribers"
             />
             <StatCard

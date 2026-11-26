@@ -249,4 +249,31 @@ def get_overview(
     admin: AdminCaller = Depends(require_admin_caller),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    return overview_svc.get_admin_overview(db=db, refresh=refresh)
+    return overview_svc.get_admin_overview(db=db, refresh=refresh, admin_user_id=admin.id)
+
+
+class DismissAlertBody(BaseModel):
+    alert_type: str
+
+
+@router.post("/alerts/dismiss")
+def dismiss_overview_alert(
+    body: DismissAlertBody,
+    admin: AdminCaller = Depends(rate_limit_admin_mutation),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    if body.alert_type not in ("failed_emails", "pending_payments"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "invalid_alert_type", "message": "Unsupported alert type."},
+        )
+    dismissed_at = overview_svc.dismiss_admin_alert(
+        db=db,
+        admin_user_id=admin.id,
+        alert_type=body.alert_type,
+    )
+    return {
+        "status": "ok",
+        "alert_type": body.alert_type,
+        "dismissed_at": dismissed_at.isoformat(),
+    }

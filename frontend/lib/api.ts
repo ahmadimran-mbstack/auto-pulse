@@ -1273,6 +1273,15 @@ export async function getAdminOverview(
   });
 }
 
+export async function dismissAdminAlert(
+  alertType: "failed_emails" | "pending_payments"
+): Promise<{ status: string; alert_type: string; dismissed_at: string }> {
+  return apiCall(`/api/admin/alerts/dismiss`, {
+    method: "POST",
+    body: JSON.stringify({ alert_type: alertType }),
+  });
+}
+
 export async function fetchAuthenticatedBlob(path: string): Promise<{ blob: Blob; headers: Headers }> {
   const baseUrl = env.apiUrl.replace(/\/$/, "");
   const cleanPath = path.startsWith("/") ? path : `/${path}`;

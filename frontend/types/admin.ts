@@ -301,6 +301,8 @@ export interface AdminOverviewResponse {
     overdue: number;
     pending_payments_count: number;
     pending_payments_usd: number;
+    pending_payments_alert_count?: number;
+    pending_payments_alert_usd?: number;
     pending_payments_pkr: number;
     revenue_month_usd: number;
     revenue_month_pkr: number;
