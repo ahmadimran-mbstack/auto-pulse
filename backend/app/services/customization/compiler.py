@@ -108,8 +108,10 @@ def _apply_constraint(
             _set("hashtags_max", c.max)
     elif c.type == "hashtag_case" and c.value in ("camel", "lower", "any"):
         _set("hashtag_case", c.value)
-    elif c.type == "emoji_policy" and c.value in ("none", "sparse", "allowed"):
+    elif c.type == "emoji_policy" and c.value in ("none", "sparse", "allowed", "many"):
         _set("emoji_policy", c.value)
+        if c.max is not None:
+            _set("emoji_max_count", c.max)
     elif c.type == "bullet_style" and c.value:
         _set("allow_markdown_bullets", c.value.lower() in ("allow", "allowed", "true", "bullets", "arrows"))
     elif c.type == "banned_phrase" and c.value:
@@ -307,6 +309,7 @@ def compile_customization_context(
         ci_policy = distill_custom_instructions_to_policy(custom_instructions)
         for field_name in (
             "emoji_policy",
+            "emoji_max_count",
             "hashtags_in_body",
             "hashtags_min",
             "hashtags_max",
@@ -314,6 +317,9 @@ def compile_customization_context(
             "question_ending",
             "length_min",
             "length_max",
+            "first_line_max",
+            "paragraphs_min",
+            "paragraphs_max",
             "no_question_hooks",
             "require_number_hook",
         ):
@@ -321,6 +327,9 @@ def compile_customization_context(
             if val is not None:
                 policy_data[field_name] = val
                 provenance[field_name] = "custom_instructions"
+        for w in getattr(ci_policy, "warnings", []) or []:
+            if w and w not in warnings:
+                warnings.append(w)
         if ci_policy.banned_words or ci_policy.banned_phrases:
             bp_list = list(policy_data.get("banned_phrases_extra") or [])
             for item in ci_policy.banned_words + ci_policy.banned_phrases:

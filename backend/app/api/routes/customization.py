@@ -594,6 +594,7 @@ def get_customization_settings(
         active_version_id=str(row.active_version_id) if row.active_version_id else None,
         compile_pending=custom_repo.has_pending_compile(db, user.id),
         detected_constraints=(row.overrides or {}).get("instruction_constraints") or [],
+        instruction_warnings=(row.overrides or {}).get("instruction_warnings") or [],
     )
 
 
@@ -613,6 +614,7 @@ def update_customization_settings(
             detected = distill_instructions(row.custom_instructions or "")
             overrides = dict(row.overrides or {})
             overrides["instruction_constraints"] = [c.model_dump() for c in detected.constraints]
+            overrides["instruction_warnings"] = detected.warnings
             overrides["instruction_topics_include"] = detected.topics_include
             overrides["instruction_topics_avoid"] = detected.topics_avoid
             row.overrides = overrides
@@ -638,6 +640,7 @@ def update_customization_settings(
         active_version_id=str(row.active_version_id) if row.active_version_id else None,
         compile_pending=custom_repo.has_pending_compile(db, user.id),
         detected_constraints=(row.overrides or {}).get("instruction_constraints") or [],
+        instruction_warnings=(row.overrides or {}).get("instruction_warnings") or [],
     )
 
 
@@ -704,13 +707,14 @@ def _build_policy_items(
         hashtag_val = f"{policy.get('hashtags_min', 1)} to {policy.get('hashtags_max', 3)} in body"
 
     # Emojis
+    emoji_max = policy.get("emoji_max_count")
     emoji_map = {
-        "none": "None",
-        "sparse": "Sparse (up to 3)",
+        "none": "Not allowed",
+        "sparse": f"At most {emoji_max}" if emoji_max else "Sparse (up to 3)",
         "allowed": "Allowed",
         "many": "Frequent",
     }
-    emoji_val = emoji_map.get(str(policy.get("emoji_policy", "none")), "None")
+    emoji_val = emoji_map.get(str(policy.get("emoji_policy", "none")), "Not allowed")
 
     # Question ending
     q_end = policy.get("question_ending", "allowed")

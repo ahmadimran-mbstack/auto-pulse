@@ -87,6 +87,7 @@ export interface CustomizationSettingsView {
   active_version_id?: string | null;
   compile_pending: boolean;
   detected_constraints: DetectedConstraint[];
+  instruction_warnings?: string[];
 }
 
 export interface QuotaUsage {

@@ -604,22 +604,56 @@ def check_hashtags(hashtags: List[str], policy: Optional[Any] = None) -> Optiona
 
 
 _EMOJI_RE = re.compile(
-    "[\U0001F300-\U0001F9FF\U0001FA00-\U0001FAFF\u2600-\u27BF]+",
+    "["
+    "\U0001F1E0-\U0001F1FF"  # regional indicators (flags)
+    "\U0001F300-\U0001F9FF"  # misc symbols, pictographs, emoticons, transport, supplemental
+    "\U0001FA00-\U0001FAFF"  # chess, extended pictographs
+    "\U0001F000-\U0001F02F"  # mahjong
+    "\U0001F0A0-\U0001F0FF"  # playing cards
+    "\u2190-\u21FF"          # arrows
+    "\u2300-\u23FF"          # misc technical (watch, hourglass, etc.)
+    "\u25A0-\u25FF"          # geometric shapes
+    "\u2600-\u27BF"          # misc symbols & dingbats (checkmarks, fire, stars, etc.)
+    "\u2B00-\u2BFF"          # misc symbols and arrows
+    "\uFE0E\uFE0F"           # variation selectors
+    "\u200D"                 # zero-width joiner
+    "\u20E3"                 # combining enclosing keycap
+    "]+",
     flags=re.UNICODE,
 )
 
 
+def find_emojis(text: str) -> List[str]:
+    """Find all emoji/symbol sequences in text."""
+    if not text:
+        return []
+    return _EMOJI_RE.findall(text)
+
+
+def strip_emojis(text: str) -> str:
+    """Remove all emoji/symbol characters and clean up extra spaces left behind."""
+    if not text:
+        return text
+    cleaned = _EMOJI_RE.sub("", text)
+    # Collapse double spaces on a line without altering paragraph breaks
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    cleaned = re.sub(r"[ \t]+\n", "\n", cleaned)
+    return cleaned.strip()
+
+
 def check_emoji_policy(caption: str, policy: Optional[Any] = None) -> Optional[str]:
-    """Enforce emoji_policy (none, sparse <= 3, allowed)."""
+    """Enforce emoji_policy (none, sparse <= N, allowed, many)."""
     from app.services.customization.policy import get_effective_policy
 
     p = get_effective_policy(policy)
-    matches = _EMOJI_RE.findall(caption or "")
-    count = sum(len(m) for m in matches)
+    matches = find_emojis(caption or "")
+    count = len(matches)
     if p.emoji_policy == "none" and count > 0:
         return f"Emojis are not allowed by your policy (found {count})"
-    if p.emoji_policy == "sparse" and count > 3:
-        return f"Too many emojis ({count}); sparse emoji policy allows at most 3"
+    if p.emoji_policy == "sparse":
+        max_allowed = p.emoji_max_count if p.emoji_max_count is not None else 3
+        if count > max_allowed:
+            return f"Too many emojis ({count}); policy allows at most {max_allowed}"
     return None
 
 

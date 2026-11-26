@@ -47,6 +47,7 @@ class EffectivePolicy(BaseModel):
     first_comment_hashtags_max: int = 3
     hashtag_case: Literal["camel", "lower", "any"] = "camel"
     emoji_policy: Literal["none", "sparse", "allowed", "many"] = "none"
+    emoji_max_count: Optional[int] = None
     allow_markdown_bullets: bool = False
     banned_phrases_extra: List[str] = Field(default_factory=list)
     required_end_phrase: Optional[str] = None
@@ -124,5 +125,8 @@ def clamp_policy(policy: EffectivePolicy) -> tuple[EffectivePolicy, List[str]]:
 
     fchm = max(0, min(PLATFORM_MAX_HASHTAGS, int(data.get("first_comment_hashtags_max", 3))))
     data["first_comment_hashtags_max"] = fchm
+
+    if data.get("emoji_max_count") is not None:
+        data["emoji_max_count"] = max(0, min(20, int(data["emoji_max_count"])))
 
     return EffectivePolicy.model_validate(data), warnings

@@ -375,9 +375,10 @@ def _policy_prompt_vars(policy: Optional[Any] = None) -> Dict[str, Any]:
     elif p.emoji_policy == "allowed":
         emoji_rule = "Emojis ARE allowed and encouraged throughout the post per the author's instructions/playbook."
     elif p.emoji_policy == "sparse":
-        emoji_rule = "Use emojis sparingly (at most 3 total)."
+        max_e = getattr(p, "emoji_max_count", None) or 3
+        emoji_rule = f"Use emojis sparingly (at most {max_e} total)."
     else:
-        emoji_rule = "Do NOT use emojis unless requested in USER CUSTOM INSTRUCTIONS."
+        emoji_rule = "Do not include any emoji or emoticon characters."
 
     formatting_rule = (
         "Plain text only (no **bold** or # headers); simple bullets/arrows are allowed."

@@ -373,6 +373,7 @@ export function CustomizeClient() {
           <LearnedProfilePanel
             context={ctxData}
             samplesCount={overview?.quota.samples_used ?? 0}
+            customInstructions={settings?.custom_instructions ?? ""}
             isLoading={contextQuery.isLoading}
             onSaveVoiceOverride={(summary) =>
               overridesMutation.mutate({ voice_summary_override: summary })
@@ -384,6 +385,7 @@ export function CustomizeClient() {
               if (remaining.length === 0) toast.info("Fact removed.");
             }}
             onGoToPreviousPosts={() => handleTabChange("posts")}
+            onGoToInstructions={() => handleTabChange("instructions")}
           />
         </TabsContent>
 
@@ -479,6 +481,7 @@ export function CustomizeClient() {
             mode={settings?.default_playbook_mode ?? "merge"}
             onModeChange={(mode) => settingsMutation.mutate({ default_playbook_mode: mode })}
             detectedConstraints={settings?.detected_constraints ?? []}
+            instructionWarnings={settings?.instruction_warnings ?? []}
             onSave={async (instructions) => {
               await settingsMutation.mutateAsync({ custom_instructions: instructions });
             }}

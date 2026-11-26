@@ -107,6 +107,7 @@ class CustomizationSettingsView(BaseModel):
     active_version_id: Optional[str] = None
     compile_pending: bool = False
     detected_constraints: List[Dict[str, Any]] = Field(default_factory=list)
+    instruction_warnings: List[str] = Field(default_factory=list)
 
 
 class CustomizationSettingsUpdate(BaseModel):

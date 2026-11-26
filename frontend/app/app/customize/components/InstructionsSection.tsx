@@ -17,6 +17,7 @@ interface InstructionsSectionProps {
   mode: "merge" | "replace";
   onModeChange: (mode: "merge" | "replace") => void;
   detectedConstraints: DetectedConstraint[];
+  instructionWarnings?: string[];
   onSave: (instructions: string) => Promise<void>;
 }
 
@@ -26,9 +27,28 @@ function formatConstraint(c: DetectedConstraint): string {
     if (c.max) return `Max length: ${c.max} chars`;
     if (c.min) return `Min length: ${c.min} chars`;
   }
-  if (c.type === "emoji_policy") return `Emojis: ${c.value}`;
-  if (c.type === "hashtag_count") return `Hashtags: ${c.min ?? 0}–${c.max ?? 0}`;
-  if (c.type === "question_ending") return `Question ending: ${c.value}`;
+  if (c.type === "first_line_max_chars" && c.max) {
+    return `First line: max ${c.max} chars`;
+  }
+  if (c.type === "paragraph_count") {
+    if (c.min && c.max) return `Paragraphs: ${c.min}–${c.max}`;
+    if (c.max) return `Paragraphs: max ${c.max}`;
+  }
+  if (c.type === "emoji_policy") {
+    if (c.value === "none") return "Emojis: not allowed";
+    if (c.value === "sparse") return c.max ? `Emojis: max ${c.max}` : "Emojis: up to 3";
+    if (c.value === "many") return "Emojis: frequent";
+    return `Emojis: ${c.value}`;
+  }
+  if (c.type === "hashtag_count") {
+    if (c.max === 0) return "Hashtags: none";
+    return `Hashtags: ${c.min ?? 0}–${c.max ?? 0}`;
+  }
+  if (c.type === "question_ending") {
+    if (c.value === "forbidden") return "Ending question: not allowed";
+    if (c.value === "required") return "Ending question: required";
+    return `Ending question: ${c.value}`;
+  }
   if (c.type === "required_phrase_end") return `Sign-off: "${c.value}"`;
   return `${c.type}: ${c.value ?? ""}`;
 }
@@ -38,6 +58,7 @@ export function InstructionsSection({
   mode,
   onModeChange,
   detectedConstraints,
+  instructionWarnings = [],
   onSave,
 }: InstructionsSectionProps) {
   const form = useForm<InstructionsValues>({
@@ -96,6 +117,16 @@ export function InstructionsSection({
                 )}
               </div>
             </div>
+
+            {instructionWarnings.length > 0 && (
+              <div className="space-y-1">
+                {instructionWarnings.map((w, idx) => (
+                  <p key={idx} className="text-xs text-status-warning-fg">
+                    {w}
+                  </p>
+                ))}
+              </div>
+            )}
 
             {detectedConstraints.length > 0 && (
               <div className="space-y-1.5">

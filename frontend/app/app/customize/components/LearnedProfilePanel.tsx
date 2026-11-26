@@ -28,10 +28,12 @@ import type { CompiledContextView, PolicyItem } from "@/types/customization";
 interface LearnedProfilePanelProps {
   context?: CompiledContextView;
   samplesCount: number;
+  customInstructions?: string | null;
   isLoading: boolean;
   onSaveVoiceOverride: (summary: string) => void;
   onRemoveFact: (factId: string) => void;
   onGoToPreviousPosts: () => void;
+  onGoToInstructions?: () => void;
 }
 
 const POST_TYPE_TABS = [
@@ -85,10 +87,12 @@ function SourceBadge({ item }: { item: PolicyItem }) {
 export function LearnedProfilePanel({
   context,
   samplesCount,
+  customInstructions,
   isLoading,
   onSaveVoiceOverride,
   onRemoveFact,
   onGoToPreviousPosts,
+  onGoToInstructions,
 }: LearnedProfilePanelProps) {
   const compiled = context?.compiled;
   const guidance = compiled?.guidance;
@@ -111,24 +115,82 @@ export function LearnedProfilePanel({
     );
   }
 
-  if (compiled?.is_empty) {
-    return (
-      <Card className="border border-border bg-card shadow-none rounded-lg">
-        <CardHeader className="p-4 sm:p-5">
-          <CardTitle className="text-base">Nothing learned yet</CardTitle>
+  const trimmedInstructions = (customInstructions || "").trim();
+
+  const customInstructionsSection = (
+    <Card className="border border-border bg-card shadow-none rounded-lg">
+      <CardHeader className="p-4 sm:p-5 pb-3 border-b border-border flex flex-row items-center justify-between gap-3 space-y-0">
+        <div>
+          <CardTitle className="text-base font-medium text-foreground">
+            Custom instructions
+          </CardTitle>
           <CardDescription>
-            Add your LinkedIn playbooks, business URL or documents, previous posts, or custom instructions in the tabs above.
+            Direct rules you saved for the writing agents.
           </CardDescription>
-        </CardHeader>
-        <CardContent className="p-4 sm:p-5 pt-0 flex flex-wrap gap-2">
-          <Button asChild variant="outline" size="sm" className="gap-1.5">
-            <Link href="/app/playground">
-              <FlaskConical className="size-4 stroke-[1.75]" />
-              <span>Test in Playground</span>
+        </div>
+        {trimmedInstructions && (
+          <Button asChild variant="outline" size="sm">
+            <Link
+              href="/app/customize?tab=instructions"
+              onClick={(e) => {
+                if (onGoToInstructions) {
+                  e.preventDefault();
+                  onGoToInstructions();
+                }
+              }}
+            >
+              Edit
             </Link>
           </Button>
-        </CardContent>
-      </Card>
+        )}
+      </CardHeader>
+      <CardContent className="p-4 sm:p-5">
+        {trimmedInstructions ? (
+          <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap break-words">
+            {trimmedInstructions}
+          </p>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+            <span>No custom instructions saved yet.</span>
+            <Link
+              href="/app/customize?tab=instructions"
+              onClick={(e) => {
+                if (onGoToInstructions) {
+                  e.preventDefault();
+                  onGoToInstructions();
+                }
+              }}
+              className="text-xs font-medium text-foreground underline underline-offset-4 hover:text-primary"
+            >
+              Add instructions
+            </Link>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  if (compiled?.is_empty) {
+    return (
+      <div className="space-y-4">
+        <Card className="border border-border bg-card shadow-none rounded-lg">
+          <CardHeader className="p-4 sm:p-5">
+            <CardTitle className="text-base">Nothing learned yet</CardTitle>
+            <CardDescription>
+              Add your LinkedIn playbooks, business URL or documents, previous posts, or custom instructions in the tabs above.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 sm:p-5 pt-0 flex flex-wrap gap-2">
+            <Button asChild variant="outline" size="sm" className="gap-1.5">
+              <Link href="/app/playground">
+                <FlaskConical className="size-4 stroke-[1.75]" />
+                <span>Test in Playground</span>
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+        {customInstructionsSection}
+      </div>
     );
   }
 
@@ -383,6 +445,8 @@ export function LearnedProfilePanel({
           </CardContent>
         </Card>
       )}
+
+      {customInstructionsSection}
     </div>
   );
 }

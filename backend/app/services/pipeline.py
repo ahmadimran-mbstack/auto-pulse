@@ -2111,6 +2111,20 @@ def execute_pipeline(
     final_state["status"] = final_status
     final_reason = final_state.get("error_detail") or final_state.get("exit_reason") or "completed"
 
+    # Last-resort deterministic emoji stripping when policy forbids emojis
+    final_policy = final_state.get("policy") or {}
+    if final_policy.get("emoji_policy", "none") == "none":
+        from app.services.checks import strip_emojis
+
+        for draft_key in ("best_clean_draft", "draft", "best_draft", "best_raw_draft"):
+            d = final_state.get(draft_key)
+            if isinstance(d, dict):
+                updated_d = dict(d)
+                for text_key in ("post_text", "first_comment", "image_headline"):
+                    if isinstance(updated_d.get(text_key), str) and updated_d[text_key]:
+                        updated_d[text_key] = strip_emojis(updated_d[text_key])
+                final_state[draft_key] = updated_d
+
     logger.info(
         f"[PIPELINE RUN] run_id={run_id or 'none'} | user_id={user_id} | run_type={run_type_label} | "
         f"cache_layers={{{cache_layers_str}}} | "

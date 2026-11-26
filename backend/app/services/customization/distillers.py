@@ -153,6 +153,7 @@ class CustomInstructionPolicy(BaseModel):
     """Strict schema for policy overrides extracted from user custom_instructions."""
 
     emoji_policy: Optional[Literal["none", "sparse", "allowed", "many"]] = None
+    emoji_max_count: Optional[int] = None
     hashtags_in_body: Optional[bool] = None
     hashtags_min: Optional[int] = None
     hashtags_max: Optional[int] = None
@@ -162,14 +163,19 @@ class CustomInstructionPolicy(BaseModel):
     question_ending: Optional[Literal["allowed", "required", "forbidden"]] = None
     length_min: Optional[int] = None
     length_max: Optional[int] = None
+    first_line_max: Optional[int] = None
+    paragraphs_min: Optional[int] = None
+    paragraphs_max: Optional[int] = None
     no_question_hooks: Optional[bool] = None
     require_number_hook: Optional[bool] = None
+    warnings: List[str] = Field(default_factory=list)
 
 
 class DistilledInstructions(BaseModel):
     constraints: List[ExtractedConstraint] = Field(default_factory=list)
     topics_include: List[str] = Field(default_factory=list)
     topics_avoid: List[str] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
 
 
 def sanitize_for_distillation(text: str) -> tuple[str, List[str]]:
@@ -435,28 +441,182 @@ def distill_custom_instructions_to_policy(
     Deterministic rules run first; optional LLM extraction is validated against the schema.
     On LLM parse failure, keeps deterministic result and logs a warning.
     """
+CONFLICT_WARNING = "Conflicting instructions found. Using the stricter rule."
+
+_EMOJI_NEGATION_RE = re.compile(
+    r"\b(?:do\s+not|don't|dont|never|avoid|skip|stop|ban|forbid|without|zero|0)\b[^.\n]*?\b(?:emojis?|emoticons?)\b"
+    r"|\bno\s+(?:any\s+)?(?:emojis?|emoticons?)\b"
+    r"|\bemoji[- ]?free\b",
+    re.IGNORECASE,
+)
+_EMOJI_LIMIT_RE = re.compile(
+    r"\b(?:at\s+most|max(?:imum)?(?:\s+of)?|up\s+to|no\s+more\s+than)\s+(\d+)\s+emojis?\b",
+    re.IGNORECASE,
+)
+_EMOJI_SPARSE_RE = re.compile(
+    r"\b(?:sparse\s+emojis?|emojis?\s+sparingly|few\s+emojis?|minimal\s+emojis?)\b",
+    re.IGNORECASE,
+)
+_EMOJI_MANY_RE = re.compile(
+    r"\b(?:lot\s+of|lots\s+of|many|heavy|plenty\s+of|generous(?:ly)?)\s+emojis?\b",
+    re.IGNORECASE,
+)
+_EMOJI_ALLOW_RE = re.compile(
+    r"\b(?:use|include|add|allow|feel\s+free\s+to\s+use|keep)\b[^.\n]*?\bemojis?\b",
+    re.IGNORECASE,
+)
+
+_HASHTAG_NEGATION_RE = re.compile(
+    r"\b(?:do\s+not|don't|dont|never|avoid|skip|stop|ban|forbid|without|zero|0)\b[^.\n]*?\bhashtags?\b"
+    r"|\bno\s+(?:any\s+)?hashtags?\b"
+    r"|\bhashtag[- ]?free\b",
+    re.IGNORECASE,
+)
+_HASHTAG_LIMIT_RE = re.compile(
+    r"\b(?:at\s+most|max(?:imum)?(?:\s+of)?|up\s+to|no\s+more\s+than)\s+(\d+)\s+hashtags?\b",
+    re.IGNORECASE,
+)
+_HASHTAG_RANGE_RE = re.compile(
+    r"\b(\d+)\s*(?:to|-)\s*(\d+)\s+hashtags?\b",
+    re.IGNORECASE,
+)
+
+_Q_END_NEGATION_RE = re.compile(
+    r"\b(?:do\s+not|don't|dont|never|avoid|no)\b[^.\n]*?\bend(?:ing)?\s+(?:with\s+)?(?:a\s+)?questions?\b"
+    r"|\bno\s+questions?\s+(?:at\s+the\s+end|to\s+end)\b",
+    re.IGNORECASE,
+)
+_Q_END_REQUIRED_RE = re.compile(
+    r"\b(?:always|must)\s+end\s+(?:with\s+)?(?:a\s+)?questions?\b",
+    re.IGNORECASE,
+)
+
+
+def _split_instruction_clauses(text: str) -> List[str]:
+    clauses: List[str] = []
+    for raw_line in (text or "").splitlines():
+        line = re.sub(r"^\s*(?:[-*•]+|\d+[.)])\s*", "", raw_line).strip()
+        if not line:
+            continue
+        for part in re.split(r"[.;]+", line):
+            p = part.strip()
+            if p:
+                clauses.append(p)
+    return clauses
+
+
+def _parse_instructions_deterministic(
+    text: str,
+) -> tuple[CustomInstructionPolicy, List[ExtractedConstraint]]:
+    """Single source of truth for deterministic parsing of custom_instructions."""
     clean = (text or "").strip()
     if not clean:
-        return CustomInstructionPolicy()
+        return CustomInstructionPolicy(), []
+
+    policy = CustomInstructionPolicy()
+    constraints: List[ExtractedConstraint] = []
+    clauses = _split_instruction_clauses(clean)
+
+    # 1. Emoji policy (line/clause-level so negation never matches positive 'use emojis' and conflicts are caught)
+    emoji_signals: List[tuple[str, Optional[int]]] = []
+    for clause in clauses:
+        if _EMOJI_NEGATION_RE.search(clause):
+            emoji_signals.append(("none", 0))
+        elif (m_lim := _EMOJI_LIMIT_RE.search(clause)):
+            n = int(m_lim.group(1))
+            if n <= 0:
+                emoji_signals.append(("none", 0))
+            else:
+                emoji_signals.append(("sparse", n))
+        elif _EMOJI_SPARSE_RE.search(clause):
+            emoji_signals.append(("sparse", None))
+        elif _EMOJI_MANY_RE.search(clause):
+            emoji_signals.append(("many", None))
+        elif _EMOJI_ALLOW_RE.search(clause):
+            emoji_signals.append(("allowed", None))
+
+    if emoji_signals:
+        modes = {m for m, _ in emoji_signals}
+        if "none" in modes:
+            policy.emoji_policy = "none"
+            policy.emoji_max_count = 0
+            if len(modes) > 1 and CONFLICT_WARNING not in policy.warnings:
+                policy.warnings.append(CONFLICT_WARNING)
+            constraints.append(ExtractedConstraint(type="emoji_policy", value="none"))
+        elif "sparse" in modes:
+            policy.emoji_policy = "sparse"
+            counts = [c for m, c in emoji_signals if m == "sparse" and c is not None]
+            if counts:
+                policy.emoji_max_count = min(counts)
+            if ("allowed" in modes or "many" in modes) and CONFLICT_WARNING not in policy.warnings:
+                policy.warnings.append(CONFLICT_WARNING)
+            constraints.append(
+                ExtractedConstraint(type="emoji_policy", value="sparse", max=policy.emoji_max_count)
+            )
+        elif "many" in modes:
+            policy.emoji_policy = "many"
+            constraints.append(ExtractedConstraint(type="emoji_policy", value="many"))
+        else:
+            policy.emoji_policy = "allowed"
+            constraints.append(ExtractedConstraint(type="emoji_policy", value="allowed"))
+
+    # 2. Hashtag rules
+    hashtag_signals: List[tuple[str, Optional[int], Optional[int]]] = []
+    for clause in clauses:
+        if _HASHTAG_NEGATION_RE.search(clause):
+            hashtag_signals.append(("none", 0, 0))
+        elif (m_hlim := _HASHTAG_LIMIT_RE.search(clause)):
+            n = int(m_hlim.group(1))
+            if n <= 0:
+                hashtag_signals.append(("none", 0, 0))
+            else:
+                hashtag_signals.append(("limit", 0, n))
+        elif (m_hr := _HASHTAG_RANGE_RE.search(clause)):
+            a, b = int(m_hr.group(1)), int(m_hr.group(2))
+            hashtag_signals.append(("range", min(a, b), max(a, b)))
+
+    if hashtag_signals:
+        h_modes = {m for m, _, _ in hashtag_signals}
+        if "none" in h_modes:
+            policy.hashtags_in_body = False
+            policy.hashtags_min = 0
+            policy.hashtags_max = 0
+            if len(h_modes) > 1 and CONFLICT_WARNING not in policy.warnings:
+                policy.warnings.append(CONFLICT_WARNING)
+            constraints.append(ExtractedConstraint(type="hashtag_count", min=0, max=0))
+        elif "limit" in h_modes:
+            max_h = min(mx for m, _, mx in hashtag_signals if m == "limit" and mx is not None)
+            policy.hashtags_min = 0
+            policy.hashtags_max = max_h
+            constraints.append(ExtractedConstraint(type="hashtag_count", min=0, max=max_h))
+        else:
+            mn, mx = hashtag_signals[-1][1], hashtag_signals[-1][2]
+            policy.hashtags_in_body = True
+            policy.hashtags_min = mn
+            policy.hashtags_max = mx
+            constraints.append(ExtractedConstraint(type="hashtag_count", min=mn, max=mx))
+
+    # 3. Question ending rules
+    q_signals: List[str] = []
+    for clause in clauses:
+        if _Q_END_NEGATION_RE.search(clause):
+            q_signals.append("forbidden")
+        elif _Q_END_REQUIRED_RE.search(clause):
+            q_signals.append("required")
+
+    if q_signals:
+        if "forbidden" in q_signals:
+            policy.question_ending = "forbidden"
+            if "required" in q_signals and CONFLICT_WARNING not in policy.warnings:
+                policy.warnings.append(CONFLICT_WARNING)
+            constraints.append(ExtractedConstraint(type="question_ending", value="forbidden"))
+        else:
+            policy.question_ending = "required"
+            constraints.append(ExtractedConstraint(type="question_ending", value="required"))
 
     lower = clean.lower()
-    policy = CustomInstructionPolicy()
 
-    # Emoji rules
-    if re.search(r"\bno\s+emojis?\b|\bnever\s+use\s+emojis?\b", lower):
-        policy.emoji_policy = "none"
-    elif re.search(r"\b(?:lot\s+of|lots\s+of|many|heavy|plenty\s+of|generous)\s+emojis?\b", lower):
-        policy.emoji_policy = "many"
-    elif re.search(r"\b(?:use|include|add|allow)(?:\s+\w+){0,3}\s+emojis?\b", lower):
-        policy.emoji_policy = "allowed"
-
-    # Hashtag rules
-    if re.search(r"\bno\s+hashtags?\b|\b0\s+hashtags?\b|\bnever\s+use\s+hashtags?\b", lower):
-        policy.hashtags_in_body = False
-        policy.hashtags_min = 0
-        policy.hashtags_max = 0
-
-    # Banned words / phrases
+    # 4. Banned words / phrases
     for m in re.finditer(
         r"(?:never\s+use(?:\s+the\s+word)?|avoid(?:\s+the\s+word)?|ban(?:\s+the\s+word)?)\s+['\"]([^'\"]{2,60})['\"]",
         clean,
@@ -465,32 +625,73 @@ def distill_custom_instructions_to_policy(
         w = m.group(1).strip()
         if w and w not in policy.banned_words:
             policy.banned_words.append(w)
+            constraints.append(ExtractedConstraint(type="banned_phrase", value=w))
 
-    # Question hook rules
-    if re.search(r"\bnever\s+start(?:\s+\w+){0,3}\s+with\s+a\s+question\b|\bno\s+question\s+hooks?\b", lower):
+    # 5. Question / number hook rules
+    if re.search(r"\b(?:never|do\s+not|don't|dont)\s+start(?:\s+\w+){0,3}\s+with\s+a\s+question\b|\bno\s+question\s+hooks?\b", lower):
         policy.no_question_hooks = True
     if re.search(r"\balways\s+start(?:\s+\w+){0,3}\s+with\s+a\s+number\b", lower):
         policy.require_number_hook = True
 
-    # Question ending rules
-    if re.search(r"\balways\s+end\s+with\s+a\s+question\b", lower):
-        policy.question_ending = "required"
-    elif re.search(r"\bnever\s+end\s+with\s+a\s+question\b|\bno\s+question\s+at\s+the\s+end\b", lower):
-        policy.question_ending = "forbidden"
-
-    # Required end phrase
+    # 6. Required end phrase
     m_end = re.search(r"(?:always\s+end\s+with|sign[- ]off\s*:?)\s+[\"']([^\"']{3,100})[\"']", clean, re.IGNORECASE)
     if m_end:
-        policy.required_end_phrase = m_end.group(1).strip()
+        phrase = m_end.group(1).strip()
+        policy.required_end_phrase = phrase
+        constraints.append(ExtractedConstraint(type="required_phrase_end", value=phrase))
 
-    # Length bounds
+    # 7. Length bounds
     m_under = re.search(r"(?:under|max(?:imum)?|at\s+most|less\s+than)\s+(\d{3,4})\s+char", lower)
     if m_under:
         policy.length_max = int(m_under.group(1))
+    m_min = re.search(r"(?:at\s+least|min(?:imum)?|more\s+than)\s+(\d{3,4})\s+char", lower)
+    if m_min:
+        policy.length_min = int(m_min.group(1))
     m_between = re.search(r"between\s+(\d{3,4})\s+(?:and|to|-)\s+(\d{3,4})\s+char", lower)
     if m_between:
         policy.length_min = int(m_between.group(1))
         policy.length_max = int(m_between.group(2))
+    if policy.length_min is not None or policy.length_max is not None:
+        constraints.append(ExtractedConstraint(type="length_chars", min=policy.length_min, max=policy.length_max))
+
+    # 8. First line max chars
+    m_first = re.search(
+        r"(?:first\s+line|hook)\s+(?:under|max(?:imum)?|at\s+most|less\s+than)\s+(\d{2,3})\s+char",
+        lower,
+    )
+    if m_first:
+        policy.first_line_max = int(m_first.group(1))
+        constraints.append(ExtractedConstraint(type="first_line_max_chars", max=policy.first_line_max))
+
+    # 9. Paragraph count
+    m_pbetween = re.search(r"between\s+(\d{1,2})\s+(?:and|to|-)\s+(\d{1,2})\s+paragraphs?", lower)
+    if m_pbetween:
+        policy.paragraphs_min = int(m_pbetween.group(1))
+        policy.paragraphs_max = int(m_pbetween.group(2))
+    else:
+        m_pmax = re.search(r"(?:max(?:imum)?|at\s+most|under)\s+(\d{1,2})\s+paragraphs?", lower)
+        if m_pmax:
+            policy.paragraphs_max = int(m_pmax.group(1))
+    if policy.paragraphs_min is not None or policy.paragraphs_max is not None:
+        constraints.append(
+            ExtractedConstraint(type="paragraph_count", min=policy.paragraphs_min, max=policy.paragraphs_max)
+        )
+
+    return policy, constraints
+
+
+def distill_custom_instructions_to_policy(
+    text: str, model: Optional[Any] = None
+) -> CustomInstructionPolicy:
+    """Parse custom_instructions into a strict CustomInstructionPolicy schema.
+    Deterministic rules run first; optional LLM extraction is validated against the schema.
+    Deterministic negation checks can never be overridden by LLM extraction.
+    """
+    clean = (text or "").strip()
+    if not clean:
+        return CustomInstructionPolicy()
+
+    policy, _ = _parse_instructions_deterministic(clean)
 
     if model is not None:
         try:
@@ -511,9 +712,10 @@ def distill_custom_instructions_to_policy(
             parsed = res.get("parsed")
             if parsed is not None:
                 validated = CustomInstructionPolicy.model_validate(parsed.model_dump())
-                # Deterministic findings take precedence if already matched; fill any missing fields from LLM
+                # Deterministic findings ALWAYS take precedence if already matched; fill any missing fields from LLM
                 for field_name in (
                     "emoji_policy",
+                    "emoji_max_count",
                     "hashtags_in_body",
                     "hashtags_min",
                     "hashtags_max",
@@ -521,11 +723,24 @@ def distill_custom_instructions_to_policy(
                     "question_ending",
                     "length_min",
                     "length_max",
+                    "first_line_max",
+                    "paragraphs_min",
+                    "paragraphs_max",
                     "no_question_hooks",
                     "require_number_hook",
                 ):
                     if getattr(policy, field_name) is None and getattr(validated, field_name) is not None:
                         setattr(policy, field_name, getattr(validated, field_name))
+                # Hard negation safety net over LLM output
+                if _EMOJI_NEGATION_RE.search(clean):
+                    policy.emoji_policy = "none"
+                    policy.emoji_max_count = 0
+                if _HASHTAG_NEGATION_RE.search(clean):
+                    policy.hashtags_in_body = False
+                    policy.hashtags_min = 0
+                    policy.hashtags_max = 0
+                if _Q_END_NEGATION_RE.search(clean):
+                    policy.question_ending = "forbidden"
                 for bw in validated.banned_words:
                     if bw and bw not in policy.banned_words:
                         policy.banned_words.append(bw)
@@ -544,41 +759,8 @@ def distill_instructions_heuristic(text: str) -> DistilledInstructions:
     if not clean:
         return DistilledInstructions()
 
-    constraints: List[ExtractedConstraint] = []
-    lower = clean.lower()
-
-    m_under = re.search(r"(?:under|max(?:imum)?|at\s+most|less\s+than)\s+(\d{3,4})\s+char", lower)
-    if m_under:
-        constraints.append(ExtractedConstraint(type="length_chars", max=int(m_under.group(1))))
-
-    m_between = re.search(r"between\s+(\d{3,4})\s+(?:and|to|-)\s+(\d{3,4})\s+char", lower)
-    if m_between:
-        constraints.append(
-            ExtractedConstraint(
-                type="length_chars",
-                min=int(m_between.group(1)),
-                max=int(m_between.group(2)),
-            )
-        )
-
-    if re.search(r"\bno\s+emojis?\b|\bnever\s+use\s+emojis?\b", lower):
-        constraints.append(ExtractedConstraint(type="emoji_policy", value="none"))
-    elif re.search(r"\b(?:use|include|add|allow)(?:\s+\w+){0,3}\s+emojis?\b", lower):
-        constraints.append(ExtractedConstraint(type="emoji_policy", value="allowed"))
-
-    if re.search(r"\bno\s+hashtags?\b|\b0\s+hashtags?\b", lower):
-        constraints.append(ExtractedConstraint(type="hashtag_count", min=0, max=0))
-
-    if re.search(r"\balways\s+end\s+with\s+a\s+question\b", lower):
-        constraints.append(ExtractedConstraint(type="question_ending", value="required"))
-    elif re.search(r"\bnever\s+end\s+with\s+a\s+question\b|\bno\s+question\s+at\s+the\s+end\b", lower):
-        constraints.append(ExtractedConstraint(type="question_ending", value="forbidden"))
-
-    m_end = re.search(r"(?:always\s+end\s+with|sign[- ]off\s*:?)\s+[\"']([^\"']{3,100})[\"']", clean, re.IGNORECASE)
-    if m_end:
-        constraints.append(ExtractedConstraint(type="required_phrase_end", value=m_end.group(1).strip()))
-
-    return DistilledInstructions(constraints=constraints)
+    policy, constraints = _parse_instructions_deterministic(clean)
+    return DistilledInstructions(constraints=constraints, warnings=policy.warnings)
 
 
 def distill_instructions(text: str, model: Optional[Any] = None) -> DistilledInstructions:
@@ -603,10 +785,15 @@ def distill_instructions(text: str, model: Optional[Any] = None) -> DistilledIns
         res = (prompt | structured).invoke({"instructions": text[:4000]})
         parsed: Optional[DistilledInstructions] = res.get("parsed")
         if parsed is not None:
+            # Deterministic constraints take precedence over LLM constraints of the same type
+            by_type: Dict[str, ExtractedConstraint] = {c.type: c for c in (parsed.constraints or [])}
+            for c in base.constraints:
+                by_type[c.type] = c
             return DistilledInstructions(
-                constraints=parsed.constraints or base.constraints,
+                constraints=list(by_type.values()),
                 topics_include=parsed.topics_include,
                 topics_avoid=parsed.topics_avoid,
+                warnings=base.warnings,
             )
     except Exception as exc:
         logger.debug(f"LLM instruction distillation fallback to heuristic: {exc}")
