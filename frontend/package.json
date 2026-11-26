@@ -4,10 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/check-use-server.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "check:use-server": "node scripts/check-use-server.mjs",
     "check:design": "node scripts/check-design.mjs",
     "check:legal": "node scripts/check-legal.mjs"
   },

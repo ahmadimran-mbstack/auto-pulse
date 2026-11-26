@@ -1,35 +1,8 @@
 "use server";
 
 import { auth } from "@/lib/auth/server";
+import { AUTH_COOKIE_NAMES } from "@/lib/auth/constants";
 import { cookies } from "next/headers";
-
-export const AUTH_COOKIE_NAMES = [
-  "__Secure-neon-auth.session_token",
-  "__Secure-neon-auth.local.session_data",
-  "__Secure-neon-auth.session_challenge",
-  "__Secure-neon-auth.session_challange",
-  "neon-auth.session_token",
-  "neon-auth.local.session_data",
-  "neon-auth.session_challenge",
-  "neon-auth.session_challange",
-  "__Secure-neon-auth.csrf_token",
-  "neon-auth.csrf_token",
-  "__Secure-better-auth.session_token",
-  "__Secure-better-auth.local.session_data",
-  "__Secure-better-auth.session_challenge",
-  "__Secure-better-auth.session_challange",
-  "__Host-better-auth.session_token",
-  "better-auth.session_token",
-  "better-auth.local.session_data",
-  "better-auth.session_challenge",
-  "better-auth.session_challange",
-  "better-auth.csrf_token",
-  "autopulse_token",
-  "autopulse_verify_email",
-  "autopulse_onboarding_completed",
-  "session_token",
-  "session",
-];
 
 // Server action to terminate the user session and clear all auth cookies
 // Reference: https://neon.com/docs/auth/quick-start/nextjs-api-only

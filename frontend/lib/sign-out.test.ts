@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { AUTH_COOKIE_NAMES, signOutAction } from "../app/app/actions";
+import { AUTH_COOKIE_NAMES } from "./auth/constants";
+import { signOutAction } from "../app/app/actions";
 import { POST as authProxyPost } from "../app/api/auth/[...path]/route";
 
 // Mock next/headers cookies
