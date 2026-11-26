@@ -18,6 +18,9 @@ from app.api.routes.billing import router as billing_router
 from app.api.routes.admin_payments import router as admin_payments_router
 from app.api.routes.admin_users import router as admin_users_router
 from app.api.routes.admin_subscribers import router as admin_subscribers_router
+from app.api.routes.admin_support import router as admin_support_router
+from app.api.routes.admin_export import router as admin_export_router
+from app.api.routes.support import router as support_router
 from app.api.routes.profile import router as profile_router
 from app.api.routes.connections import router as connections_router
 from app.api.routes.posts import router as posts_router
@@ -249,6 +252,9 @@ app.include_router(billing_router)
 app.include_router(admin_payments_router)
 app.include_router(admin_users_router)
 app.include_router(admin_subscribers_router)
+app.include_router(admin_support_router)
+app.include_router(admin_export_router)
+app.include_router(support_router)
 
 
 @app.on_event("startup")

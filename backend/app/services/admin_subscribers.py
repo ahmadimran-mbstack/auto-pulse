@@ -16,10 +16,14 @@ from app.core.plans import (
     MONTHLY_WINDOW_DAYS,
     PKR_PER_USD,
     PLAN_RATE_LIMITS,
-    PLANS,
-    PUBLIC_PLAN_ORDER,
     RATE_LIMIT_WINDOWS,
+    compute_annual_cents,
     get_plan,
+    get_plan_entries,
+    get_plan_rate_limit_tier,
+    get_plan_tier,
+    get_plans,
+    get_purchasable_plan_ids,
     usd_to_pkr_approx,
 )
 from app.models.admin import AdminAuditLog
@@ -31,39 +35,51 @@ from app.services.entitlements import (
     invalidate_effective_plan_cache,
 )
 from app.services.notifications import send_user_notification
-from app.services.payments import PLAN_TIER
 from app.services.quota import COUNTED_RUN_STATUSES
 
 logger = logging.getLogger(__name__)
 
 
+def _paid_plan_ids_sql() -> str:
+    purchasable = get_purchasable_plan_ids()
+    if not purchasable:
+        return "'__none__'"
+    return ", ".join("'" + pid.replace("'", "''") + "'" for pid in purchasable)
+
+
 def _plan_limit_sql_case() -> str:
     whens = []
-    for pid, cfg in PLANS.items():
+    for pid, cfg in get_plans().items():
+        safe_pid = pid.replace("'", "''")
         if cfg.scheduled_posts_per_period is None:
-            whens.append(f"WHEN '{pid}' THEN NULL")
+            whens.append(f"WHEN '{safe_pid}' THEN NULL")
         else:
-            whens.append(f"WHEN '{pid}' THEN {int(cfg.scheduled_posts_per_period)}")
+            whens.append(f"WHEN '{safe_pid}' THEN {int(cfg.scheduled_posts_per_period)}")
+    if not whens:
+        return "3"
     return f"CASE COALESCE(s.plan_id, 'trial') {' '.join(whens)} ELSE 3 END"
 
 
 def _monthly_rate_sql_case() -> str:
-    """Compute monthly rate in USD from PLANS (annual_price_usd / 12 for annual)."""
+    """Compute monthly rate in USD from get_plan_entries() (annual_price_cents / 12 for annual)."""
     whens = []
-    for pid, cfg in PLANS.items():
-        if pid in ("trial", "internal") or cfg.monthly_price_usd is None:
-            whens.append(f"WHEN '{pid}' THEN 0.0")
+    for pid, entry in get_plan_entries().items():
+        safe_pid = pid.replace("'", "''")
+        if entry.is_system or entry.monthly_price_cents is None or entry.monthly_price_cents <= 0:
+            whens.append(f"WHEN '{safe_pid}' THEN 0.0")
         else:
-            monthly_val = float(cfg.monthly_price_usd)
-            annual_val = (
-                float(cfg.annual_price_usd)
-                if cfg.annual_price_usd is not None
-                else round(monthly_val * 12 * (1.0 - ANNUAL_DISCOUNT), 2)
+            monthly_val = round(entry.monthly_price_cents / 100.0, 2)
+            annual_cents = (
+                entry.annual_price_cents
+                if entry.annual_price_cents is not None
+                else (compute_annual_cents(entry.monthly_price_cents)[0] or 0)
             )
-            annual_monthly = round(annual_val / 12.0, 2)
+            annual_monthly = round((annual_cents / 100.0) / 12.0, 2)
             whens.append(
-                f"WHEN '{pid}' THEN CASE WHEN s.billing_interval = 'annual' THEN {annual_monthly} ELSE {monthly_val} END"
+                f"WHEN '{safe_pid}' THEN CASE WHEN s.billing_interval = 'annual' THEN {annual_monthly} ELSE {monthly_val} END"
             )
+    if not whens:
+        return "0.0"
     return f"CASE COALESCE(s.plan_id, 'trial') {' '.join(whens)} ELSE 0.0 END"
 
 
@@ -131,7 +147,8 @@ def change_user_plan(
 
     new_plan = plan_id.strip().lower()
     expected_plan = expected_plan_id.strip().lower()
-    if new_plan not in PLANS:
+    plans_map = get_plans()
+    if new_plan not in plans_map:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"code": "invalid_plan", "message": f"Unknown plan '{plan_id}'."},
@@ -186,8 +203,8 @@ def change_user_plan(
     old_interval = sub.billing_interval
 
     new_sub_status = "trialing" if new_plan == "trial" else "active"
-    new_tier = PLAN_TIER.get(new_plan, 0)
-    pending_tier = PLAN_TIER.get(sub.pending_plan_id or "", -1)
+    new_tier = get_plan_tier(new_plan)
+    pending_tier = get_plan_tier(sub.pending_plan_id or "")
     # Clear pending downgrade only if it conflicts with the new plan (same plan or higher/equal tier)
     clear_pending = bool(
         sub.pending_plan_id and (sub.pending_plan_id == new_plan or pending_tier >= new_tier or new_plan == "trial")
@@ -267,8 +284,8 @@ def change_user_plan(
     email_status = "not_sent"
     email_error: Optional[str] = None
     if will_send_email:
-        old_name = PLANS[old_plan_id].name if old_plan_id in PLANS else old_plan_id
-        new_name = PLANS[new_plan].name
+        old_name = plans_map[old_plan_id].name if old_plan_id in plans_map else old_plan_id
+        new_name = plans_map[new_plan].name
         display_name = user_row.display_name or target_email.split("@")[0]
         email_res = send_user_notification(
             user_id=target_user_id,
@@ -292,7 +309,7 @@ def change_user_plan(
     return {
         "id": target_user_id,
         "plan_id": updated_row.plan_id,
-        "plan_name": PLANS[updated_row.plan_id].name,
+        "plan_name": plans_map[updated_row.plan_id].name if updated_row.plan_id in plans_map else updated_row.plan_id,
         "billing_interval": updated_row.billing_interval,
         "current_period_start": updated_row.current_period_start.isoformat() if updated_row.current_period_start else None,
         "current_period_end": updated_row.current_period_end.isoformat() if updated_row.current_period_end else None,
@@ -453,17 +470,18 @@ def list_admin_subscribers(
         )
     """
 
+    paid_in_sql = _paid_plan_ids_sql()
     summary_row = db.execute(
         text(
             f"""
             SELECT
               COUNT(*) FILTER (
-                WHERE COALESCE(s.plan_id, 'trial') IN ('starter', 'pro', 'business')
+                WHERE COALESCE(s.plan_id, 'trial') IN ({paid_in_sql})
                   AND ({eff_sql}) = 'active'
               )::int AS paid_subscribers,
               COALESCE(SUM(
                 CASE
-                  WHEN COALESCE(s.plan_id, 'trial') IN ('starter', 'pro', 'business')
+                  WHEN COALESCE(s.plan_id, 'trial') IN ({paid_in_sql})
                     AND ({eff_sql}) = 'active'
                     AND COALESCE(p.account_status, 'active') = 'active'
                   THEN ({rate_sql})
@@ -471,7 +489,7 @@ def list_admin_subscribers(
                 END
               ), 0.0)::float AS estimated_mrr_usd,
               COUNT(*) FILTER (
-                WHERE COALESCE(s.plan_id, 'trial') IN ('starter', 'pro', 'business')
+                WHERE COALESCE(s.plan_id, 'trial') IN ({paid_in_sql})
                   AND ({eff_sql}) = 'active'
                   AND s.current_period_end IS NOT NULL
                   AND s.current_period_end > now()
@@ -496,9 +514,10 @@ def list_admin_subscribers(
         params["q"] = f"%{search.strip()}%"
         where_clauses.append("(u.email ILIKE :q OR COALESCE(p.display_name, u.name, '') ILIKE :q)")
 
+    plans_map = get_plans()
     if plan and plan.strip():
         pl = plan.strip().lower()
-        if pl not in PLANS:
+        if pl not in plans_map:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={"code": "invalid_plan", "message": "Invalid plan filter."},
@@ -584,7 +603,7 @@ def list_admin_subscribers(
     now_utc = datetime.datetime.now(datetime.timezone.utc)
     items: List[Dict[str, Any]] = []
     for r in rows:
-        plan_cfg = PLANS.get(r.plan_id)
+        plan_cfg = plans_map.get(r.plan_id)
         end_dt = r.trial_ends_at if r.plan_id == "trial" else r.current_period_end
         days_left: Optional[int] = None
         is_overdue = r.effective_status == "expired"
@@ -667,7 +686,7 @@ def list_admin_usage(
 
     if view == "paid":
         where_clauses = [
-            "COALESCE(s.plan_id, 'trial') IN ('starter', 'pro', 'business', 'internal')",
+            "COALESCE(s.plan_id, 'trial') != 'trial'",
             f"({eff_sql}) = 'active'",
         ]
     else:
@@ -764,9 +783,10 @@ def list_admin_usage(
     ).fetchall()
 
     now_utc = datetime.datetime.now(datetime.timezone.utc)
+    plans_map = get_plans()
     items: List[Dict[str, Any]] = []
     for r in rows:
-        plan_cfg = PLANS.get(r.plan_id, get_plan("trial"))
+        plan_cfg = plans_map.get(r.plan_id) or get_plan("trial")
         sched_limit = plan_cfg.scheduled_posts_per_period
         quota_used = int(r.quota_used or 0)
         quota_pct = (
@@ -852,9 +872,15 @@ def get_admin_plans_overview(db: Session) -> Dict[str, Any]:
         for r in rows
     }
 
+    entries = sorted(
+        get_plan_entries().values(),
+        key=lambda e: (not e.config.is_public, e.sort_order, e.config.id),
+    )
     items: List[Dict[str, Any]] = []
-    for pid in (*PUBLIC_PLAN_ORDER, "internal"):
-        cfg = PLANS[pid]
+    for entry in entries:
+        cfg = entry.config
+        pid = cfg.id
+        tier = get_plan_rate_limit_tier(pid)
         c = counts_by_plan.get(pid, {"total": 0, "active": 0})
         items.append(
             {
@@ -877,9 +903,9 @@ def get_admin_plans_overview(db: Session) -> Dict[str, Any]:
                     "docs_token_limit": cfg.docs_token_limit,
                 },
                 "rate_limits": {
-                    "api_per_min": PLAN_RATE_LIMITS["api"].get(pid),
-                    "generate_per_hour": PLAN_RATE_LIMITS["generate"].get(pid),
-                    "payment_submit_per_hour": PLAN_RATE_LIMITS["payment_submit"].get(pid),
+                    "api_per_min": PLAN_RATE_LIMITS["api"].get(tier),
+                    "generate_per_hour": PLAN_RATE_LIMITS["generate"].get(tier),
+                    "payment_submit_per_hour": PLAN_RATE_LIMITS["payment_submit"].get(tier),
                 },
                 "features": {
                     "approval_email": cfg.approval_email,

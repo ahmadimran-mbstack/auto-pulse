@@ -8,7 +8,7 @@ from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from app.core.plans import PLANS, get_plan
+from app.core.plans import get_plan, get_plans
 from app.models.profile import Profile
 from app.models.subscription import ReminderSent, Subscription
 from app.services.email import send_subscription_reminder_email
@@ -47,7 +47,8 @@ def _claim_and_send(
 
     profile = db.scalars(select(Profile).where(Profile.user_id == sub.user_id)).first()
     display_name = (profile.display_name if profile and profile.display_name else "Creator")
-    plan = get_plan(sub.plan_id) if sub.plan_id in PLANS else get_plan("trial")
+    plans_map = get_plans()
+    plan = plans_map.get(sub.plan_id) or get_plan("trial")
 
     try:
         send_subscription_reminder_email(

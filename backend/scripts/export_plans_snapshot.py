@@ -19,7 +19,7 @@ SNAPSHOT_PATH = REPO_ROOT / "frontend" / "lib" / "plans.snapshot.json"
 
 
 def build_snapshot_dict() -> dict:
-    payload = get_public_plans_payload()
+    payload = get_public_plans_payload(use_defaults=True)
     return {
         "_note": "Generated from backend/app/core/plans.py by backend/scripts/export_plans_snapshot.py. Do not edit by hand.",
         **payload,

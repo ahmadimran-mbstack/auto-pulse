@@ -8,7 +8,13 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import User, current_user
 from app.core.config import settings
-from app.core.plans import PLAN_RATE_LIMITS, PLANS, RATE_LIMIT_WINDOWS
+from app.core.plans import (
+    PLAN_RATE_LIMITS,
+    RATE_LIMIT_WINDOWS,
+    get_plan_rate_limit_tier,
+    get_plans,
+    get_purchasable_plan_ids,
+)
 from app.db.session import get_db
 
 logger = logging.getLogger(__name__)
@@ -100,8 +106,13 @@ def enforce_rate_limit(
 
 
 def _next_upgrade_plan_id(plan_id: str) -> Optional[str]:
-    order = {"trial": "starter", "starter": "pro", "pro": "business", "business": None, "internal": None}
-    return order.get(plan_id, "starter")
+    purchasable = list(get_purchasable_plan_ids())
+    if plan_id == "internal":
+        return None
+    if plan_id in purchasable:
+        idx = purchasable.index(plan_id)
+        return purchasable[idx + 1] if idx + 1 < len(purchasable) else None
+    return purchasable[0] if purchasable else None
 
 
 def _fixed_window_check(
@@ -185,22 +196,26 @@ def rate_limit(bucket: str) -> Callable[..., None]:
         eff = get_effective_plan(db, user.id)
         plan_id = eff["plan_id"]
         eff_status = eff["status"]
-        plan_cfg = PLANS.get(plan_id, PLANS["trial"])
+        plans_map = get_plans()
+        plan_cfg = plans_map.get(plan_id) or plans_map["trial"]
+        rate_tier = get_plan_rate_limit_tier(plan_id)
 
         if eff_status == "expired":
             if bucket == "generate":
+                purchasable = get_purchasable_plan_ids()
+                first_paid = purchasable[0] if purchasable else "starter"
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail={
                         "code": "plan_expired",
                         "error_category": "plan_expired",
                         "message": "Your plan has ended. Upgrade to continue.",
-                        "upgrade_to": "starter" if plan_id == "trial" else plan_id,
+                        "upgrade_to": first_paid if plan_id == "trial" else plan_id,
                     },
                 )
             limit = int(limits_map.get("expired") or limits_map.get("trial") or 30)
         else:
-            limit = int(limits_map.get(plan_id) or limits_map.get("trial") or 30)
+            limit = int(limits_map.get(rate_tier) or limits_map.get("trial") or 30)
 
         allowed, remaining, retry_after, redis_ok = _fixed_window_check(
             bucket=bucket,

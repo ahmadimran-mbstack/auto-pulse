@@ -14,10 +14,11 @@ from app.core.plans import (
     ANNUAL_PERIOD_DAYS,
     MONTHLY_WINDOW_DAYS,
     PKR_PER_USD,
-    PLANS,
-    PUBLIC_PLAN_ORDER,
     TRIAL_DAYS,
     get_plan,
+    get_plan_entries,
+    get_plans,
+    get_public_plan_order,
     usd_to_pkr_approx,
 )
 from app.models.profile import Profile
@@ -144,7 +145,8 @@ def get_effective_plan(
                 if raw:
                     cached = json.loads(raw)
                     pid = cached.get("plan_id", "trial")
-                    plan = get_plan(pid) if pid in PLANS else get_plan("trial")
+                    plans_map = get_plans()
+                    plan = plans_map.get(pid) or plans_map["trial"]
                     return {
                         "plan_id": plan.id,
                         "plan": plan,
@@ -159,7 +161,8 @@ def get_effective_plan(
 
     sub = ensure_trial_subscription(db, user_id)
     apply_pending_downgrade_if_due(db, sub, now=now)
-    plan = get_plan(sub.plan_id) if sub.plan_id in PLANS else get_plan("trial")
+    plans_map = get_plans()
+    plan = plans_map.get(sub.plan_id) or plans_map["trial"]
     computed_status = compute_subscription_status(sub, now=now)
 
     payload = {
@@ -191,7 +194,7 @@ def apply_pending_downgrade_if_due(
     current_time = _utc_now(now)
     if (
         sub.pending_plan_id
-        and sub.pending_plan_id in PLANS
+        and sub.pending_plan_id in get_plans()
         and sub.current_period_end is not None
         and current_time >= _utc_now(sub.current_period_end)
     ):
@@ -270,8 +273,9 @@ def set_user_plan(
     provider_ref: Optional[str] = None,
 ) -> Subscription:
     """Assign a user's plan and update period dates."""
-    if plan_id not in PLANS:
-        raise ValueError(f"Unknown plan '{plan_id}'. Valid plans: {', '.join(PLANS.keys())}")
+    plans_map = get_plans()
+    if plan_id not in plans_map:
+        raise ValueError(f"Unknown plan '{plan_id}'. Valid plans: {', '.join(plans_map.keys())}")
 
     current_time = _utc_now(now)
     sub = ensure_trial_subscription(db, user_id)
@@ -370,13 +374,29 @@ def activate_paid_subscription(
     return sub, before_snapshot
 
 
-def get_public_plans_payload() -> Dict[str, Any]:
-    """Return public plans payload for GET /api/plans (excludes internal)."""
+def get_public_plans_payload(use_defaults: bool = False) -> Dict[str, Any]:
+    """Return public plans payload for GET /api/plans (excludes internal and inactive)."""
+    from app.core.plans import _FALLBACK_ENTRIES
+
     items: List[Dict[str, Any]] = []
-    for pid in PUBLIC_PLAN_ORDER:
-        plan = PLANS[pid]
-        if not plan.is_public:
+    if use_defaults:
+        entries_map = _FALLBACK_ENTRIES
+        order = ("trial", "starter", "pro", "business")
+    else:
+        entries_map = get_plan_entries()
+        order = get_public_plan_order()
+    for pid in order:
+        entry = entries_map[pid]
+        plan = entry.config
+        if not plan.is_public or not entry.is_active:
             continue
+        is_purchasable = bool(
+            entry.is_active
+            and plan.is_public
+            and not entry.is_system
+            and entry.monthly_price_cents is not None
+            and entry.monthly_price_cents > 0
+        )
         items.append(
             {
                 "id": plan.id,
@@ -388,6 +408,11 @@ def get_public_plans_payload() -> Dict[str, Any]:
                 "annual_monthly_equivalent_usd": plan.annual_monthly_equivalent_usd,
                 "annual_monthly_equivalent_pkr_approx": usd_to_pkr_approx(plan.annual_monthly_equivalent_usd),
                 "plan_length_days": plan.plan_length_days,
+                "sort_order": entry.sort_order,
+                "is_popular": entry.is_popular,
+                "is_system": entry.is_system,
+                "is_purchasable": is_purchasable,
+                "extra_features": list(entry.extra_features),
                 "limits": {
                     "linkedin_profiles": plan.linkedin_profiles,
                     "scheduled_posts": plan.scheduled_posts_per_period,
@@ -409,5 +434,6 @@ def get_public_plans_payload() -> Dict[str, Any]:
         "currency": "USD",
         "pkr_per_usd": PKR_PER_USD,
         "annual_discount": ANNUAL_DISCOUNT,
+        "trial_days": TRIAL_DAYS,
         "plans": items,
     }

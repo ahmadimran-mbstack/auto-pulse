@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import User, current_user
 from app.core.config import settings
 from app.core.limiter import rate_limit
-from app.core.plans import PLANS, PURCHASABLE_PLANS, compute_plan_price
+from app.core.plans import compute_plan_price, get_plans, get_purchasable_plan_ids
 from app.db.session import get_db
 from app.models.subscription import Payment
 from app.services.entitlements import get_effective_plan
@@ -35,10 +35,11 @@ class PaymentSubmitRequest(BaseModel):
     )
     method: str
     transaction_id: str
+    expected_amount_usd_cents: Optional[int] = None
 
 
-def _serialize_payment(p: Payment) -> Dict[str, Any]:
-    plan_cfg = PLANS.get(p.plan_id)
+def _serialize_payment(p: Payment, plans_map: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    plan_cfg = (plans_map if plans_map is not None else get_plans()).get(p.plan_id)
     return {
         "id": str(p.id),
         "plan_id": p.plan_id,
@@ -53,6 +54,10 @@ def _serialize_payment(p: Payment) -> Dict[str, Any]:
         "submitted_at": p.submitted_at.isoformat() if p.submitted_at else None,
         "reviewed_at": p.reviewed_at.isoformat() if p.reviewed_at else None,
         "reject_reason": p.reject_reason,
+        "source": getattr(p, "source", "checkout"),
+        "note": getattr(p, "note", None),
+        "voided_at": p.voided_at.isoformat() if getattr(p, "voided_at", None) else None,
+        "void_reason": getattr(p, "void_reason", None),
     }
 
 
@@ -62,9 +67,12 @@ def get_billing_status(
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Return current effective plan, status, period end, days left, pending payment, and last 10 payments."""
+    from app.core.plans import ANNUAL_DISCOUNT, TRIAL_DAYS, get_plan_entries
+
     eff = get_effective_plan(db, user.id)
     db.commit()
     plan = eff["plan"]
+    entry = get_plan_entries().get(plan.id)
     status_val = eff["status"]
 
     end_iso = eff["trial_ends_at"] if plan.id == "trial" else eff["current_period_end"]
@@ -89,6 +97,12 @@ def get_billing_status(
     return {
         "plan_id": plan.id,
         "plan_name": plan.name,
+        "is_active": entry.is_active if entry is not None else True,
+        "is_system": entry.is_system if entry is not None else False,
+        "monthly_price_usd": plan.monthly_price_usd,
+        "annual_price_usd": plan.annual_price_usd,
+        "annual_discount": ANNUAL_DISCOUNT,
+        "trial_days": TRIAL_DAYS,
         "status": status_val,
         "billing_interval": eff["billing_interval"],
         "period_end": end_iso,
@@ -107,7 +121,7 @@ def get_checkout_info(
     """Return server-authoritative checkout pricing and QR account details."""
     plan_clean = plan.strip().lower()
     interval_clean = interval.strip().lower()
-    if plan_clean not in PURCHASABLE_PLANS:
+    if plan_clean not in get_purchasable_plan_ids():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"code": "invalid_plan", "message": "Selected plan cannot be purchased."},
@@ -119,7 +133,7 @@ def get_checkout_info(
         )
 
     usd_cents, amount_pkr = compute_plan_price(plan_clean, interval_clean)
-    plan_cfg = PLANS[plan_clean]
+    plan_cfg = get_plans()[plan_clean]
     return {
         "plan_id": plan_clean,
         "plan_name": plan_cfg.name,
@@ -145,7 +159,7 @@ def submit_payment(
     method = payload.method.strip().lower()
     tx_id = payload.transaction_id.strip().upper()
 
-    if plan_id not in PURCHASABLE_PLANS:
+    if plan_id not in get_purchasable_plan_ids():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"code": "invalid_plan", "message": "Selected plan cannot be purchased."},
@@ -170,6 +184,23 @@ def submit_payment(
         )
 
     usd_cents, amount_pkr = compute_plan_price(plan_id, interval)
+    if (
+        payload.expected_amount_usd_cents is not None
+        and int(payload.expected_amount_usd_cents) != int(usd_cents)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "price_changed",
+                "message": (
+                    f"The price for this plan changed to ${usd_cents / 100.0:.2f} "
+                    f"(Rs {amount_pkr:,}). Please review and submit again."
+                ),
+                "amount_usd_cents": usd_cents,
+                "amount_usd": round(usd_cents / 100.0, 2),
+                "amount_pkr": amount_pkr,
+            },
+        )
     payment = Payment(
         user_id=user.id,
         user_email=user.email,

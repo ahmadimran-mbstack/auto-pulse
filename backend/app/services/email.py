@@ -395,9 +395,10 @@ def send_subscription_reminder_email(
     """Send trial (1d) or renewal (5d, 1d) reminder email."""
     billing_url = f"{settings.APP_BASE_URL.rstrip('/')}/app/billing"
     if reminder_type == "trial_1d":
+        from app.core.plans import TRIAL_DAYS
         subject = "Your AutoPulse free trial ends tomorrow"
         headline = "1 day left in your free trial"
-        body_line = f"Your 3-day AutoPulse free trial ends on {target_date_str}. Choose a plan to keep your scheduled LinkedIn posts running."
+        body_line = f"Your {TRIAL_DAYS}-day AutoPulse free trial ends on {target_date_str}. Choose a plan to keep your scheduled LinkedIn posts running."
     elif reminder_type == "renewal_1d":
         subject = f"Your AutoPulse {plan_name} plan renews tomorrow"
         headline = "1 day until plan renewal"

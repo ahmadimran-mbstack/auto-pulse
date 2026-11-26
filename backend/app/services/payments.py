@@ -6,21 +6,13 @@ from typing import Any, Dict, Optional
 
 from sqlalchemy.orm import Session
 
-from app.core.plans import PLANS
+from app.core.plans import get_plan_tier, get_plans, get_purchasable_plan_ids
 from app.models.subscription import Subscription
 from app.services.entitlements import (
     compute_subscription_status,
     ensure_trial_subscription,
     set_user_plan,
 )
-
-PLAN_TIER: Dict[str, int] = {
-    "trial": 0,
-    "starter": 1,
-    "pro": 2,
-    "business": 3,
-    "internal": 99,
-}
 
 
 def apply_plan_change(
@@ -33,7 +25,8 @@ def apply_plan_change(
     now: Optional[datetime.datetime] = None,
 ) -> Subscription:
     """Apply an upgrade immediately (new period, no proration) or schedule a downgrade at current_period_end."""
-    if new_plan_id not in PLANS:
+    plans_map = get_plans()
+    if new_plan_id not in plans_map:
         raise ValueError(f"Unknown plan '{new_plan_id}'")
 
     current_time = now or datetime.datetime.now(datetime.timezone.utc)
@@ -42,11 +35,11 @@ def apply_plan_change(
 
     sub = ensure_trial_subscription(db, user_id)
     current_status = compute_subscription_status(sub, now=current_time)
-    current_tier = PLAN_TIER.get(sub.plan_id, 0)
-    target_tier = PLAN_TIER.get(new_plan_id, 0)
+    current_tier = get_plan_tier(sub.plan_id)
+    target_tier = get_plan_tier(new_plan_id)
 
     is_active_paid = (
-        sub.plan_id in ("starter", "pro", "business")
+        sub.plan_id in get_purchasable_plan_ids()
         and current_status == "active"
         and sub.current_period_end is not None
         and sub.current_period_end > current_time

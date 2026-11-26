@@ -14,7 +14,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from sqlalchemy import text  # noqa: E402
-from app.core.plans import PLANS  # noqa: E402
+from app.core.plans import get_plans  # noqa: E402
 from app.db.session import SessionLocal  # noqa: E402
 from app.services.entitlements import get_entitlements, set_user_plan  # noqa: E402
 
@@ -33,7 +33,7 @@ def resolve_user_id_by_email(db, email: str) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Set a user's AutoPulse plan.")
     parser.add_argument("email", help="User email address")
-    parser.add_argument("plan", choices=list(PLANS.keys()), help="Target plan id")
+    parser.add_argument("plan", choices=list(get_plans().keys()), help="Target plan id")
     parser.add_argument(
         "--interval",
         choices=["monthly", "annual"],

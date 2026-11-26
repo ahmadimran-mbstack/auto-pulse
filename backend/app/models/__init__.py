@@ -5,8 +5,10 @@ from app.models.approval import Approval
 from app.models.publication import PostPublication
 from app.models.slack import SlackIntegration, SlackApprovalMessage
 from app.models.subscription import Payment, ReminderSent, Subscription
+from app.models.plan import Plan
 from app.models.usage import LLMCallLog, SpendAlert
 from app.models.admin import AdminAuditLog, DeletedAccount, EmailLog
+from app.models.support import SupportTicket, SupportTicketMessage
 from app.models.customization import (
     CustomizationDocument,
     CustomizationFact,
@@ -30,11 +32,14 @@ __all__ = [
     "Subscription",
     "Payment",
     "ReminderSent",
+    "Plan",
     "LLMCallLog",
     "SpendAlert",
     "AdminAuditLog",
     "DeletedAccount",
     "EmailLog",
+    "SupportTicket",
+    "SupportTicketMessage",
     "CustomizationDocument",
     "CustomizationFact",
     "CustomizationJob",

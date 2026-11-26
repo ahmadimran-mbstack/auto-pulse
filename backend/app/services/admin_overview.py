@@ -9,7 +9,12 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.limiter import get_redis_client
-from app.core.plans import PLANS, PUBLIC_PLAN_ORDER
+from app.core.plans import (
+    get_plan_entries,
+    get_plans,
+    get_public_plan_order,
+    get_purchasable_plan_ids,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +50,12 @@ def get_admin_overview(db: Session, refresh: bool = False) -> Dict[str, Any]:
 
     eff_sql = _effective_sub_status_sql()
     rate_sql = _monthly_rate_sql_case()
+    purchasable_ids = get_purchasable_plan_ids()
+    paid_in_sql = (
+        ", ".join("'" + pid.replace("'", "''") + "'" for pid in purchasable_ids)
+        if purchasable_ids
+        else "'__none__'"
+    )
 
     # 1. Users & Subscribers KPIs (single SQL pass)
     user_sub_row = db.execute(
@@ -59,7 +70,7 @@ def get_admin_overview(db: Session, refresh: bool = False) -> Dict[str, Any]:
                 COUNT(*) FILTER (WHERE p.account_status = 'suspended')::int AS suspended_users,
                 COUNT(*) FILTER (WHERE p.account_status = 'disabled')::int AS disabled_users,
                 COUNT(*) FILTER (
-                    WHERE COALESCE(s.plan_id, 'trial') IN ('starter', 'pro', 'business')
+                    WHERE COALESCE(s.plan_id, 'trial') IN ({paid_in_sql})
                       AND ({eff_sql}) = 'active'
                 )::int AS paid_subscribers,
                 COUNT(*) FILTER (
@@ -68,7 +79,7 @@ def get_admin_overview(db: Session, refresh: bool = False) -> Dict[str, Any]:
                 )::int AS trial_users,
                 COALESCE(SUM(
                     CASE
-                        WHEN COALESCE(s.plan_id, 'trial') IN ('starter', 'pro', 'business')
+                        WHEN COALESCE(s.plan_id, 'trial') IN ({paid_in_sql})
                           AND ({eff_sql}) = 'active'
                           AND COALESCE(p.account_status, 'active') = 'active'
                         THEN ({rate_sql})
@@ -76,7 +87,7 @@ def get_admin_overview(db: Session, refresh: bool = False) -> Dict[str, Any]:
                     END
                 ), 0.0)::float AS estimated_mrr_usd,
                 COUNT(*) FILTER (
-                    WHERE COALESCE(s.plan_id, 'trial') IN ('starter', 'pro', 'business')
+                    WHERE COALESCE(s.plan_id, 'trial') IN ({paid_in_sql})
                       AND ({eff_sql}) = 'active'
                       AND s.current_period_end IS NOT NULL
                       AND s.current_period_end > now()
@@ -265,14 +276,20 @@ def get_admin_overview(db: Session, refresh: bool = False) -> Dict[str, Any]:
         )
     ).fetchall()
     plan_map = {r.plan_id: {"total": int(r.total or 0), "active": int(r.active or 0)} for r in plan_rows}
+    plans_map = get_plans()
+    entries_map = get_plan_entries()
+    ordered_ids = list(get_public_plan_order()) + [
+        pid for pid, e in entries_map.items() if not e.config.is_public and e.is_active
+    ]
     plan_breakdown = [
         {
             "plan_id": pid,
-            "plan_name": PLANS[pid].name,
+            "plan_name": plans_map[pid].name,
             "total": plan_map.get(pid, {}).get("total", 0),
             "active": plan_map.get(pid, {}).get("active", 0),
         }
-        for pid in (*PUBLIC_PLAN_ORDER, "internal")
+        for pid in ordered_ids
+        if pid in plans_map
     ]
 
     # 6. Pending payments queue (oldest 5 first) & recent 10 audit logs
@@ -339,7 +356,7 @@ def get_admin_overview(db: Session, refresh: bool = False) -> Dict[str, Any]:
                 "id": str(r.id),
                 "user_id": r.user_id,
                 "user_email": r.user_email,
-                "plan_name": PLANS[r.plan_id].name if r.plan_id in PLANS else r.plan_id,
+                "plan_name": plans_map[r.plan_id].name if r.plan_id in plans_map else r.plan_id,
                 "billing_interval": r.billing_interval,
                 "amount_usd": round(int(r.amount_usd_cents) / 100.0, 2),
                 "amount_pkr": int(r.amount_pkr),

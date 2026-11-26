@@ -69,7 +69,11 @@ def test_phase5_all_10_scenarios(e2e_users):
     client = TestClient(app)
 
     try:
-        with patch("app.core.limiter.get_redis_client", return_value=fake_redis):
+        with patch("app.core.limiter.get_redis_client", return_value=fake_redis), \
+             patch(
+                 "app.api.routes.admin_deps.resolve_user_email_and_verified",
+                 side_effect=lambda _db, u: ((u.email or "").lower(), (u.email or "").lower() == "ahmadimran@mbstack.net"),
+             ):
             # 1. New user is on trial
             st1 = client.get("/api/billing/status")
             assert st1.status_code == 200

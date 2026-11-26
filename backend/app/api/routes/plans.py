@@ -1,6 +1,6 @@
 """Public plans and authenticated user entitlements routes."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
 from app.core.auth import User, current_user
@@ -12,8 +12,9 @@ router = APIRouter(prefix="/api", tags=["plans"])
 
 
 @router.get("/plans", dependencies=[Depends(public_rate_limit("public"))])
-def list_public_plans():
+def list_public_plans(response: Response):
     """Public endpoint returning available plans, pricing, and limits (no auth)."""
+    response.headers["Cache-Control"] = "public, max-age=15, stale-while-revalidate=30"
     return get_public_plans_payload()
 
 

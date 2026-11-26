@@ -105,10 +105,24 @@ class Settings(BaseSettings):
     PAYMENT_ACCOUNT_LAST4: str = "9182"
     ADMIN_EMAILS: str = "ahmadimran@mbstack.net,ahmadimran67208@gmail.com,teammbstack@gmail.com,haris@mbstack.net"
     SUPPORT_EMAIL: str = "contact@mbstack.net"
+    SUPPORT_ADMIN_EMAIL: Optional[str] = None
+    REVALIDATE_SECRET: Optional[str] = None
+    FRONTEND_REVALIDATE_URL: Optional[str] = None
+    ADMIN_ACTIVATE_SECRET: Optional[str] = None
 
     @property
     def admin_email_set(self) -> set[str]:
         return {e.strip().lower() for e in (self.ADMIN_EMAILS or "").split(",") if e.strip()}
+
+    @property
+    def support_admin_recipient(self) -> Optional[str]:
+        if self.SUPPORT_ADMIN_EMAIL and self.SUPPORT_ADMIN_EMAIL.strip():
+            return self.SUPPORT_ADMIN_EMAIL.strip()
+        for email in (self.ADMIN_EMAILS or "").split(","):
+            clean = email.strip()
+            if clean:
+                return clean
+        return None
 
     # Day 5: Email delivery settings
     EMAIL_API_KEY: Optional[str] = None

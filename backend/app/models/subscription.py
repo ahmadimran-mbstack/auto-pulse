@@ -100,6 +100,14 @@ class Payment(Base):
         DateTime(timezone=True), nullable=True
     )
     reject_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source: Mapped[str] = mapped_column(Text, nullable=False, server_default="checkout")
+    recorded_by: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    voided_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    voided_by: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    void_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         CheckConstraint(
@@ -107,25 +115,29 @@ class Payment(Base):
             name="ck_payments_billing_interval",
         ),
         CheckConstraint(
-            "method IN ('easypaisa', 'jazzcash')",
+            "method IN ('easypaisa', 'jazzcash', 'manual', 'cash', 'bank_transfer')",
             name="ck_payments_method",
         ),
         CheckConstraint(
-            "status IN ('pending', 'approved', 'rejected')",
+            "status IN ('pending', 'approved', 'rejected', 'voided')",
             name="ck_payments_status",
+        ),
+        CheckConstraint(
+            "source IN ('checkout', 'manual')",
+            name="ck_payments_source",
         ),
         Index(
             "uq_payments_transaction_id_active",
             "transaction_id",
             unique=True,
-            postgresql_where=text("status IN ('pending', 'approved')"),
+            postgresql_where=text("status IN ('pending', 'approved', 'voided')"),
         ),
         Index(
             "uq_payments_method_transaction_id_active",
             "method",
             "transaction_id",
             unique=True,
-            postgresql_where=text("status IN ('pending', 'approved')"),
+            postgresql_where=text("status IN ('pending', 'approved', 'voided')"),
         ),
         Index(
             "uq_payments_user_pending",

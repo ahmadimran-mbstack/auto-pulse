@@ -635,12 +635,19 @@ def test_13_every_admin_route_rejects_non_admin_with_403(phase6_env):
         url = re.sub(r"\{[^}]+\}", str(uuid.uuid4()), path)
         for method in sorted(methods - {"HEAD", "OPTIONS"}):
             kwargs = {"headers": {"Authorization": f"Bearer {non_admin_token}"}}
-            if method in ("POST", "PATCH", "PUT", "DELETE"):
+            if path == "/api/admin/activate-plan":
+                kwargs["json"] = {"user_id": "x", "plan_id": "pro", "reason": "non-admin test"}
+            elif method in ("POST", "PATCH", "PUT", "DELETE"):
                 kwargs["json"] = {}
             resp = client.request(method, url, **kwargs)
-            assert resp.status_code == 403, (
-                f"Expected 403 for non-admin on {method} {path}, got {resp.status_code}: {resp.text}"
-            )
+            if path == "/api/admin/activate-plan":
+                assert resp.status_code in (401, 404), (
+                    f"Expected 401/404 for {method} {path} without secret, got {resp.status_code}: {resp.text}"
+                )
+            else:
+                assert resp.status_code == 403, (
+                    f"Expected 403 for non-admin on {method} {path}, got {resp.status_code}: {resp.text}"
+                )
             checked += 1
 
     assert checked >= 14

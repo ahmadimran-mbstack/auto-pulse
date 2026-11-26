@@ -210,6 +210,163 @@ def render_notification_template(
         )
         return subject, plain, _wrap_html(subject, body)
 
+    if notification_type == "payment_voided":
+        amount = str(payload.get("amount") or "")
+        tx_id = str(payload.get("transaction_id") or "")
+        plan_name = str(payload.get("plan_name") or "")
+        reason = str(payload.get("reason") or "Payment voided by administrator.")
+        access_note = str(payload.get("access_note") or "")
+        user_msg = str(payload.get("user_message") or "").strip()
+        billing_url = f"{app_url}/app/billing"
+        user_msg_plain = f"\n\nMessage from support:\n{user_msg}" if user_msg else ""
+        user_msg_html = (
+            f'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px 14px;margin:16px 0;font-size:13px;color:#374151;">'
+            f'<strong style="display:block;margin-bottom:4px;color:#111827;">Message from support:</strong>'
+            f'{html.escape(user_msg).replace(chr(10), "<br />")}</div>'
+            if user_msg
+            else ""
+        )
+        subject = "Your AutoPulse payment was voided"
+        plain = (
+            f"Hi {name},\n\n"
+            f"A previously recorded AutoPulse payment was voided.\n\n"
+            f"Plan: {plan_name}\n"
+            f"Amount: {amount}\n"
+            f"Transaction ID: {tx_id}\n"
+            f"Reason: {reason}\n"
+            + (f"{access_note}\n" if access_note else "")
+            + f"{user_msg_plain}\n\n"
+            f"View billing details: {billing_url}\n"
+        )
+        body = (
+            f'<h2 style="margin:0 0 12px;font-size:18px;color:#111827;">Your AutoPulse payment was voided</h2>'
+            f'<p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#374151;">Hi {html.escape(name)}, a payment on your account has been voided.</p>'
+            f'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px 14px;margin:0 0 16px;font-size:13px;line-height:1.6;color:#374151;">'
+            f'<strong>Plan:</strong> {html.escape(plan_name)}<br />'
+            f'<strong>Amount:</strong> {html.escape(amount)}<br />'
+            f'<strong>Transaction ID:</strong> {html.escape(tx_id)}<br />'
+            f'<strong>Reason:</strong> {html.escape(reason)}</div>'
+            + (f'<p style="margin:0 0 14px;font-size:13px;color:#374151;">{html.escape(access_note)}</p>' if access_note else "")
+            + user_msg_html
+            + f'<a href="{billing_url}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:14px;font-weight:500;">View Billing</a>'
+        )
+        return subject, plain, _wrap_html(subject, body)
+
+    if notification_type == "support_ticket_created_user":
+        ticket_id = str(payload.get("ticket_id") or "")
+        subject_txt = str(payload.get("subject") or "Support Request")
+        category = str(payload.get("category") or "other").replace("_", " ")
+        priority = str(payload.get("priority") or "medium")
+        ticket_url = f"{app_url}/app/support/{ticket_id}"
+        subject = f"We received your support ticket: {subject_txt}"
+        plain = (
+            f"Hi {name},\n\n"
+            f"We received your support ticket and will reply as soon as possible.\n\n"
+            f"Subject: {subject_txt}\n"
+            f"Category: {category}\n"
+            f"Priority: {priority}\n\n"
+            f"View your ticket: {ticket_url}\n"
+        )
+        body = (
+            f'<h2 style="margin:0 0 12px;font-size:18px;color:#111827;">We received your support ticket</h2>'
+            f'<p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#374151;">Hi {html.escape(name)}, our team has received your request.</p>'
+            f'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px 14px;margin:0 0 16px;font-size:13px;line-height:1.6;color:#374151;">'
+            f'<strong>Subject:</strong> {html.escape(subject_txt)}<br />'
+            f'<strong>Category:</strong> {html.escape(category)}<br />'
+            f'<strong>Priority:</strong> {html.escape(priority)}</div>'
+            f'<a href="{ticket_url}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:14px;font-weight:500;">View Support Ticket</a>'
+        )
+        return subject, plain, _wrap_html(subject, body)
+
+    if notification_type == "support_ticket_created_admin":
+        ticket_id = str(payload.get("ticket_id") or "")
+        subject_txt = str(payload.get("subject") or "Support Request")
+        user_email = str(payload.get("user_email") or "unknown")
+        category = str(payload.get("category") or "other").replace("_", " ")
+        priority = str(payload.get("priority") or "medium")
+        preview = str(payload.get("preview") or "")[:400]
+        ticket_url = f"{app_url}/admin/support/{ticket_id}"
+        subject = f"[AutoPulse Support] New {priority} ticket: {subject_txt}"
+        plain = (
+            f"New support ticket submitted.\n\n"
+            f"From: {name} ({user_email})\n"
+            f"Subject: {subject_txt}\n"
+            f"Category: {category}\n"
+            f"Priority: {priority}\n\n"
+            f"{preview}\n\n"
+            f"Open in admin: {ticket_url}\n"
+        )
+        body = (
+            f'<h2 style="margin:0 0 12px;font-size:18px;color:#111827;">New support ticket submitted</h2>'
+            f'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px 14px;margin:0 0 16px;font-size:13px;line-height:1.6;color:#374151;">'
+            f'<strong>User:</strong> {html.escape(name)} ({html.escape(user_email)})<br />'
+            f'<strong>Subject:</strong> {html.escape(subject_txt)}<br />'
+            f'<strong>Category:</strong> {html.escape(category)} · <strong>Priority:</strong> {html.escape(priority)}</div>'
+            + (f'<p style="margin:0 0 16px;font-size:13px;line-height:1.6;color:#374151;">{html.escape(preview).replace(chr(10), "<br />")}</p>' if preview else "")
+            + f'<a href="{ticket_url}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:14px;font-weight:500;">Open Ticket in Admin</a>'
+        )
+        return subject, plain, _wrap_html(subject, body)
+
+    if notification_type == "support_reply_user":
+        ticket_id = str(payload.get("ticket_id") or "")
+        subject_txt = str(payload.get("subject") or "Support Request")
+        reply_body = str(payload.get("reply_body") or "")
+        ticket_url = f"{app_url}/app/support/{ticket_id}"
+        subject = f"New reply on your AutoPulse ticket: {subject_txt}"
+        plain = (
+            f"Hi {name},\n\n"
+            f"Support replied to your ticket \"{subject_txt}\":\n\n"
+            f"{reply_body}\n\n"
+            f"Reply in AutoPulse: {ticket_url}\n"
+        )
+        body = (
+            f'<h2 style="margin:0 0 12px;font-size:18px;color:#111827;">New reply on your support ticket</h2>'
+            f'<p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#374151;">Hi {html.escape(name)}, our team replied to <strong>{html.escape(subject_txt)}</strong>:</p>'
+            f'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px 14px;margin:0 0 16px;font-size:13px;line-height:1.6;color:#374151;">'
+            f'{html.escape(reply_body).replace(chr(10), "<br />")}</div>'
+            f'<a href="{ticket_url}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:14px;font-weight:500;">View &amp; Reply</a>'
+        )
+        return subject, plain, _wrap_html(subject, body)
+
+    if notification_type == "support_reply_admin":
+        ticket_id = str(payload.get("ticket_id") or "")
+        subject_txt = str(payload.get("subject") or "Support Request")
+        user_email = str(payload.get("user_email") or "unknown")
+        reply_body = str(payload.get("reply_body") or "")
+        ticket_url = f"{app_url}/admin/support/{ticket_id}"
+        subject = f"[AutoPulse Support] User reply on: {subject_txt}"
+        plain = (
+            f"{name} ({user_email}) replied on ticket \"{subject_txt}\":\n\n"
+            f"{reply_body}\n\n"
+            f"Open in admin: {ticket_url}\n"
+        )
+        body = (
+            f'<h2 style="margin:0 0 12px;font-size:18px;color:#111827;">User replied on support ticket</h2>'
+            f'<p style="margin:0 0 12px;font-size:13px;color:#374151;"><strong>From:</strong> {html.escape(name)} ({html.escape(user_email)})<br /><strong>Ticket:</strong> {html.escape(subject_txt)}</p>'
+            f'<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:12px 14px;margin:0 0 16px;font-size:13px;line-height:1.6;color:#374151;">'
+            f'{html.escape(reply_body).replace(chr(10), "<br />")}</div>'
+            f'<a href="{ticket_url}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:14px;font-weight:500;">Open Ticket in Admin</a>'
+        )
+        return subject, plain, _wrap_html(subject, body)
+
+    if notification_type == "support_status_changed_user":
+        ticket_id = str(payload.get("ticket_id") or "")
+        subject_txt = str(payload.get("subject") or "Support Request")
+        new_status = str(payload.get("status") or "open").replace("_", " ")
+        ticket_url = f"{app_url}/app/support/{ticket_id}"
+        subject = f"Your AutoPulse ticket is now {new_status}: {subject_txt}"
+        plain = (
+            f"Hi {name},\n\n"
+            f"The status of your support ticket \"{subject_txt}\" changed to: {new_status}.\n\n"
+            f"View your ticket: {ticket_url}\n"
+        )
+        body = (
+            f'<h2 style="margin:0 0 12px;font-size:18px;color:#111827;">Support ticket status updated</h2>'
+            f'<p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#374151;">Hi {html.escape(name)}, your ticket <strong>{html.escape(subject_txt)}</strong> is now <strong>{html.escape(new_status)}</strong>.</p>'
+            f'<a href="{ticket_url}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:6px;font-size:14px;font-weight:500;">View Support Ticket</a>'
+        )
+        return subject, plain, _wrap_html(subject, body)
+
     raise ValueError(f"Unsupported notification type: {notification_type}")
 
 

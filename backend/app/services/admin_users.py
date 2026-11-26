@@ -11,7 +11,7 @@ from sqlalchemy import desc, func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.plans import PLANS, get_plan
+from app.core.plans import get_plan, get_plans
 from app.models.admin import AdminAuditLog, DeletedAccount, EmailLog
 from app.models.post import GenerationRun
 from app.models.profile import Profile
@@ -33,13 +33,16 @@ logger = logging.getLogger(__name__)
 
 
 def _plan_limit_sql_case() -> str:
-    """Build SQL CASE expression for scheduled_posts_per_period directly from PLANS."""
+    """Build SQL CASE expression for scheduled_posts_per_period from get_plans() (fallback ELSE 3)."""
     whens = []
-    for pid, cfg in PLANS.items():
+    for pid, cfg in get_plans().items():
+        safe_pid = pid.replace("'", "''")
         if cfg.scheduled_posts_per_period is None:
-            whens.append(f"WHEN '{pid}' THEN NULL")
+            whens.append(f"WHEN '{safe_pid}' THEN NULL")
         else:
-            whens.append(f"WHEN '{pid}' THEN {int(cfg.scheduled_posts_per_period)}")
+            whens.append(f"WHEN '{safe_pid}' THEN {int(cfg.scheduled_posts_per_period)}")
+    if not whens:
+        return "3"
     return f"CASE COALESCE(s.plan_id, 'trial') {' '.join(whens)} ELSE 3 END"
 
 
@@ -80,9 +83,10 @@ def list_admin_users(
             "(u.email ILIKE :q OR COALESCE(p.display_name, u.name, '') ILIKE :q)"
         )
 
+    plans_map = get_plans()
     if plan and plan.strip():
         clean_plan = plan.strip().lower()
-        if clean_plan not in PLANS:
+        if clean_plan not in plans_map:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={"code": "invalid_plan", "message": "Unknown plan filter."},
@@ -188,7 +192,7 @@ def list_admin_users(
     admin_emails = settings.admin_email_set
     items: List[Dict[str, Any]] = []
     for r in rows:
-        plan_cfg = PLANS.get(r.plan_id)
+        plan_cfg = plans_map.get(r.plan_id)
         email_lower = (r.email or "").strip().lower()
         items.append(
             {
@@ -243,7 +247,8 @@ def get_admin_user_detail(db: Session, user_id: str) -> Dict[str, Any]:
     else:
         sub_obj = sub
 
-    plan_cfg = get_plan(sub_obj.plan_id) if sub_obj.plan_id in PLANS else get_plan("trial")
+    plans_map = get_plans()
+    plan_cfg = plans_map.get(sub_obj.plan_id) or get_plan("trial")
     computed_status = compute_subscription_status(sub_obj)
     usage_counts = get_user_usage_counts(db, user_id, sub_obj)
     win_start, win_end = get_billing_window(sub_obj)

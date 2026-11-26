@@ -15,8 +15,8 @@ from app.core.config import settings
 from app.core.plans import (
     MAX_FAILED_RUNS_PER_DAY,
     MONTHLY_WINDOW_DAYS,
-    PLANS,
     get_plan,
+    get_plans,
 )
 from app.db.session import SessionLocal
 from app.models.customization import CustomizationDocument
@@ -418,7 +418,8 @@ def check_run_budgets_before_call(is_llm: bool = True) -> None:
         sub = db.scalars(select(Subscription).where(Subscription.user_id == user_id)).first()
         if not sub or sub.plan_id == "internal":
             return
-        plan = get_plan(sub.plan_id) if sub.plan_id in PLANS else get_plan("trial")
+        plans_map = get_plans()
+        plan = plans_map.get(sub.plan_id) or get_plan("trial")
         if plan.daily_spend_limit_usd is None:
             return
 

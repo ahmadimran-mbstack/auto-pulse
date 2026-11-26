@@ -71,7 +71,8 @@ def delete_user_account(
 ) -> Dict[str, Any]:
     """Delete a user's app data, revoke connections, clear caches, and remove their Neon Auth record.
 
-    Preserves payments, email_logs, and admin_audit_logs with user_id and email snapshot.
+    Preserves payments, email_logs, admin_audit_logs, support_tickets, and support_ticket_messages
+    with user_id and email snapshot.
     """
     now_utc = datetime.datetime.now(datetime.timezone.utc)
     clean_email = user_email.strip().lower() if user_email else None
