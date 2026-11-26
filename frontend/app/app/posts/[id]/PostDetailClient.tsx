@@ -4,12 +4,15 @@ import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
+  ArrowLeftIcon,
   ExternalLinkIcon,
   Loader2Icon,
   AlertCircleIcon,
   CheckCircle2Icon,
   HelpCircleIcon,
+  SendIcon,
 } from "lucide-react";
+import { FaLinkedin } from "react-icons/fa6";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -52,6 +55,7 @@ import {
 } from "@/lib/posts";
 import { cn } from "@/lib/utils";
 import { getStatusBannerStyle } from "@/components/app/StatusBadge";
+import { PublishDraftDialog } from "@/components/app/PublishDraftDialog";
 
 interface PostDetailClientProps {
   id: string;
@@ -110,10 +114,12 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
   const decisionMutation = useSubmitDecisionMutation(user.id);
   const retryMutation = useRetryPublicationMutation(user.id);
 
-  // Modal state for outcome_unknown retry confirmation
+  // Modal state for outcome_unknown retry confirmation & draft publish
   const [showConfirmModal, setShowConfirmModal] = React.useState(false);
   const [confirmedNotPosted, setConfirmedNotPosted] = React.useState(false);
   const [showTrace, setShowTrace] = React.useState(false);
+  const [showPublishDialog, setShowPublishDialog] = React.useState(false);
+  const [isPostingNow, setIsPostingNow] = React.useState(false);
 
   // Poll post data every 10 seconds while status is "publishing"
   React.useEffect(() => {
@@ -206,7 +212,17 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
   const bannerStyle = getStatusBannerStyle(post.status);
 
   return (
-    <div className="p-6 md:p-8 space-y-6 max-w-5xl mx-auto">
+    <div className="p-4 sm:p-6 md:p-8 space-y-6 max-w-5xl mx-auto">
+      {/* Back to posts button */}
+      <div>
+        <Button asChild variant="ghost" size="sm" className="-ml-2 text-muted-foreground hover:text-foreground">
+          <Link href="/app/posts">
+            <ArrowLeftIcon className="size-4 mr-1.5" />
+            Back to posts
+          </Link>
+        </Button>
+      </div>
+
       {/* Breadcrumb navigation */}
       <Breadcrumb>
         <BreadcrumbList>
@@ -253,20 +269,62 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
       />
 
       {/* Status Alert Section positioned prominently */}
-      {post.status === "awaiting_approval" && (
-        <Alert variant={bannerStyle.alertVariant}>
-          <AlertCircleIcon className={cn("size-4", bannerStyle.iconClass)} />
-          <div className="flex-1">
-            <AlertTitle className={bannerStyle.textClass}>
-              Awaiting your approval
-            </AlertTitle>
-            <AlertDescription className={cn("text-xs mt-0.5", bannerStyle.descClass)}>
-              {formattedDeadline
-                ? `Please review and decide before ${formattedDeadline}.`
-                : "Please review and decide on this draft."}
-            </AlertDescription>
+      {post.status === "draft" && (
+        <Alert
+          variant={bannerStyle.alertVariant}
+          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-4 py-3"
+        >
+          <div className="flex items-start gap-3 min-w-0">
+            <SendIcon className={cn("size-4 shrink-0 mt-0.5", bannerStyle.iconClass)} />
+            <div className="space-y-0.5 min-w-0">
+              <AlertTitle className={bannerStyle.textClass}>Draft ready</AlertTitle>
+              <AlertDescription className={cn("text-xs", bannerStyle.descClass)}>
+                This draft is ready to publish to LinkedIn whenever you are.
+              </AlertDescription>
+            </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="shrink-0 self-start sm:self-center">
+            <Button
+              type="button"
+              onClick={() => setShowPublishDialog(true)}
+              disabled={isPostingNow}
+              className="h-9 px-4 text-sm font-medium rounded-md gap-2 border-0 bg-amber-500 text-amber-950 hover:bg-amber-400 disabled:opacity-70 disabled:cursor-not-allowed"
+            >
+              {isPostingNow ? (
+                <>
+                  <Loader2Icon className="size-4 shrink-0 animate-spin" />
+                  <span>Posting...</span>
+                </>
+              ) : (
+                <>
+                  <SendIcon className="size-4 shrink-0" />
+                  <span>Post now</span>
+                </>
+              )}
+            </Button>
+          </div>
+        </Alert>
+      )}
+
+      {post.status === "awaiting_approval" && (
+        <Alert
+          variant={bannerStyle.alertVariant}
+          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-4 py-3"
+        >
+          <div className="flex items-start gap-3 min-w-0">
+            <AlertCircleIcon className={cn("size-4 shrink-0 mt-0.5", bannerStyle.iconClass)} />
+            <div className="space-y-0.5 min-w-0">
+              <AlertTitle className={bannerStyle.textClass}>
+                Awaiting your approval
+              </AlertTitle>
+              <AlertDescription className={cn("text-xs", bannerStyle.descClass)}>
+                {formattedDeadline
+                  ? `Please review and decide before ${formattedDeadline}.`
+                  : "Please review and decide on this draft."}
+              </AlertDescription>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
             <Button
               variant="outline"
               size="sm"
@@ -274,7 +332,7 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
               disabled={decisionMutation.isPending}
             >
               {decisionMutation.isPending &&
-              decisionMutation.variables?.decision === "rejected" ? (
+                decisionMutation.variables?.decision === "rejected" ? (
                 <Loader2Icon className="size-3.5 animate-spin mr-1" />
               ) : null}
               <span>Reject</span>
@@ -286,7 +344,7 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
               disabled={decisionMutation.isPending}
             >
               {decisionMutation.isPending &&
-              decisionMutation.variables?.decision === "approved" ? (
+                decisionMutation.variables?.decision === "approved" ? (
                 <Loader2Icon className="size-3.5 animate-spin mr-1" />
               ) : null}
               <span>Approve</span>
@@ -296,126 +354,167 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
       )}
 
       {post.status === "approved" && (
-        <Alert variant={bannerStyle.alertVariant}>
-          <CheckCircle2Icon className={cn("size-4", bannerStyle.iconClass)} />
-          <div className="flex-1">
-            <AlertTitle className={cn("font-medium flex items-center gap-1.5", bannerStyle.textClass)}>
-              <span>Approved</span>
-              {post.approval?.channel && (
-                <span className={cn("text-xs font-normal opacity-80", bannerStyle.textClass)}>
-                  via {post.approval.channel === "slack" ? "Slack" : "Email"}
-                </span>
-              )}
-            </AlertTitle>
-            <AlertDescription className={cn("text-xs", bannerStyle.descClass)}>
-              This post will be published around {formattedPublishAt || "the scheduled time"}.
-            </AlertDescription>
+        <Alert
+          variant={bannerStyle.alertVariant}
+          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-4 py-3"
+        >
+          <div className="flex items-start gap-3 min-w-0">
+            <CheckCircle2Icon className={cn("size-4 shrink-0 mt-0.5", bannerStyle.iconClass)} />
+            <div className="space-y-0.5 min-w-0">
+              <AlertTitle className={cn("font-medium flex items-center gap-1.5", bannerStyle.textClass)}>
+                <span>Approved</span>
+                {post.approval?.channel && (
+                  <span className={cn("text-xs font-normal opacity-80", bannerStyle.textClass)}>
+                    via {post.approval.channel === "slack" ? "Slack" : "Email"}
+                  </span>
+                )}
+              </AlertTitle>
+              <AlertDescription className={cn("text-xs", bannerStyle.descClass)}>
+                This post will be published around {formattedPublishAt || "the scheduled time"}.
+              </AlertDescription>
+            </div>
           </div>
         </Alert>
       )}
 
       {post.status === "publishing" && (
-        <Alert variant={bannerStyle.alertVariant}>
-          <Loader2Icon className={cn("size-4 animate-spin", bannerStyle.iconClass)} />
-          <div className="flex-1">
-            <AlertTitle className={bannerStyle.textClass}>Publishing in progress</AlertTitle>
-            <AlertDescription className={cn("text-xs flex items-center gap-1", bannerStyle.descClass)}>
-              <span>Delivering post to</span>
-              <PlatformLabel platform="linkedin" size="xs" />
-              <span>. This page will update automatically when complete.</span>
-            </AlertDescription>
+        <Alert
+          variant={bannerStyle.alertVariant}
+          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-4 py-3"
+        >
+          <div className="flex items-start gap-3 min-w-0">
+            <Loader2Icon className={cn("size-4 shrink-0 mt-0.5 animate-spin", bannerStyle.iconClass)} />
+            <div className="space-y-0.5 min-w-0">
+              <AlertTitle className={bannerStyle.textClass}>Publishing in progress</AlertTitle>
+              <AlertDescription className={cn("text-xs flex flex-wrap items-center gap-1", bannerStyle.descClass)}>
+                <span>Delivering post to</span>
+                <PlatformLabel platform="linkedin" size="xs" />
+                <span>. This page will update automatically when complete.</span>
+              </AlertDescription>
+            </div>
           </div>
         </Alert>
       )}
 
       {post.status === "published" && (
-        <Alert variant={bannerStyle.alertVariant}>
-          <CheckCircle2Icon className={cn("size-4", bannerStyle.iconClass)} />
-          <div className="flex-1">
-            <AlertTitle className={cn("inline-flex items-center gap-1.5", bannerStyle.textClass)}>
-              <span>Published to</span>
-              <PlatformLabel platform="linkedin" size="sm" />
-            </AlertTitle>
-            <AlertDescription className={cn("text-xs", bannerStyle.descClass)}>
-              Successfully delivered to your profile.
-            </AlertDescription>
+        <Alert
+          variant={bannerStyle.alertVariant}
+          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-4 py-3"
+        >
+          <div className="flex items-start gap-3 min-w-0">
+            <CheckCircle2Icon className={cn("size-4 shrink-0 mt-0.5", bannerStyle.iconClass)} />
+            <div className="space-y-0.5 min-w-0">
+              <AlertTitle className={cn("inline-flex items-center gap-1.5", bannerStyle.textClass)}>
+                <span>Published to</span>
+                <PlatformLabel platform="linkedin" size="sm" />
+              </AlertTitle>
+              <AlertDescription className={cn("text-xs", bannerStyle.descClass)}>
+                Successfully delivered to your profile.
+              </AlertDescription>
+            </div>
           </div>
           {linkedInPublication?.external_url && (
-            <Button asChild size="sm" variant="outline">
-              <a
-                href={linkedInPublication.external_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1"
+            <div className="shrink-0 self-start sm:self-center">
+              <Button
+                asChild
+                variant="outline"
+                className="h-9 px-4 text-sm font-medium rounded-md gap-2 bg-green-50 border-green-600/30 text-green-700 hover:bg-green-100 hover:text-green-700 dark:bg-green-500/10 dark:border-green-500/30 dark:text-green-400 dark:hover:bg-green-500/20 dark:hover:text-green-400"
               >
-                <span>View on</span>
-                <PlatformLabel platform="linkedin" size="xs" />
-                <ExternalLinkIcon className="size-3.5 ml-1" />
-              </a>
-            </Button>
+                <a
+                  href={linkedInPublication.external_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <FaLinkedin className="size-4 shrink-0" aria-hidden="true" />
+                  <span>View on LinkedIn</span>
+                  <ExternalLinkIcon className="size-4 shrink-0" aria-hidden="true" />
+                </a>
+              </Button>
+            </div>
           )}
         </Alert>
       )}
 
       {post.status === "rejected" && (
-        <Alert variant={bannerStyle.alertVariant}>
-          <AlertCircleIcon className={cn("size-4", bannerStyle.iconClass)} />
-          <div className="flex-1">
-            <AlertTitle className={bannerStyle.textClass}>Rejected</AlertTitle>
-            <AlertDescription className={cn("text-xs", bannerStyle.descClass)}>
-              This draft was rejected and will not be published.
-            </AlertDescription>
+        <Alert
+          variant={bannerStyle.alertVariant}
+          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-4 py-3"
+        >
+          <div className="flex items-start gap-3 min-w-0">
+            <AlertCircleIcon className={cn("size-4 shrink-0 mt-0.5", bannerStyle.iconClass)} />
+            <div className="space-y-0.5 min-w-0">
+              <AlertTitle className={bannerStyle.textClass}>Rejected</AlertTitle>
+              <AlertDescription className={cn("text-xs", bannerStyle.descClass)}>
+                This draft was rejected and will not be published.
+              </AlertDescription>
+            </div>
           </div>
         </Alert>
       )}
 
       {post.status === "expired" && (
-        <Alert variant={bannerStyle.alertVariant}>
-          <AlertCircleIcon className={cn("size-4", bannerStyle.iconClass)} />
-          <div className="flex-1">
-            <AlertTitle className={bannerStyle.textClass}>Expired</AlertTitle>
-            <AlertDescription className={cn("text-xs", bannerStyle.descClass)}>
-              This draft passed its review deadline before approval. Nothing was published.
-            </AlertDescription>
+        <Alert
+          variant={bannerStyle.alertVariant}
+          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-4 py-3"
+        >
+          <div className="flex items-start gap-3 min-w-0">
+            <AlertCircleIcon className={cn("size-4 shrink-0 mt-0.5", bannerStyle.iconClass)} />
+            <div className="space-y-0.5 min-w-0">
+              <AlertTitle className={bannerStyle.textClass}>Expired</AlertTitle>
+              <AlertDescription className={cn("text-xs", bannerStyle.descClass)}>
+                This draft passed its review deadline before approval. Nothing was published.
+              </AlertDescription>
+            </div>
           </div>
         </Alert>
       )}
 
       {post.status === "failed" && (
-        <Alert variant={bannerStyle.alertVariant}>
-          <AlertCircleIcon className={cn("size-4", bannerStyle.iconClass)} />
-          <div className="flex-1">
-            <AlertTitle className={bannerStyle.textClass}>Publishing failed</AlertTitle>
-            <AlertDescription className={cn("text-xs", bannerStyle.descClass)}>
-              {pubErrorInfo.message}
-            </AlertDescription>
+        <Alert
+          variant={bannerStyle.alertVariant}
+          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-4 py-3"
+        >
+          <div className="flex items-start gap-3 min-w-0">
+            <AlertCircleIcon className={cn("size-4 shrink-0 mt-0.5", bannerStyle.iconClass)} />
+            <div className="space-y-0.5 min-w-0">
+              <AlertTitle className={bannerStyle.textClass}>Publishing failed</AlertTitle>
+              <AlertDescription className={cn("text-xs", bannerStyle.descClass)}>
+                {pubErrorInfo.message}
+              </AlertDescription>
+            </div>
           </div>
-          {pubErrorInfo.action === "reconnect" && (
-            <Button asChild size="sm" variant="outline">
-              <Link href="/app/connections" className="inline-flex items-center gap-1">
-                <span>Reconnect</span>
-                <PlatformLabel platform="linkedin" size="xs" />
-              </Link>
-            </Button>
-          )}
-          {pubErrorInfo.action === "confirm_retry" && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setShowConfirmModal(true)}
-            >
-              Retry
-            </Button>
-          )}
-          {pubErrorInfo.action === "retry" && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleSimpleRetry}
-              disabled={retryMutation.isPending}
-            >
-              {retryMutation.isPending ? "Retrying..." : "Retry publishing"}
-            </Button>
+          {(pubErrorInfo.action === "reconnect" ||
+            pubErrorInfo.action === "confirm_retry" ||
+            pubErrorInfo.action === "retry") && (
+            <div className="shrink-0 self-start sm:self-center">
+              {pubErrorInfo.action === "reconnect" && (
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/app/connections" className="inline-flex items-center gap-1">
+                    <span>Reconnect</span>
+                    <PlatformLabel platform="linkedin" size="xs" />
+                  </Link>
+                </Button>
+              )}
+              {pubErrorInfo.action === "confirm_retry" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowConfirmModal(true)}
+                >
+                  Retry
+                </Button>
+              )}
+              {pubErrorInfo.action === "retry" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSimpleRetry}
+                  disabled={retryMutation.isPending}
+                >
+                  {retryMutation.isPending ? "Retrying..." : "Retry publishing"}
+                </Button>
+              )}
+            </div>
           )}
         </Alert>
       )}
@@ -560,6 +659,16 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
         onOpenChange={setShowTrace}
         userId={user.id}
         postId={post.id}
+      />
+
+      {/* Publish Draft Confirmation Dialog */}
+      <PublishDraftDialog
+        open={showPublishDialog}
+        onOpenChange={setShowPublishDialog}
+        userId={user.id}
+        post={post}
+        onPublished={() => refetch()}
+        onPendingChange={setIsPostingNow}
       />
     </div>
   );

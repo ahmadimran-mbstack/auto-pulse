@@ -20,6 +20,7 @@ import {
   disconnectLinkedInConnection,
   submitPostDecision,
   retryPostPublication,
+  publishPostNow,
   generateDraft,
   clearCachedToken,
   getLinkedInStatus,
@@ -338,6 +339,21 @@ export function useRetryPublicationMutation(userId: string) {
     }) => retryPostPublication(id, confirmNotPosted),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: queryKeys.post(userId, vars.id) });
+      qc.invalidateQueries({ queryKey: queryKeys.all(userId) });
+    },
+  });
+}
+
+export function usePublishPostNowMutation(userId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => publishPostNow(id),
+    onSuccess: (_, id) => {
+      qc.invalidateQueries({ queryKey: queryKeys.post(userId, id) });
+      qc.invalidateQueries({ queryKey: queryKeys.all(userId) });
+    },
+    onError: (_, id) => {
+      qc.invalidateQueries({ queryKey: queryKeys.post(userId, id) });
       qc.invalidateQueries({ queryKey: queryKeys.all(userId) });
     },
   });

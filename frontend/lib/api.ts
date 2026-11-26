@@ -839,6 +839,18 @@ export async function retryPostPublication(
   });
 }
 
+// Publishes a draft-ready (or clearly failed) post immediately through the LinkedIn pipeline
+export async function publishPostNow(
+  id: string
+): Promise<{ status: string; external_id?: string | null; external_url?: string | null }> {
+  return apiCall<{ status: string; external_id?: string | null; external_url?: string | null }>(
+    `/posts/${id}/publish-now`,
+    {
+      method: "POST",
+    }
+  );
+}
+
 // Fetches the caller's LinkedIn account connection status
 export async function getLinkedInStatus(): Promise<import("@/types/connections").LinkedInStatusResponse> {
   return apiCall<import("@/types/connections").LinkedInStatusResponse>("/api/linkedin/status", {

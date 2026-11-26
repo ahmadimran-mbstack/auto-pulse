@@ -15,6 +15,7 @@ from app.db.session import get_db
 from app.models.approval import Approval
 from app.models.post import GenerationRun, Post
 from app.models.publication import PostPublication
+from app.repositories import connection as connection_repo
 from app.repositories import post as post_repo
 from app.repositories import profile as profile_repo
 from app.schemas.post import (
@@ -382,6 +383,199 @@ def retry_linkedin_publication(
     db.refresh(pub)
 
     return {"status": "ok", "message": "Publication retry queued"}
+
+
+# POST /posts/{id}/publish-now: atomically claim a draft/failed post and publish immediately via LinkedIn pipeline
+@router.post("/{post_id}/publish-now")
+def publish_draft_post_now(
+    post_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    from app.services.entitlements import get_entitlements
+    from app.services.linkedin_publisher import (
+        LinkedInNotConnectedError,
+        LinkedInReconnectRequiredError,
+        LinkedInTokenExpiredError,
+        publish_post_to_linkedin,
+    )
+    from app.services.quota import raise_blocked_403
+
+    p = post_repo.get_caller_post(db=db, user_id=user.id, post_id=post_id)
+    if not p:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail={"code": "not_found", "message": "Post not found"},
+        )
+
+    # Respect existing plan status / limits
+    ent = get_entitlements(db, user.id)
+    if ent["status"] == "expired":
+        raise_blocked_403(
+            "subscription_expired",
+            "Your plan has ended. Choose a plan to publish posts.",
+            upgrade_to="starter",
+        )
+
+    # Check LinkedIn connection before claiming so we don't strand the post in publishing
+    try:
+        connection_repo.get_valid_linkedin_connection_token(db=db, user_id=user.id)
+    except LinkedInNotConnectedError:
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail={
+                "code": "LINKEDIN_NOT_CONNECTED",
+                "message": "LinkedIn account is not connected. Please connect LinkedIn to publish.",
+            },
+        )
+    except LinkedInTokenExpiredError:
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail={
+                "code": "LINKEDIN_TOKEN_EXPIRED",
+                "message": "LinkedIn token is expired. Please reconnect your account.",
+            },
+        )
+    except LinkedInReconnectRequiredError:
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail={
+                "code": "LINKEDIN_RECONNECT_REQUIRED",
+                "message": "LinkedIn token refresh failed. Please reconnect your account.",
+            },
+        )
+
+    # Never auto/re-publish a post with outcome_unknown
+    existing_pub = (
+        db.query(PostPublication)
+        .filter(
+            PostPublication.post_id == post_id,
+            PostPublication.platform == "linkedin",
+            PostPublication.user_id == user.id,
+        )
+        .first()
+    )
+    if existing_pub and existing_pub.error_code == "outcome_unknown":
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail={
+                "code": "outcome_unknown",
+                "message": "LinkedIn outcome is unknown for this post. Please confirm it was not posted before retrying.",
+            },
+        )
+
+    # Atomic claim: single UPDATE moving draft/failed -> publishing
+    claim_res = db.execute(
+        text(
+            "UPDATE posts "
+            "SET status = 'publishing', updated_at = now() "
+            "WHERE id = :id AND user_id = :user_id AND status IN ('draft', 'failed') "
+            "RETURNING id"
+        ),
+        {"id": post_id, "user_id": user.id},
+    )
+    if not claim_res.fetchone():
+        db.rollback()
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail={
+                "code": "already_claimed",
+                "message": "This post is already publishing or has already been published.",
+            },
+        )
+
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    if existing_pub:
+        existing_pub.status = "publishing"
+        existing_pub.claimed_at = now_utc
+        existing_pub.attempts = (existing_pub.attempts or 0) + 1
+        existing_pub.error_code = None
+        existing_pub.error_detail = None
+        existing_pub.updated_at = now_utc
+        pub = existing_pub
+    else:
+        pub = PostPublication(
+            post_id=post_id,
+            user_id=user.id,
+            platform="linkedin",
+            status="publishing",
+            attempts=1,
+            claimed_at=now_utc,
+            created_at=now_utc,
+            updated_at=now_utc,
+        )
+        db.add(pub)
+    db.commit()
+    db.refresh(p)
+    db.refresh(pub)
+
+    try:
+        success, external_id, err_code, err_detail = publish_post_to_linkedin(db, p)
+    except Exception as exc:
+        err_code = "step_failed"
+        err_detail = str(exc)[:200]
+        success = False
+        external_id = None
+
+    if success:
+        db.execute(
+            text(
+                "UPDATE post_publications "
+                "SET status = 'published', external_id = :ext_id, published_at = now(), "
+                "    error_code = NULL, error_detail = NULL, updated_at = now() "
+                "WHERE id = :id"
+            ),
+            {"id": pub.id, "ext_id": external_id},
+        )
+        db.execute(
+            text("UPDATE posts SET status = 'published', updated_at = now() WHERE id = :id"),
+            {"id": post_id},
+        )
+        db.commit()
+        return {
+            "status": "published",
+            "external_id": external_id,
+            "external_url": f"https://www.linkedin.com/feed/update/{external_id}" if external_id else None,
+        }
+
+    # Failure or outcome_unknown: record status and error without auto-retry
+    db.execute(
+        text(
+            "UPDATE post_publications "
+            "SET status = 'failed', error_code = :err_code, error_detail = :err_detail, updated_at = now() "
+            "WHERE id = :id"
+        ),
+        {"id": pub.id, "err_code": err_code, "err_detail": err_detail},
+    )
+    db.execute(
+        text("UPDATE posts SET status = 'failed', updated_at = now() WHERE id = :id"),
+        {"id": post_id},
+    )
+    db.commit()
+
+    if err_code == "connection_inactive":
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail={
+                "code": "LINKEDIN_TOKEN_EXPIRED",
+                "message": err_detail or "LinkedIn connection is missing or expired. Please reconnect.",
+            },
+        )
+    if err_code == "rate_limited":
+        raise HTTPException(
+            status_code=http_status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "code": "rate_limited",
+                "message": err_detail or "LinkedIn rate limit reached. Please try again later.",
+            },
+        )
+    raise HTTPException(
+        status_code=http_status.HTTP_502_BAD_GATEWAY,
+        detail={
+            "code": err_code or "publish_failed",
+            "message": err_detail or "Failed to publish post to LinkedIn.",
+        },
+    )
 
 
 # GET /posts/{id}/image.png: render branded PNG image with width scaling and ETag caching

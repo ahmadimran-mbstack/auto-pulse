@@ -25,7 +25,9 @@ import {
   CheckIcon,
   SparklesIcon,
   ArrowUpDownIcon,
+  SendIcon,
 } from "lucide-react";
+import { PublishDraftDialog } from "@/components/app/PublishDraftDialog";
 import { PageHeader } from "@/components/app/PageHeader";
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
@@ -169,9 +171,10 @@ export function PostsClient({ user }: PostsClientProps) {
   const [nextCursor, setNextCursor] = React.useState<string | null>(null);
   const [loadingMore, setLoadingMore] = React.useState(false);
 
-  // Quick view sheet state
+  // Quick view sheet state & publish draft dialog state
   const [quickViewPost, setQuickViewPost] = React.useState<PostListItem | null>(null);
   const [quickViewOpen, setQuickViewOpen] = React.useState(false);
+  const [publishPostTarget, setPublishPostTarget] = React.useState<PostListItem | null>(null);
 
   // Query server posts for currently selected status filter
   const statusParam = mapTabToStatusFilter(activeTab);
@@ -374,6 +377,17 @@ export function PostsClient({ user }: PostsClientProps) {
                 className="flex items-center justify-end gap-1 whitespace-nowrap"
                 onClick={(e) => e.stopPropagation()}
               >
+                {post.status === "draft" && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2.5 text-xs gap-1.5 mr-1"
+                    onClick={() => setPublishPostTarget(post)}
+                  >
+                    <SendIcon className="size-3" />
+                    <span>Post now</span>
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -418,6 +432,15 @@ export function PostsClient({ user }: PostsClientProps) {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-44">
+                    {post.status === "draft" && (
+                      <DropdownMenuItem
+                        onClick={() => setPublishPostTarget(post)}
+                        className="cursor-pointer font-medium"
+                      >
+                        <SendIcon className="size-4 mr-2" />
+                        <span>Post now</span>
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem
                       onClick={() => handleOpenQuickView(post)}
                       className="cursor-pointer"
@@ -612,6 +635,23 @@ export function PostsClient({ user }: PostsClientProps) {
                       </span>
                     </div>
                   </div>
+
+                  {post.status === "draft" && (
+                    <div
+                      className="pt-2 border-t border-border/40 flex justify-end"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs gap-1.5"
+                        onClick={() => setPublishPostTarget(post)}
+                      >
+                        <SendIcon className="size-3.5" />
+                        <span>Post now</span>
+                      </Button>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -646,6 +686,17 @@ export function PostsClient({ user }: PostsClientProps) {
         post={quickViewPost}
         open={quickViewOpen}
         onOpenChange={setQuickViewOpen}
+      />
+
+      {/* Publish draft-ready post dialog */}
+      <PublishDraftDialog
+        open={Boolean(publishPostTarget)}
+        onOpenChange={(open) => {
+          if (!open) setPublishPostTarget(null);
+        }}
+        userId={user.id}
+        post={publishPostTarget}
+        onPublished={() => refetch()}
       />
     </div>
   );
