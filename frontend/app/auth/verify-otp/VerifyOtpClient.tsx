@@ -140,27 +140,29 @@ export function VerifyOtpClient({ email }: VerifyOtpClientProps) {
 
       document.cookie =
         "autopulse_signed_out=; path=/; max-age=0; SameSite=Lax";
-      authToast.success("Email verified. Redirecting to setup...", {
-        id: "verify-otp-verified",
-      });
       const returnTo =
         typeof window !== "undefined"
           ? new URLSearchParams(window.location.search).get("returnTo")
           : null;
       const safeReturn = returnTo && returnTo.startsWith("/app/") ? returnTo : "/onboarding";
-      if (safeReturn === "/onboarding") {
-        try {
-          const { getAdminMe } = await import("@/lib/api");
-          const adminRes = await getAdminMe();
-          if (adminRes?.is_admin) {
-            router.replace("/admin");
-            return;
-          }
-        } catch {
-          // Non-admin user proceeds to onboarding
-        }
+
+      const { resolvePostAuthDestination } = await import("@/lib/auth/post-auth");
+      const resolved = await resolvePostAuthDestination(safeReturn);
+      if (!resolved.ok) {
+        console.error("[auth] Email verified but active session could not be verified.");
+        authToast.error(
+          "Signed in, but we could not open your dashboard. Please try again.",
+          { id: "verify-otp-session-error" }
+        );
+        setIsPending(false);
+        return;
       }
-      router.replace(safeReturn);
+
+      authToast.success("Email verified. Redirecting to setup...", {
+        id: "verify-otp-verified",
+      });
+      router.refresh();
+      window.location.assign(resolved.destination);
     } catch (err: unknown) {
       const message =
         err instanceof Error

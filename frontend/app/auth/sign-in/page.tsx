@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AuthShell } from "../components/AuthShell";
 import { GoogleSignInButton } from "../components/GoogleSignInButton";
 import { authToast } from "@/lib/auth-toast";
-import { getAdminMe } from "@/lib/api";
+import { resolvePostAuthDestination } from "@/lib/auth/post-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -169,17 +169,19 @@ function SignInForm() {
       // Clear any prior signed-out sentinel flag upon authenticating
       document.cookie = "autopulse_signed_out=; path=/; max-age=0; SameSite=Lax";
 
-      // Route admins straight to /admin and everyone else to /app
-      try {
-        const adminRes = await getAdminMe();
-        if (adminRes?.is_admin) {
-          router.replace("/admin");
-          return;
-        }
-      } catch {
-        // Non-admin or lookup failed; fall through to /app
+      const result = await resolvePostAuthDestination("/app");
+      if (!result.ok) {
+        console.error("[auth] Sign-in succeeded but active session could not be verified.");
+        authToast.error(
+          "Signed in, but we could not open your dashboard. Please try again.",
+          { id: "sign-in-session-error" }
+        );
+        setIsPending(false);
+        return;
       }
-      router.replace("/app");
+
+      router.refresh();
+      window.location.assign(result.destination);
     } catch {
       authToast.error(
         "Network error. Please check your connection and try again.",
@@ -229,11 +231,10 @@ function SignInForm() {
                   setFieldErrors((prev) => ({ ...prev, email: undefined }));
                 }
               }}
-              className={`h-10 rounded-[8px] border bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none ${
-                fieldErrors.email
-                  ? "border-[#ff6369] focus-visible:border-[#ff6369] focus-visible:ring-[#ff6369]/60"
-                  : "border-[var(--lp-border-input)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-[var(--lp-ice)]/60"
-              }`}
+              className={`h-10 rounded-[8px] border bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none ${fieldErrors.email
+                ? "border-[#ff6369] focus-visible:border-[#ff6369] focus-visible:ring-[#ff6369]/60"
+                : "border-[var(--lp-border-input)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-[var(--lp-ice)]/60"
+                }`}
             />
             {/* Inline field error for email validation */}
             {fieldErrors.email && (
@@ -272,11 +273,10 @@ function SignInForm() {
                     setFieldErrors((prev) => ({ ...prev, password: undefined }));
                   }
                 }}
-                className={`h-10 rounded-[8px] border bg-[var(--lp-surface)] px-3.5 pr-10 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none ${
-                  fieldErrors.password
-                    ? "border-[#ff6369] focus-visible:border-[#ff6369] focus-visible:ring-[#ff6369]/60"
-                    : "border-[var(--lp-border-input)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-[var(--lp-ice)]/60"
-                }`}
+                className={`h-10 rounded-[8px] border bg-[var(--lp-surface)] px-3.5 pr-10 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none ${fieldErrors.password
+                  ? "border-[#ff6369] focus-visible:border-[#ff6369] focus-visible:ring-[#ff6369]/60"
+                  : "border-[var(--lp-border-input)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-[var(--lp-ice)]/60"
+                  }`}
               />
               <button
                 type="button"

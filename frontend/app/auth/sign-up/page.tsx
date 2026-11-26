@@ -161,12 +161,12 @@ function SignUpForm() {
 
       const returnTo = searchParams.get("returnTo");
       const safeReturn = returnTo && returnTo.startsWith("/app/") ? returnTo : null;
+      const target = safeReturn
+        ? `/auth/verify-otp?returnTo=${encodeURIComponent(safeReturn)}`
+        : "/auth/verify-otp";
       // Neon Auth sends the single verification email on signUp.email; navigate to verify page
-      router.replace(
-        safeReturn
-          ? `/auth/verify-otp?returnTo=${encodeURIComponent(safeReturn)}`
-          : "/auth/verify-otp"
-      );
+      router.refresh();
+      router.replace(target);
     } catch (err: unknown) {
       const message =
         err instanceof Error
@@ -216,11 +216,10 @@ function SignUpForm() {
                   setFieldErrors((prev) => ({ ...prev, name: undefined }));
                 }
               }}
-              className={`h-10 rounded-[8px] border bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none ${
-                fieldErrors.name
-                  ? "border-[#ff6369] focus-visible:border-[#ff6369] focus-visible:ring-[#ff6369]/60"
-                  : "border-[var(--lp-border-input)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-[var(--lp-ice)]/60"
-              }`}
+              className={`h-10 rounded-[8px] border bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none ${fieldErrors.name
+                ? "border-[#ff6369] focus-visible:border-[#ff6369] focus-visible:ring-[#ff6369]/60"
+                : "border-[var(--lp-border-input)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-[var(--lp-ice)]/60"
+                }`}
             />
             {/* Inline field error for full name */}
             {fieldErrors.name && (
@@ -250,11 +249,10 @@ function SignUpForm() {
                   setFieldErrors((prev) => ({ ...prev, email: undefined }));
                 }
               }}
-              className={`h-10 rounded-[8px] border bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none ${
-                fieldErrors.email
-                  ? "border-[#ff6369] focus-visible:border-[#ff6369] focus-visible:ring-[#ff6369]/60"
-                  : "border-[var(--lp-border-input)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-[var(--lp-ice)]/60"
-              }`}
+              className={`h-10 rounded-[8px] border bg-[var(--lp-surface)] px-3.5 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none ${fieldErrors.email
+                ? "border-[#ff6369] focus-visible:border-[#ff6369] focus-visible:ring-[#ff6369]/60"
+                : "border-[var(--lp-border-input)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-[var(--lp-ice)]/60"
+                }`}
             />
             {/* Inline field error for email */}
             {fieldErrors.email && (
@@ -294,11 +292,10 @@ function SignUpForm() {
                     setFieldErrors((prev) => ({ ...prev, password: undefined }));
                   }
                 }}
-                className={`h-10 rounded-[8px] border bg-[var(--lp-surface)] px-3.5 pr-10 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none ${
-                  fieldErrors.password
-                    ? "border-[#ff6369] focus-visible:border-[#ff6369] focus-visible:ring-[#ff6369]/60"
-                    : "border-[var(--lp-border-input)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-[var(--lp-ice)]/60"
-                }`}
+                className={`h-10 rounded-[8px] border bg-[var(--lp-surface)] px-3.5 pr-10 text-sm text-[var(--lp-text-heading)] font-normal placeholder:text-[var(--lp-text-muted)] focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--lp-bg)] outline-none ${fieldErrors.password
+                  ? "border-[#ff6369] focus-visible:border-[#ff6369] focus-visible:ring-[#ff6369]/60"
+                  : "border-[var(--lp-border-input)] focus-visible:border-[var(--lp-ice)] focus-visible:ring-[var(--lp-ice)]/60"
+                  }`}
               />
               <button
                 type="button"
