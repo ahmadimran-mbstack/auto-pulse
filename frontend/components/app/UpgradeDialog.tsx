@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ApiClientError } from "@/lib/api";
+import { usePublicPlans } from "@/lib/queries";
 import { PlanCards } from "@/components/app/PlanCards";
 import type { PlanId } from "@/types/plans";
 
@@ -30,6 +31,7 @@ const UPGRADE_DIALOG_CODES = new Set([
 ]);
 
 export function UpgradeDialog({ error, currentPlanId, onClose }: UpgradeDialogProps) {
+  const { data: publicPlans } = usePublicPlans();
   if (!error) return null;
 
   const code = error.code;
@@ -53,7 +55,17 @@ export function UpgradeDialog({ error, currentPlanId, onClose }: UpgradeDialogPr
 
   // 2. Daily limit reached: show upgrade link ONLY if a higher plan has a higher daily limit
   if (code === "daily_limit_reached") {
-    const canUpgradeForDaily = currentPlanId !== "business" && currentPlanId !== "internal";
+    const currentDaily =
+      publicPlans?.plans.find((p) => p.id === currentPlanId)?.limits.playground_runs_per_day ?? 0;
+    const hasHigherDaily = Boolean(
+      publicPlans?.plans.some(
+        (p) =>
+          p.id !== currentPlanId &&
+          (p.limits.playground_runs_per_day === null ||
+            p.limits.playground_runs_per_day > (currentDaily ?? 0))
+      )
+    );
+    const canUpgradeForDaily = currentPlanId !== "internal" && (publicPlans ? hasHigherDaily : true);
     return (
       <Dialog open onOpenChange={(open) => !open && onClose()}>
         <DialogContent>

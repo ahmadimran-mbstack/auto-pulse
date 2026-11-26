@@ -20,6 +20,7 @@ import {
   BarChart3,
   Sparkles,
   CreditCard,
+  LifeBuoy,
 } from "lucide-react";
 
 import { useQuery } from "@tanstack/react-query";
@@ -29,6 +30,7 @@ import { SidebarNoticeCard } from "@/components/app/sidebar-notice-card";
 import { SidebarUserRow } from "@/components/app/sidebar-user-row";
 import { CommandPalette } from "@/components/app/command-palette";
 import { isSidebarRouteActive } from "@/lib/dashboard-routes";
+import { SIDEBAR_NAV_ITEM_CLASSES } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 
 interface AppSidebarProps {
@@ -100,6 +102,7 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
     { title: "Customize", url: "/app/customize", icon: Sparkles, exact: false },
     { title: "Connections", url: "/app/connections", icon: Share2, exact: false },
     { title: "Billing", url: "/app/billing", icon: CreditCard, exact: false },
+    { title: "Support", url: "/app/support", icon: LifeBuoy, exact: false },
   ];
 
 
@@ -175,14 +178,15 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
                 <Link
                   key={item.title}
                   href={item.url}
+                  data-slot="sidebar-nav-item"
+                  data-active={isActive}
+                  aria-current={isActive ? "page" : undefined}
                   onClick={() => onNavigate?.()}
                   onMouseEnter={() => handlePrefetch(item.url)}
                   onFocus={() => handlePrefetch(item.url)}
                   className={cn(
-                    "flex h-9 items-center gap-3 rounded-lg px-3 text-sm transition-colors",
-                    isActive
-                      ? "bg-accent text-foreground font-normal"
-                      : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    "flex h-9 items-center gap-3 rounded-lg px-3 text-sm",
+                    SIDEBAR_NAV_ITEM_CLASSES
                   )}
                 >
                   <Icon className="size-4 shrink-0" strokeWidth={1.5} />
@@ -194,17 +198,18 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
             {/* Expandable Settings Item */}
             <div>
               <div
+                data-slot="sidebar-nav-item"
+                data-active={isSettingsActive && !settingsExpanded}
                 className={cn(
-                  "flex h-9 items-center justify-between rounded-lg px-3 text-sm cursor-pointer transition-colors",
-                  isSettingsActive
-                    ? "bg-accent text-foreground font-normal"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                  "flex h-9 items-center justify-between rounded-lg px-3 text-sm cursor-pointer",
+                  SIDEBAR_NAV_ITEM_CLASSES
                 )}
                 onClick={() => setUserSettingsExpanded(!settingsExpanded)}
               >
                 <Link
                   href="/app/settings"
-                  className="flex items-center gap-3 flex-1"
+                  aria-current={isSettingsActive && !settingsExpanded ? "page" : undefined}
+                  className="flex items-center gap-3 flex-1 outline-hidden"
                   onClick={() => {
                     // Let row toggle expand or navigate
                     setUserSettingsExpanded(true);
@@ -249,12 +254,13 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
                       <Link
                         key={sub.tab}
                         href={`/app/settings?tab=${sub.tab}`}
+                        data-slot="sidebar-nav-item"
+                        data-active={isSubActive}
+                        aria-current={isSubActive ? "page" : undefined}
                         onClick={() => onNavigate?.()}
                         className={cn(
-                          "flex h-8 items-center gap-2.5 rounded-md px-2.5 text-xs transition-colors duration-200 ease-in-out",
-                          isSubActive
-                            ? "bg-accent text-foreground font-medium"
-                            : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                          "flex h-8 items-center gap-2.5 rounded-md px-2.5 text-xs",
+                          SIDEBAR_NAV_ITEM_CLASSES
                         )}
                       >
                         <SubIcon className="size-3.5 shrink-0" strokeWidth={1.5} />
@@ -269,12 +275,13 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
             {adminMe?.is_admin && (
               <Link
                 href="/admin"
+                data-slot="sidebar-nav-item"
+                data-active={pathname.startsWith("/admin")}
+                aria-current={pathname.startsWith("/admin") ? "page" : undefined}
                 onClick={() => onNavigate?.()}
                 className={cn(
-                  "flex h-9 items-center gap-3 rounded-lg px-3 text-sm transition-colors",
-                  pathname.startsWith("/admin")
-                    ? "bg-accent text-foreground font-normal"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                  "flex h-9 items-center gap-3 rounded-lg px-3 text-sm",
+                  SIDEBAR_NAV_ITEM_CLASSES
                 )}
               >
                 <Shield className="size-4 shrink-0" strokeWidth={1.5} />

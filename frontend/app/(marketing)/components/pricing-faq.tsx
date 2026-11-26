@@ -8,46 +8,51 @@ import {
 } from "@/components/ui/accordion";
 import { ScrollReveal } from "./scroll-reveal";
 
-const PRICING_FAQ_ITEMS = [
-  {
-    id: "trial",
-    question: "What happens after the 3-day trial?",
-    answer:
-      "Your account pauses and nothing is posted until you choose a plan. Your profile and settings stay saved.",
-  },
-  {
-    id: "payment",
-    question: "How do I pay?",
-    answer:
-      "Payments are in PKR through Easypaisa and JazzCash. Prices are shown in USD, with the Rs amount at about Rs 280 per dollar.",
-  },
-  {
-    id: "change-plan",
-    question: "Can I change plans?",
-    answer:
-      "Upgrades start right away with a new 30-day period. Downgrades start when your current period ends.",
-  },
-  {
-    id: "counting",
-    question: "What counts as a post or a Playground run?",
-    answer:
-      "A post is one AI draft made for your schedule, including the \"Generate today's post\" button. A Playground run is one on-demand run. Failed runs do not count.",
-  },
-  {
-    id: "approval",
-    question: "Will AutoPulse post without my approval?",
-    answer:
-      "No. Every draft needs your approval by email, or in Slack on Pro and Business, before it is published.",
-  },
-  {
-    id: "platforms",
-    question: "Do you support Instagram and Facebook?",
-    answer:
-      "Not yet. They are waiting for platform review and are marked coming soon. AutoPulse publishes to LinkedIn today.",
-  },
-];
+export function PricingFaq({
+  trialDays = 3,
+  pkrPerUsd = 280,
+}: {
+  trialDays?: number;
+  pkrPerUsd?: number;
+}) {
+  const faqItems = [
+    {
+      id: "trial",
+      question: `What happens after the ${trialDays}-day trial?`,
+      answer:
+        "Your account pauses and nothing is posted until you choose a plan. Your profile and settings stay saved.",
+    },
+    {
+      id: "payment",
+      question: "How do I pay?",
+      answer: `Payments are in PKR through Easypaisa and JazzCash. Prices are shown in USD, with the Rs amount at about Rs ${pkrPerUsd.toLocaleString()} per dollar.`,
+    },
+    {
+      id: "change-plan",
+      question: "Can I change plans?",
+      answer:
+        "Upgrades start right away with a new 30-day period. Downgrades start when your current period ends.",
+    },
+    {
+      id: "counting",
+      question: "What counts as a post or a Playground run?",
+      answer:
+        'A post is one AI draft made for your schedule, including the "Generate today\'s post" button. A Playground run is one on-demand run. Failed runs do not count.',
+    },
+    {
+      id: "approval",
+      question: "Will AutoPulse post without my approval?",
+      answer:
+        "No. Every draft needs your approval by email, or in Slack on plans with Slack approval enabled, before it is published.",
+    },
+    {
+      id: "platforms",
+      question: "Do you support Instagram and Facebook?",
+      answer:
+        "Not yet. They are waiting for platform review and are marked coming soon. AutoPulse publishes to LinkedIn today.",
+    },
+  ];
 
-export function PricingFaq() {
   return (
     <section
       id="pricing-faq"
@@ -64,7 +69,7 @@ export function PricingFaq() {
             </p>
           </div>
           <Accordion type="single" collapsible className="w-full border-t border-[var(--lp-border-hairline)]">
-            {PRICING_FAQ_ITEMS.map((item) => (
+            {faqItems.map((item) => (
               <AccordionItem
                 key={item.id}
                 value={item.id}

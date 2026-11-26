@@ -16,7 +16,8 @@ function isValidPlansPayload(data: unknown): data is PublicPlansResponse {
       typeof p === "object" &&
       typeof (p as Record<string, unknown>).id === "string" &&
       typeof (p as Record<string, unknown>).name === "string" &&
-      typeof (p as Record<string, unknown>).monthly_price_usd === "number" &&
+      ((p as Record<string, unknown>).monthly_price_usd === null ||
+        typeof (p as Record<string, unknown>).monthly_price_usd === "number") &&
       typeof (p as Record<string, unknown>).limits === "object" &&
       typeof (p as Record<string, unknown>).features === "object"
   );
@@ -27,12 +28,15 @@ export function getSnapshotPlans(): PublicPlansResponse {
     currency: "USD",
     pkr_per_usd: snapshot.pkr_per_usd,
     annual_discount: snapshot.annual_discount,
+    trial_days: typeof (snapshot as Record<string, unknown>).trial_days === "number"
+      ? ((snapshot as Record<string, unknown>).trial_days as number)
+      : 3,
     plans: snapshot.plans as PublicPlansResponse["plans"],
   };
 }
 
 /**
- * Server-side plans loader with 5-minute ISR revalidation, 4s timeout,
+ * Server-side plans loader with cache tag "plans" (60s fallback revalidate), 4s timeout,
  * and automatic fallback to the bundled snapshot on any failure.
  */
 export async function getPlans(): Promise<PublicPlansResponse> {
@@ -44,7 +48,7 @@ export async function getPlans(): Promise<PublicPlansResponse> {
 
   try {
     const res = await fetch(`${apiUrl}/api/plans`, {
-      next: { revalidate: 300 },
+      next: { tags: ["plans"], revalidate: 60 },
       signal: AbortSignal.timeout(4000),
     });
     if (!res.ok) {

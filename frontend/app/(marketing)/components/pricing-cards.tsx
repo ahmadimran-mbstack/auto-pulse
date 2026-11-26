@@ -4,14 +4,18 @@ import React from "react";
 import Link from "next/link";
 import { Check, Minus } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import type { PublicPlansResponse } from "@/types/plans";
 import { useSessionStatus } from "./use-session-status";
 
 export function LandingPricingCards({ data }: { data: PublicPlansResponse }) {
   const [interval, setInterval] = React.useState<"monthly" | "annual">("monthly");
   const { isLoaded, isSignedIn } = useSessionStatus();
-  const getPlanHref = (planId: string) => {
-    if (planId === "trial") {
+  const trialDays = data.trial_days ?? 3;
+  const annualPct = Math.round((data.annual_discount ?? 0.05) * 100);
+
+  const getPlanHref = (planId: string, isFreeTrial: boolean) => {
+    if (isFreeTrial) {
       return isLoaded && isSignedIn ? "/app" : "/auth/sign-up";
     }
     const checkoutUrl = `/app/checkout?plan=${planId}&interval=${interval}`;
@@ -28,7 +32,7 @@ export function LandingPricingCards({ data }: { data: PublicPlansResponse }) {
             Simple plans for consistent LinkedIn publishing
           </p>
           <p className="text-sm text-[var(--lp-text-muted)]">
-            Start with a 3-day free trial. Every plan includes LinkedIn publishing and email approvals.
+            Start with a {trialDays}-day free trial. Every plan includes LinkedIn publishing and email approvals.
           </p>
         </div>
 
@@ -59,13 +63,14 @@ export function LandingPricingCards({ data }: { data: PublicPlansResponse }) {
               : "text-[var(--lp-text-muted)] hover:text-[var(--lp-text-heading)]"
               }`}
           >
-            Annual (5% off)
+            Annual ({annualPct}% off)
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
         {data.plans.map((plan) => {
+          const isFreeTrial = Boolean(plan.is_system || plan.monthly_price_usd === 0);
           const isAnnual = interval === "annual" && plan.annual_price_usd !== null;
           const monthlyUsd = isAnnual
             ? plan.annual_monthly_equivalent_usd
@@ -74,27 +79,35 @@ export function LandingPricingCards({ data }: { data: PublicPlansResponse }) {
             ? plan.annual_monthly_equivalent_pkr_approx
             : plan.monthly_price_pkr_approx;
 
+          const docsLimit = plan.features.docs_token_limit ?? 0;
+          const schedTxt =
+            plan.limits.scheduled_posts === null
+              ? "Unlimited"
+              : `${plan.limits.scheduled_posts}${isFreeTrial ? " total" : "/month"}`;
+          const pgTxt =
+            plan.limits.playground_runs === null
+              ? "Unlimited"
+              : `${plan.limits.playground_runs}${isFreeTrial ? " total" : "/month"}${
+                  plan.limits.playground_runs_per_day !== null
+                    ? ` (${plan.limits.playground_runs_per_day}/day)`
+                    : ""
+                }`;
+
           const rows: { label: string; included: boolean }[] = [
-            {
-              label: `Scheduled posts: ${plan.limits.scheduled_posts}${plan.id === "trial" ? " total" : "/month"
-                }`,
-              included: true,
-            },
-            {
-              label: `Playground runs: ${plan.limits.playground_runs}${plan.id === "trial" ? " total" : "/month"
-                } (${plan.limits.playground_runs_per_day}/day)`,
-              included: true,
-            },
+            { label: `Scheduled posts: ${schedTxt}`, included: true },
+            { label: `Playground runs: ${pgTxt}`, included: true },
             {
               label: plan.features.approval_slack ? "Slack approval: included" : "Slack approval: no",
               included: plan.features.approval_slack,
             },
             {
               label:
-                plan.features.docs_token_limit > 0
-                  ? `Business documents: ${plan.features.docs_token_limit.toLocaleString()} tokens`
-                  : "Business documents: no",
-              included: plan.features.docs_token_limit > 0,
+                plan.features.docs_token_limit === null
+                  ? "Business documents: unlimited tokens"
+                  : docsLimit > 0
+                    ? `Business documents: ${docsLimit.toLocaleString()} tokens`
+                    : "Business documents: no",
+              included: plan.features.docs_token_limit === null || docsLimit > 0,
             },
             {
               label: `Analytics: ${plan.features.analytics_level}`,
@@ -104,6 +117,10 @@ export function LandingPricingCards({ data }: { data: PublicPlansResponse }) {
               label: `Support: ${plan.features.support}`,
               included: true,
             },
+            ...(plan.extra_features ?? []).map((feat) => ({
+              label: feat,
+              included: true,
+            })),
             {
               label: "Facebook and Instagram: coming soon",
               included: false,
@@ -117,15 +134,25 @@ export function LandingPricingCards({ data }: { data: PublicPlansResponse }) {
             >
               <div className="space-y-5">
                 <div>
-                  <h3 className="text-base font-normal text-[var(--lp-text-heading)]">
-                    {plan.name}
-                  </h3>
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-base font-normal text-[var(--lp-text-heading)]">
+                      {plan.name}
+                    </h3>
+                    {plan.is_popular && (
+                      <Badge
+                        variant="secondary"
+                        className="bg-[var(--lp-ice)]/15 text-[var(--lp-ice)] border border-[var(--lp-ice)]/30 text-[10px] font-normal"
+                      >
+                        Popular
+                      </Badge>
+                    )}
+                  </div>
                   <div className="mt-3 flex items-baseline gap-1.5">
                     <span className="text-3xl font-normal tracking-tight text-[var(--lp-text-heading)] tabular-nums">
-                      ${monthlyUsd === 0 ? "0" : monthlyUsd?.toFixed(2)}
+                      ${monthlyUsd === 0 ? "0" : monthlyUsd?.toFixed(2) ?? "-"}
                     </span>
                     <span className="text-xs text-[var(--lp-text-muted)]">
-                      {plan.id === "trial" ? `/ ${plan.plan_length_days} days` : "/ month"}
+                      {isFreeTrial ? `/ ${plan.plan_length_days} days` : "/ month"}
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-[var(--lp-text-muted)] tabular-nums">
@@ -163,10 +190,10 @@ export function LandingPricingCards({ data }: { data: PublicPlansResponse }) {
 
               <div className="pt-6 mt-6 border-t border-[var(--lp-border-hairline)]">
                 <Link
-                  href={getPlanHref(plan.id)}
+                  href={getPlanHref(plan.id, isFreeTrial)}
                   className="inline-flex w-full items-center justify-center rounded-lg border border-[var(--lp-border-hairline)] bg-[var(--lp-ice)] px-4 py-2 text-xs font-medium text-[#08090C] transition-opacity hover:opacity-90"
                 >
-                  {plan.id === "trial"
+                  {isFreeTrial
                     ? isSignedIn
                       ? "Go to dashboard"
                       : "Start free trial"

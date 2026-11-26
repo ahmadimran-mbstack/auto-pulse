@@ -1,28 +1,33 @@
-export type PlanId = "trial" | "starter" | "pro" | "business" | "internal";
+export type PlanId = string;
 export type SubscriptionStatus = "trialing" | "active" | "expired" | "canceled";
 export type AnalyticsLevel = "none" | "basic" | "full";
 
 export interface PublicPlan {
-  id: Exclude<PlanId, "internal">;
+  id: PlanId;
   name: string;
-  monthly_price_usd: number;
-  monthly_price_pkr_approx: number;
+  monthly_price_usd: number | null;
+  monthly_price_pkr_approx: number | null;
   annual_price_usd: number | null;
   annual_price_pkr_approx: number | null;
   annual_monthly_equivalent_usd: number | null;
   annual_monthly_equivalent_pkr_approx: number | null;
   plan_length_days: number;
+  sort_order?: number;
+  is_popular?: boolean;
+  is_system?: boolean;
+  is_purchasable?: boolean;
+  extra_features?: string[];
   limits: {
-    linkedin_profiles: number;
-    scheduled_posts: number;
-    playground_runs: number;
-    playground_runs_per_day: number;
-    max_post_days_per_week: number;
+    linkedin_profiles: number | null;
+    scheduled_posts: number | null;
+    playground_runs: number | null;
+    playground_runs_per_day: number | null;
+    max_post_days_per_week: number | null;
   };
   features: {
     approval_email: boolean;
     approval_slack: boolean;
-    docs_token_limit: number;
+    docs_token_limit: number | null;
     analytics_level: AnalyticsLevel;
     support: string;
   };
@@ -32,6 +37,7 @@ export interface PublicPlansResponse {
   currency: "USD";
   pkr_per_usd: number;
   annual_discount: number;
+  trial_days?: number;
   plans: PublicPlan[];
 }
 
@@ -70,8 +76,8 @@ export interface UserEntitlements {
   };
 }
 
-export type PaymentMethod = "easypaisa" | "jazzcash";
-export type PaymentStatus = "pending" | "approved" | "rejected";
+export type PaymentMethod = "easypaisa" | "jazzcash" | "manual" | "cash" | "bank_transfer";
+export type PaymentStatus = "pending" | "approved" | "rejected" | "voided";
 
 export interface BillingPaymentItem {
   id: string;
@@ -87,11 +93,22 @@ export interface BillingPaymentItem {
   submitted_at: string | null;
   reviewed_at: string | null;
   reject_reason: string | null;
+  source?: string;
+  note?: string | null;
+  voided_at?: string | null;
+  voided_by?: string | null;
+  void_reason?: string | null;
 }
 
 export interface BillingStatusResponse {
   plan_id: PlanId;
   plan_name: string;
+  is_active?: boolean;
+  is_system?: boolean;
+  monthly_price_usd?: number | null;
+  annual_price_usd?: number | null;
+  annual_discount?: number;
+  trial_days?: number;
   status: SubscriptionStatus;
   billing_interval: "monthly" | "annual" | null;
   period_end: string | null;
@@ -101,7 +118,7 @@ export interface BillingStatusResponse {
 }
 
 export interface CheckoutInfoResponse {
-  plan_id: "starter" | "pro" | "business";
+  plan_id: string;
   plan_name: string;
   billing_interval: "monthly" | "annual";
   amount_usd_cents: number;
@@ -116,4 +133,5 @@ export interface AdminPaymentItem extends BillingPaymentItem {
   user_id: string;
   user_email: string;
   reviewed_by: string | null;
+  recorded_by?: string | null;
 }

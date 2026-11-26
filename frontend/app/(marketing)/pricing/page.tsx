@@ -6,21 +6,26 @@ import { PricingFaq } from "../components/pricing-faq";
 import { FinalCta } from "../components/final-cta";
 import { Footer } from "../components/footer";
 
-export const metadata: Metadata = {
-  title: "Pricing | AutoPulse",
-  description:
-    "Start with a 3-day free trial. Compare Free trial, Starter, Pro, and Business plans for automated LinkedIn publishing.",
-  alternates: {
-    canonical: "/pricing",
-  },
-  openGraph: {
+export async function generateMetadata(): Promise<Metadata> {
+  const data = await getPlans();
+  const trialDays = data.trial_days ?? 3;
+  const planNames = data.plans.map((p) => p.name).join(", ");
+  const description = `Start with a ${trialDays}-day free trial. Compare ${planNames} plans for automated LinkedIn publishing.`;
+
+  return {
     title: "Pricing | AutoPulse",
-    description:
-      "Start with a 3-day free trial. Compare Free trial, Starter, Pro, and Business plans for automated LinkedIn publishing.",
-    url: "/pricing",
-    type: "website",
-  },
-};
+    description,
+    alternates: {
+      canonical: "/pricing",
+    },
+    openGraph: {
+      title: "Pricing | AutoPulse",
+      description,
+      url: "/pricing",
+      type: "website",
+    },
+  };
+}
 
 export default async function PricingPage() {
   const data = await getPlans();
@@ -32,7 +37,7 @@ export default async function PricingPage() {
       </div>
       <main className="flex-1">
         <PricingPageClient data={data} />
-        <PricingFaq />
+        <PricingFaq trialDays={data.trial_days} pkrPerUsd={data.pkr_per_usd} />
         <FinalCta />
       </main>
       <Footer />

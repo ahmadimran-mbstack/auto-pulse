@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 interface LockedFeatureCardProps {
   title: string;
   description: string;
-  requiredPlan: "Starter" | "Pro" | "Business";
+  requiredPlan: string;
 }
 
 export function LockedFeatureCard({ title, description, requiredPlan }: LockedFeatureCardProps) {

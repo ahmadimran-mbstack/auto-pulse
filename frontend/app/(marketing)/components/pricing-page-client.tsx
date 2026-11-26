@@ -31,47 +31,63 @@ interface CompareSection {
   rows: CompareRow[];
 }
 
-function buildKeyFeatures(plan: PublicPlan): string[] {
-  const schedLabel = `${plan.limits.scheduled_posts} AI posts${plan.id === "trial" ? " total" : " per month"
-    }`;
-  const daysLabel = `Up to ${plan.limits.max_post_days_per_week} posting days per week`;
-  const pgLabel = `${plan.limits.playground_runs} Playground runs${plan.id === "trial" ? " total" : " per month"
-    } (${plan.limits.playground_runs_per_day}/day)`;
+function analyticsBulletText(level: PublicPlan["features"]["analytics_level"]): string | null {
+  if (level === "full") return "Full analytics (funnel, hooks, topics, turnaround)";
+  if (level === "basic") return "Basic analytics (summary and posts over time)";
+  return null;
+}
 
-  if (plan.id === "trial") {
-    return [
-      schedLabel,
-      pgLabel,
-      daysLabel,
-      "1 LinkedIn profile",
-      "Approval by email before every post",
-    ];
+function buildKeyFeatures(plan: PublicPlan, previousPaidPlan: PublicPlan | null): string[] {
+  const isFree = Boolean(plan.is_system || plan.monthly_price_usd === 0);
+  const schedLabel =
+    plan.limits.scheduled_posts === null
+      ? "Unlimited AI posts"
+      : `${plan.limits.scheduled_posts} AI posts${isFree ? " total" : " per month"}`;
+  const daysLabel =
+    plan.limits.max_post_days_per_week === null
+      ? "Post every day of the week"
+      : `Up to ${plan.limits.max_post_days_per_week} posting days per week`;
+  const pgLabel =
+    plan.limits.playground_runs === null
+      ? "Unlimited Playground runs"
+      : `${plan.limits.playground_runs} Playground runs${isFree ? " total" : " per month"}${
+          plan.limits.playground_runs_per_day !== null
+            ? ` (${plan.limits.playground_runs_per_day}/day)`
+            : ""
+        }`;
+  const profilesLabel =
+    plan.limits.linkedin_profiles === null
+      ? "Unlimited LinkedIn profiles"
+      : `${plan.limits.linkedin_profiles} LinkedIn ${plan.limits.linkedin_profiles === 1 ? "profile" : "profiles"}`;
+
+  const items: string[] = [];
+  if (previousPaidPlan) {
+    items.push(`Everything in ${previousPaidPlan.name}, plus:`);
   }
-  if (plan.id === "starter") {
-    return [
-      schedLabel,
-      pgLabel,
-      daysLabel,
-      "Basic analytics (summary and posts over time)",
-      "Email support",
-    ];
+  items.push(schedLabel, pgLabel, daysLabel, profilesLabel);
+
+  if (plan.features.approval_slack && plan.features.approval_email) {
+    items.push("Approval in Slack and email");
+  } else if (plan.features.approval_email) {
+    items.push("Approval by email before every post");
   }
-  if (plan.id === "pro") {
-    return [
-      "Everything in Starter, plus:",
-      schedLabel,
-      "Approval in Slack and email",
-      `Up to ${plan.features.docs_token_limit.toLocaleString()} business document tokens`,
-      "Full analytics (funnel, hooks, topics, turnaround)",
-    ];
+
+  if (plan.features.docs_token_limit === null) {
+    items.push("Unlimited business document tokens");
+  } else if (plan.features.docs_token_limit > 0) {
+    items.push(`Up to ${plan.features.docs_token_limit.toLocaleString()} business document tokens`);
   }
-  return [
-    "Everything in Pro, plus:",
-    schedLabel,
-    `${pgLabel}`,
-    `Up to ${plan.features.docs_token_limit.toLocaleString()} business document tokens`,
-    `Support: ${plan.features.support}`,
-  ];
+
+  const analyticsTxt = analyticsBulletText(plan.features.analytics_level);
+  if (analyticsTxt) items.push(analyticsTxt);
+
+  items.push(`Support: ${plan.features.support}`);
+
+  if (plan.extra_features && plan.extra_features.length > 0) {
+    items.push(...plan.extra_features);
+  }
+  items.push("Facebook and Instagram: coming soon");
+  return items;
 }
 
 function formatAnalyticsLabel(level: PublicPlan["features"]["analytics_level"]) {
@@ -113,7 +129,10 @@ export function PricingPageClient({ data }: { data: PublicPlansResponse }) {
       : `/auth/sign-up?returnTo=${encodeURIComponent(checkoutUrl)}`;
   };
 
-  const plans = data.plans;
+  const plans = [...data.plans].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  const trialDays = data.trial_days ?? 3;
+  const annualPct = Math.round((data.annual_discount ?? 0.05) * 100);
+  const planNamesSummary = plans.map((p) => p.name).join(", ");
   const [openSections, setOpenSections] = React.useState<Record<string, boolean>>({
     glance: true,
     posting: true,
@@ -135,14 +154,22 @@ export function PricingPageClient({ data }: { data: PublicPlansResponse }) {
       rows: [
         {
           label: "Price per month (USD)",
-          values: plans.map((p) => (p.monthly_price_usd === 0 ? "Free" : `$${p.monthly_price_usd.toFixed(2)}`)),
+          values: plans.map((p) =>
+            p.monthly_price_usd === null
+              ? "-"
+              : p.monthly_price_usd === 0
+              ? "Free"
+              : `$${p.monthly_price_usd.toFixed(2)}`
+          ),
         },
         {
           label: "About in PKR",
-          values: plans.map((p) => `Rs ${p.monthly_price_pkr_approx.toLocaleString()}`),
+          values: plans.map((p) =>
+            p.monthly_price_pkr_approx !== null ? `Rs ${p.monthly_price_pkr_approx.toLocaleString()}` : "-"
+          ),
         },
         {
-          label: "Price per year, 5% off",
+          label: `Price per year, ${annualPct}% off`,
           values: plans.map((p) => (p.annual_price_usd !== null ? `$${p.annual_price_usd.toFixed(2)}` : "-")),
         },
         {
@@ -158,26 +185,40 @@ export function PricingPageClient({ data }: { data: PublicPlansResponse }) {
         {
           label: "AI posts per month",
           values: plans.map((p) =>
-            p.id === "trial" ? `${p.limits.scheduled_posts} in total` : `${p.limits.scheduled_posts}`
+            p.limits.scheduled_posts === null
+              ? "Unlimited"
+              : p.is_system || p.monthly_price_usd === 0
+              ? `${p.limits.scheduled_posts} in total`
+              : `${p.limits.scheduled_posts}`
           ),
         },
         {
           label: "Posting days per week",
-          values: plans.map((p) => `up to ${p.limits.max_post_days_per_week}`),
+          values: plans.map((p) =>
+            p.limits.max_post_days_per_week === null ? "Unlimited" : `up to ${p.limits.max_post_days_per_week}`
+          ),
         },
         {
           label: "Playground runs per month",
           values: plans.map((p) =>
-            p.id === "trial" ? `${p.limits.playground_runs} in total` : `${p.limits.playground_runs}`
+            p.limits.playground_runs === null
+              ? "Unlimited"
+              : p.is_system || p.monthly_price_usd === 0
+              ? `${p.limits.playground_runs} in total`
+              : `${p.limits.playground_runs}`
           ),
         },
         {
           label: "Playground runs per day",
-          values: plans.map((p) => `${p.limits.playground_runs_per_day}`),
+          values: plans.map((p) =>
+            p.limits.playground_runs_per_day === null ? "Unlimited" : `${p.limits.playground_runs_per_day}`
+          ),
         },
         {
           label: "LinkedIn profile",
-          values: plans.map((p) => `${p.limits.linkedin_profiles}`),
+          values: plans.map((p) =>
+            p.limits.linkedin_profiles === null ? "Unlimited" : `${p.limits.linkedin_profiles}`
+          ),
         },
       ],
     },
@@ -205,7 +246,9 @@ export function PricingPageClient({ data }: { data: PublicPlansResponse }) {
           label: "Business documents (playbooks, past posts)",
           tooltip: "roughly 3,000 / 6,000 words",
           values: plans.map((p) =>
-            p.features.docs_token_limit > 0
+            p.features.docs_token_limit === null
+              ? "Unlimited"
+              : p.features.docs_token_limit > 0
               ? `Up to ${p.features.docs_token_limit.toLocaleString()} tokens`
               : false
           ),
@@ -262,7 +305,7 @@ export function PricingPageClient({ data }: { data: PublicPlansResponse }) {
         },
         {
           label: "Email and tickets",
-          values: plans.map((p) => p.id !== "trial"),
+          values: plans.map((p) => !(p.is_system || p.monthly_price_usd === 0)),
         },
         {
           label: "Answered first",
@@ -276,7 +319,7 @@ export function PricingPageClient({ data }: { data: PublicPlansResponse }) {
       rows: [
         {
           label: "Instagram and Facebook",
-          values: plans.map((p) => (p.id === "trial" ? "-" : "Coming soon")),
+          values: plans.map((p) => (p.is_system || p.monthly_price_usd === 0 ? "-" : "Coming soon")),
         },
       ],
     },
@@ -295,7 +338,7 @@ export function PricingPageClient({ data }: { data: PublicPlansResponse }) {
               Start free. Stay consistent.
             </p>
             <p className="text-base sm:text-lg text-[var(--lp-text-muted)] max-w-2xl mx-auto text-balance">
-              Start with a 3-day free trial. Every plan includes LinkedIn publishing and email approvals.
+              Start with a {trialDays}-day free trial. Every plan includes LinkedIn publishing and email approvals.
             </p>
 
             <div className="pt-2 flex justify-center">
@@ -330,20 +373,29 @@ export function PricingPageClient({ data }: { data: PublicPlansResponse }) {
                       : "text-[var(--lp-text-muted)] hover:text-[var(--lp-text-heading)]"
                   )}
                 >
-                  Annual (5% off)
+                  Annual ({annualPct}% off)
                 </button>
               </div>
             </div>
           </div>
         </section>
 
-        {/* 2. Four Plan Cards */}
+        {/* 2. Plan Cards */}
         <section className="pb-16 md:pb-24">
           <div className="max-w-7xl mx-auto px-5 lg:px-8">
             <ScrollReveal>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
-                {plans.map((plan) => {
-                  const isPro = plan.id === "pro";
+                {plans.map((plan, idx) => {
+                  const isPopular = Boolean(plan.is_popular);
+                  const isFree = Boolean(plan.is_system || plan.monthly_price_usd === 0);
+                  const prevPlan = idx > 0 ? plans[idx - 1] : null;
+                  const previousPaidPlan =
+                    !isFree &&
+                    prevPlan &&
+                    !prevPlan.is_system &&
+                    (prevPlan.monthly_price_usd ?? 0) > 0
+                      ? prevPlan
+                      : null;
                   const isAnnual = interval === "annual" && plan.annual_price_usd !== null;
                   const monthlyUsd = isAnnual
                     ? plan.annual_monthly_equivalent_usd
@@ -351,14 +403,14 @@ export function PricingPageClient({ data }: { data: PublicPlansResponse }) {
                   const monthlyPkr = isAnnual
                     ? plan.annual_monthly_equivalent_pkr_approx
                     : plan.monthly_price_pkr_approx;
-                  const keyFeatures = buildKeyFeatures(plan);
+                  const keyFeatures = buildKeyFeatures(plan, previousPaidPlan);
 
                   return (
                     <div
                       key={plan.id}
                       className={cn(
                         "relative flex flex-col justify-between rounded-2xl p-6 sm:p-7 transition-all duration-200 ease-out hover:-translate-y-0.5 motion-reduce:transition-none motion-reduce:hover:translate-y-0",
-                        isPro
+                        isPopular
                           ? "bg-gradient-to-b from-[var(--lp-ice)]/25 via-white/10 to-white/10 p-[1px] shadow-[0_0_40px_-12px_rgba(125,211,252,0.25)]"
                           : "border border-white/10 bg-[var(--lp-navy-deep)]/70 hover:border-white/25"
                       )}
@@ -366,7 +418,7 @@ export function PricingPageClient({ data }: { data: PublicPlansResponse }) {
                       <div
                         className={cn(
                           "flex flex-col justify-between h-full",
-                          isPro && "rounded-[15px] bg-[var(--lp-navy-deep)] p-6 sm:p-7"
+                          isPopular && "rounded-[15px] bg-[var(--lp-navy-deep)] p-6 sm:p-7"
                         )}
                       >
                         <div className="space-y-6">
@@ -375,12 +427,12 @@ export function PricingPageClient({ data }: { data: PublicPlansResponse }) {
                               <h2 className="text-base font-normal text-[var(--lp-text-heading)]">
                                 {plan.name}
                               </h2>
-                              {isPro && (
+                              {isPopular && (
                                 <Badge
                                   variant="secondary"
                                   className="bg-[var(--lp-ice)]/15 text-[var(--lp-ice)] border border-[var(--lp-ice)]/30 text-[11px] font-normal"
                                 >
-                                  Best for daily posting
+                                  Popular
                                 </Badge>
                               )}
                             </div>
@@ -391,10 +443,10 @@ export function PricingPageClient({ data }: { data: PublicPlansResponse }) {
                             >
                               <div className="flex items-baseline gap-1.5">
                                 <span className="text-5xl font-normal tracking-tight text-[var(--lp-text-heading)] tabular-nums">
-                                  ${monthlyUsd === 0 ? "0" : monthlyUsd?.toFixed(2)}
+                                  ${monthlyUsd === 0 ? "0" : monthlyUsd?.toFixed(2) ?? "-"}
                                 </span>
                                 <span className="text-xs text-[var(--lp-text-muted)]">
-                                  {plan.id === "trial" ? `/ ${plan.plan_length_days} days` : "/ month"}
+                                  {isFree ? `/ ${plan.plan_length_days} days` : "/ month"}
                                 </span>
                               </div>
                               <p className="mt-1.5 text-xs text-[var(--lp-text-muted)] tabular-nums">
@@ -413,8 +465,8 @@ export function PricingPageClient({ data }: { data: PublicPlansResponse }) {
                               Key features
                             </p>
                             <ul className="space-y-2.5 text-xs text-[var(--lp-text-muted)]">
-                              {keyFeatures.map((feat, idx) => (
-                                <li key={idx} className="flex items-start gap-2">
+                              {keyFeatures.map((feat, fIdx) => (
+                                <li key={fIdx} className="flex items-start gap-2">
                                   <Check
                                     className="w-3.5 h-3.5 mt-0.5 text-[var(--lp-ice)] shrink-0"
                                     aria-hidden="true"
@@ -431,13 +483,13 @@ export function PricingPageClient({ data }: { data: PublicPlansResponse }) {
                             asChild
                             className={cn(
                               "w-full rounded-xl text-xs font-medium",
-                              isPro
+                              isPopular
                                 ? "bg-[var(--lp-ice)] text-[#08090C] hover:bg-[var(--lp-ice)]/90"
                                 : "bg-white text-[#08090C] hover:bg-white/90"
                             )}
                           >
                             <Link href={getPlanHref(plan.id)}>
-                              {plan.id === "trial"
+                              {isFree
                                 ? isSignedIn
                                   ? "Go to dashboard"
                                   : "Start free trial"
@@ -486,7 +538,7 @@ export function PricingPageClient({ data }: { data: PublicPlansResponse }) {
                   Compare plans
                 </h2>
                 <p className="text-sm text-[var(--lp-text-muted)]">
-                  Every limit and feature across Free trial, Starter, Pro, and Business.
+                  Every limit and feature across {planNamesSummary}.
                 </p>
               </div>
             </ScrollReveal>
@@ -511,11 +563,11 @@ export function PricingPageClient({ data }: { data: PublicPlansResponse }) {
                               {p.name}
                             </div>
                             <div className="text-lg font-normal text-[var(--lp-text-heading)] tabular-nums">
-                              {price === 0 ? "Free" : `$${price?.toFixed(2)}/mo`}
+                              {price === 0 ? "Free" : `$${price?.toFixed(2) ?? "-"}/mo`}
                             </div>
                             <Button asChild size="sm" variant="outline" className="h-7 text-xs border-white/15">
                               <Link href={getPlanHref(p.id)}>
-                                {p.id === "trial" ? (isSignedIn ? "Open" : "Start") : "Choose"}
+                                {p.is_system || p.monthly_price_usd === 0 ? (isSignedIn ? "Open" : "Start") : "Choose"}
                               </Link>
                             </Button>
                           </div>
@@ -532,7 +584,7 @@ export function PricingPageClient({ data }: { data: PublicPlansResponse }) {
                         <tr className="border-t border-white/10 bg-[var(--lp-navy-deep)]/60">
                           <th
                             scope="row"
-                            colSpan={5}
+                            colSpan={plans.length + 1}
                             className="p-0 text-left"
                           >
                             <button
