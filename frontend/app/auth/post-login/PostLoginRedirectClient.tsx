@@ -2,17 +2,18 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { getAdminMe } from "@/lib/api";
+import { resolvePostAuthDestination } from "@/lib/auth/post-auth";
 
 export function PostLoginRedirectClient() {
   const router = useRouter();
 
   React.useEffect(() => {
     let active = true;
-    getAdminMe()
+    resolvePostAuthDestination("/app")
       .then((res) => {
         if (!active) return;
-        router.replace(res.is_admin ? "/admin" : "/app");
+        router.refresh();
+        window.location.assign(res.ok ? res.destination : "/auth/sign-in");
       })
       .catch(() => {
         if (!active) return;
