@@ -74,9 +74,10 @@ export function verifyVerifyEmailCookieValue(
 // Build a Set-Cookie header string for setting or clearing the verify-email cookie
 export function buildVerifyEmailSetCookieHeader(
   value: string,
-  maxAgeSeconds: number
+  maxAgeSeconds: number,
+  secure: boolean = process.env.NODE_ENV === "production"
 ): string {
-  const secureFlag = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  const secureFlag = secure ? "; Secure" : "";
   return `${VERIFY_EMAIL_COOKIE_NAME}=${value}; Path=/; Max-Age=${maxAgeSeconds}; HttpOnly; SameSite=Lax${secureFlag}`;
 }
 

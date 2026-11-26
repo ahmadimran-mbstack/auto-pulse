@@ -28,7 +28,7 @@ export default async function AppShellLayout({
   try {
     const res = await auth.getSession();
     session = res?.data;
-  } catch (err) {
+  } catch {
     // Session retrieval failed or token expired
   }
 

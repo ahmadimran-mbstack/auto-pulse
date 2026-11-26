@@ -287,15 +287,66 @@ export async function POST(request: Request, context: any) {
       })
       : request;
 
+  const isSignOut = subPath.includes("sign-out");
+  const isHttps =
+    request.url.startsWith("https://") ||
+    request.headers.get("x-forwarded-proto") === "https";
+
   let res: Response;
   try {
     res = await executeWithOriginFallback(baseHandlers.POST, forwardReq, context);
-  } catch {
-    // Upstream error or network issue: ensure response is created so client can still receive cookie cleanup
-    res = new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
+  } catch (err) {
+    console.error("[NEON_AUTH] Upstream POST failed:", {
+      subPath,
+      error: err instanceof Error ? err.message : String(err),
     });
+    if (isSignOut) {
+      // Upstream error during sign-out: still allow cookie cleanup below
+      res = new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    } else {
+      return new Response(
+        JSON.stringify({
+          code: "AUTH_UPSTREAM_ERROR",
+          message: "Authentication service is temporarily unavailable. Please try again.",
+        }),
+        { status: 502, headers: { "Content-Type": "application/json" } }
+      );
+    }
+  }
+
+  // Ensure Neon Auth session cookies remain persistent across tab/browser restarts
+  if (
+    res.ok &&
+    (subPath === "sign-in/email" ||
+      subPath.endsWith("/sign-in/email") ||
+      subPath === "email-otp/verify-email" ||
+      subPath.endsWith("/email-otp/verify-email")) &&
+    typeof res.headers.getSetCookie === "function"
+  ) {
+    const rawCookies = res.headers.getSetCookie();
+    if (rawCookies.length > 0) {
+      const updatedHeaders = new Headers(res.headers);
+      updatedHeaders.delete("set-cookie");
+      for (const cookieStr of rawCookies) {
+        let nextCookie = cookieStr;
+        if (
+          nextCookie.includes("session_token=") &&
+          !/max-age=/i.test(nextCookie) &&
+          !/expires=/i.test(nextCookie)
+        ) {
+          nextCookie += "; Max-Age=2592000";
+        }
+        updatedHeaders.append("Set-Cookie", nextCookie);
+      }
+      res = new Response(res.body, {
+        status: res.status,
+        statusText: res.statusText,
+        headers: updatedHeaders,
+      });
+    }
   }
 
   // Issue signed verify-email cookie after sign-up so /auth/verify-otp is reachable
@@ -306,7 +357,11 @@ export async function POST(request: Request, context: any) {
       const newHeaders = new Headers(res.headers);
       newHeaders.append(
         "Set-Cookie",
-        buildVerifyEmailSetCookieHeader(createVerifyEmailCookieValue(email), VERIFY_EMAIL_TTL_SECONDS)
+        buildVerifyEmailSetCookieHeader(
+          createVerifyEmailCookieValue(email),
+          VERIFY_EMAIL_TTL_SECONDS,
+          isHttps
+        )
       );
       return new Response(res.body, {
         status: res.status,
@@ -331,7 +386,11 @@ export async function POST(request: Request, context: any) {
         const newHeaders = new Headers(res.headers);
         newHeaders.append(
           "Set-Cookie",
-          buildVerifyEmailSetCookieHeader(createVerifyEmailCookieValue(email), VERIFY_EMAIL_TTL_SECONDS)
+          buildVerifyEmailSetCookieHeader(
+            createVerifyEmailCookieValue(email),
+            VERIFY_EMAIL_TTL_SECONDS,
+            isHttps
+          )
         );
         newHeaders.delete("content-encoding");
         newHeaders.delete("content-length");
@@ -355,16 +414,13 @@ export async function POST(request: Request, context: any) {
   // Clear verify-email cookie once email verification succeeds
   if ((subPath === "email-otp/verify-email" || subPath.endsWith("/email-otp/verify-email")) && res.ok) {
     const newHeaders = new Headers(res.headers);
-    newHeaders.append("Set-Cookie", buildVerifyEmailSetCookieHeader("", 0));
+    newHeaders.append("Set-Cookie", buildVerifyEmailSetCookieHeader("", 0, isHttps));
     return new Response(res.body, {
       status: res.status,
       statusText: res.statusText,
       headers: newHeaders,
     });
   }
-
-  // Detect sign-out endpoint invocations
-  const isSignOut = subPath.includes("sign-out");
 
   if (isSignOut) {
     const newHeaders = new Headers(res.headers);

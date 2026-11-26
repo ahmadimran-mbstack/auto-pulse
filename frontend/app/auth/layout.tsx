@@ -49,7 +49,7 @@ export default async function AuthLayout({ children }: AuthLayoutProps) {
   try {
     const res = await auth.getSession();
     session = res?.data;
-  } catch (err) {
+  } catch {
     // Gracefully handle session retrieval errors in layout (e.g. unauthenticated or cookie restrictions)
   }
 
