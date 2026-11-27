@@ -68,7 +68,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSignOut } from "@/hooks/use-sign-out";
 import { getAdminBadgeCounts } from "@/lib/api";
-import { useMeQuery } from "@/lib/queries";
+import { getPostAuthRoute, performSuspendedSignOut } from "@/lib/auth/post-auth";
+import { queryClient, useMeQuery } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 interface AdminNavItem {
@@ -380,10 +381,24 @@ export function AdminGate({
   });
 
   React.useEffect(() => {
-    if (!isLoading && (isError || !data?.is_admin)) {
-      router.replace("/app");
+    if (isLoading) return;
+    if (data?.status === "suspended") {
+      performSuspendedSignOut(() => queryClient.clear()).then(() => {
+        router.replace(getPostAuthRoute(data));
+      });
+      return;
     }
-  }, [isLoading, isError, data?.is_admin, router]);
+    if (data && !data.is_admin) {
+      const target = getPostAuthRoute(data);
+      if (target !== "/admin" && !pathname.startsWith(target)) {
+        router.replace(target);
+      }
+      return;
+    }
+    if (isError || !data) {
+      router.replace("/auth/sign-in");
+    }
+  }, [isLoading, isError, data, pathname, router]);
 
   React.useEffect(() => {
     if (typeof document !== "undefined" && data?.is_admin) {

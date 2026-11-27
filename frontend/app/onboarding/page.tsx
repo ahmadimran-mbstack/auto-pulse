@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getProfile } from "@/lib/api";
+import { getMe, getProfile } from "@/lib/api";
+import { getPostAuthRoute, type MeResponse } from "@/lib/auth/post-auth";
+import { queryClient } from "@/lib/queries";
 import { setOnboardingCompletedCookieAction } from "./actions";
 import { OnboardingSkeleton } from "./components/OnboardingShell";
 import { ErrorState } from "@/components/app/ErrorState";
@@ -30,14 +32,20 @@ export default function OnboardingIndexPage() {
         const profile = await getProfile();
         if (!isMounted) return;
 
-        // If user already finished onboarding, ensure cookie is set and send straight to dashboard
+        // If user already finished onboarding, update me cache and route via getPostAuthRoute
         if (profile.onboarding_complete) {
+          const isMeQuery = (q: { queryKey: readonly unknown[] }) =>
+            Array.isArray(q.queryKey) && q.queryKey[0] === "autopulse" && q.queryKey[2] === "me";
+          queryClient.setQueriesData<MeResponse>({ predicate: isMeQuery }, (old) =>
+            old ? { ...old, onboarding_completed: true } : old
+          );
           try {
             await setOnboardingCompletedCookieAction();
           } catch {
             // Ignore cookie setting errors
           }
-          router.replace("/app");
+          const freshMe = await getMe().catch(() => null);
+          router.replace(freshMe ? getPostAuthRoute({ ...freshMe, onboarding_completed: true }) : "/app");
           return;
         }
 

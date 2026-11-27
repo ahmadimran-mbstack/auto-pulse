@@ -2,11 +2,9 @@ import * as React from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/server";
-import {
-  verifyOnboardingCookie,
-  ONBOARDING_COMPLETED_COOKIE,
-} from "@/lib/onboarding-cookie";
 import { AppQueryProvider } from "@/components/providers/query-provider";
+import { OnboardingGate } from "@/components/onboarding/OnboardingGate";
+import type { AppUser } from "@/components/providers/user-provider";
 import { OnboardingHeader } from "./components/OnboardingHeader";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +12,7 @@ export const revalidate = 0;
 
 // Standalone layout for the onboarding wizard
 // Ensures users cannot access onboarding without authenticating,
-// and redirects completed users straight to the active dashboard.
+// and gates access via the shared /me query.
 export default async function OnboardingLayout({
   children,
 }: {
@@ -27,7 +25,7 @@ export default async function OnboardingLayout({
   try {
     const res = await auth.getSession();
     session = res?.data;
-  } catch (err) {
+  } catch {
     // Session check failed or expired
   }
 
@@ -36,23 +34,26 @@ export default async function OnboardingLayout({
     redirect("/auth/sign-in");
   }
 
-  // Guard 2: Users who already finished onboarding must never see it again
-  const completedCookie = cookieStore.get(ONBOARDING_COMPLETED_COOKIE)?.value;
-  if (verifyOnboardingCookie(session.user.id, completedCookie)) {
-    redirect("/app");
-  }
+  const user: AppUser = {
+    id: session.user.id,
+    name: session.user.name,
+    email: session.user.email,
+    image: session.user.image ?? null,
+  };
 
   return (
     <AppQueryProvider>
-      <div className="min-h-screen flex flex-col bg-[#FAFAFA] dark:bg-background text-foreground">
-        {/* Top bar with AutoPulse logo and Sign out button */}
-        <OnboardingHeader />
+      <OnboardingGate user={user}>
+        <div className="min-h-screen flex flex-col bg-[#FAFAFA] dark:bg-background text-foreground">
+          {/* Top bar with AutoPulse logo and Sign out button */}
+          <OnboardingHeader />
 
-        {/* Centered single column for onboarding steps (approx 640px wide) */}
-        <main className="flex-1 w-full max-w-[640px] mx-auto px-4 sm:px-6 py-8 sm:py-10">
-          {children}
-        </main>
-      </div>
+          {/* Centered single column for onboarding steps (approx 640px wide) */}
+          <main className="flex-1 w-full max-w-[640px] mx-auto px-4 sm:px-6 py-8 sm:py-10">
+            {children}
+          </main>
+        </div>
+      </OnboardingGate>
     </AppQueryProvider>
   );
 }

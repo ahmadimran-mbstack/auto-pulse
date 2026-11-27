@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { getProfile, saveStep4, completeOnboarding, ApiClientError } from "@/lib/api";
+import { getMe, getProfile, saveStep4, completeOnboarding, ApiClientError } from "@/lib/api";
+import { getPostAuthRoute, type MeResponse } from "@/lib/auth/post-auth";
 import { setOnboardingCompletedCookieAction } from "../actions";
 import { OnboardingShell, OnboardingSkeleton } from "../components/OnboardingShell";
 import { TimezoneSelect } from "../components/TimezoneSelect";
@@ -11,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PlatformLabel } from "@/components/app/PlatformLabel";
 import { ApprovalTimingControl } from "@/components/app/ApprovalTimingControl";
-import { useSlackStatusQuery, useEntitlements } from "@/lib/queries";
+import { queryClient, useSlackStatusQuery, useEntitlements } from "@/lib/queries";
 
 interface DayOption {
   day: number;
@@ -185,18 +186,27 @@ export default function OnboardingSchedulePage() {
       });
 
       // 2. Mark onboarding as finalized in backend database
-      const profile = await completeOnboarding();
+      await completeOnboarding();
 
-      // 3. Set signed httpOnly cookie (non-blocking best-effort)
+      // 3. Update /me cache immediately so AppGate does not wait for staleTime
+      const isMeQuery = (q: { queryKey: readonly unknown[] }) =>
+        Array.isArray(q.queryKey) && q.queryKey[0] === "autopulse" && q.queryKey[2] === "me";
+      queryClient.setQueriesData<MeResponse>({ predicate: isMeQuery }, (old) =>
+        old ? { ...old, onboarding_completed: true } : old
+      );
+      await queryClient.invalidateQueries({ predicate: isMeQuery });
+
+      // 4. Set signed httpOnly cookie (non-blocking best-effort)
       try {
         await setOnboardingCompletedCookieAction();
       } catch (cookieErr) {
         console.warn("Failed to set onboarding completion cookie:", cookieErr);
       }
 
-      // 4. Send user straight to active dashboard with a clean window transition
-      if (typeof window !== "undefined") {
-        window.location.replace("/app");
+      // 5. Route via shared getPostAuthRoute helper
+      const freshMe = await getMe().catch(() => null);
+      if (freshMe) {
+        router.replace(getPostAuthRoute({ ...freshMe, onboarding_completed: true }));
       } else {
         router.replace("/app");
       }

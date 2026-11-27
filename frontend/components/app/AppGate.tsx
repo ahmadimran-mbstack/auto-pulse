@@ -1,11 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { AppUser } from "@/components/providers/user-provider";
 import { queryClient, useMeQuery } from "@/lib/queries";
-import { performSuspendedSignOut } from "@/lib/auth/post-auth";
+import { getPostAuthRoute, performSuspendedSignOut } from "@/lib/auth/post-auth";
 
 export function AppGate({
   user,
@@ -14,23 +14,26 @@ export function AppGate({
   user: AppUser;
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
   const router = useRouter();
   const { data: me, isLoading } = useMeQuery(user.id);
 
   React.useEffect(() => {
-    if (!me) return;
+    if (isLoading || !me) return;
+    const target = getPostAuthRoute(me);
     if (me.status === "suspended") {
       performSuspendedSignOut(() => queryClient.clear()).then(() => {
-        router.replace("/auth/sign-in?error=suspended");
+        router.replace(target);
       });
       return;
     }
-    if (!me.is_admin && !me.onboarding_completed) {
-      router.replace("/onboarding");
+    // Admins may stay on /app when navigating via "Back to app"
+    if (!me.is_admin && target !== "/app" && !pathname.startsWith(target)) {
+      router.replace(target);
     }
-  }, [me, router]);
+  }, [isLoading, me, pathname, router]);
 
-  if (isLoading || !me || me.status === "suspended" || (!me.is_admin && !me.onboarding_completed)) {
+  if (isLoading || !me || me.status === "suspended" || (!me.is_admin && getPostAuthRoute(me) !== "/app")) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-6">
         <div className="space-y-3 w-48">

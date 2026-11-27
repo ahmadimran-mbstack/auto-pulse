@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   useDashboardQuery,
   usePostsQuery,
@@ -17,10 +17,8 @@ import { mapTabToStatusFilter, type PostsTabFilter } from "@/lib/posts";
 import { Globe } from "lucide-react";
 import { ErrorState } from "@/components/app/ErrorState";
 import { toast } from "sonner";
-import { useQuery } from "@tanstack/react-query";
-import { getAdminMe, patchProfile } from "@/lib/api";
+import { patchProfile } from "@/lib/api";
 import { SlackDisconnectedBanner } from "@/components/app/SlackDisconnectedBanner";
-import { setOnboardingCompletedCookieAction } from "@/app/onboarding/actions";
 
 interface AppDashboardClientProps {
   user: {
@@ -32,7 +30,6 @@ interface AppDashboardClientProps {
 }
 
 export function AppDashboardClient({ user }: AppDashboardClientProps) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const statusParam = searchParams.get("status") as PostsTabFilter | null;
   const mappedStatus = statusParam ? mapTabToStatusFilter(statusParam) : undefined;
@@ -45,24 +42,6 @@ export function AppDashboardClient({ user }: AppDashboardClientProps) {
     error: dashError,
     refetch: refetchDash,
   } = useDashboardQuery(user.id);
-
-  const { data: adminMe } = useQuery({
-    queryKey: ["admin-me"],
-    queryFn: getAdminMe,
-    retry: false,
-    staleTime: 60_000,
-  });
-
-  // Guard: If profile has not completed onboarding, route to onboarding wizard; otherwise persist completion cookie (admins bypass onboarding)
-  React.useEffect(() => {
-    if (dashboardData?.profile) {
-      if (dashboardData.profile.onboarding_complete === false && !adminMe?.is_admin) {
-        router.replace("/onboarding");
-      } else if (dashboardData.profile.onboarding_complete === true) {
-        setOnboardingCompletedCookieAction().catch(() => {});
-      }
-    }
-  }, [dashboardData, adminMe?.is_admin, router]);
 
   // 2. TanStack Query: Fetch posts with status filter
   const [limit, setLimit] = React.useState(20);
