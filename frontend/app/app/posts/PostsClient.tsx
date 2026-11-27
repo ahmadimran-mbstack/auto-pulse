@@ -26,8 +26,10 @@ import {
   SparklesIcon,
   ArrowUpDownIcon,
   SendIcon,
+  Trash2Icon,
 } from "lucide-react";
 import { PublishDraftDialog } from "@/components/app/PublishDraftDialog";
+import { DeletePostDialog } from "@/components/app/DeletePostDialog";
 import { PageHeader } from "@/components/app/PageHeader";
 import { EmptyState } from "@/components/app/EmptyState";
 import { ErrorState } from "@/components/app/ErrorState";
@@ -51,9 +53,15 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { usePostsQuery, prefetchPostDetail } from "@/lib/queries";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { usePostsQuery, useDeletePostMutation, prefetchPostDetail } from "@/lib/queries";
 import { getPosts } from "@/lib/api";
 import {
   formatRunDate,
@@ -190,6 +198,9 @@ export function PostsClient({ user }: PostsClientProps) {
   }, [activeTab, data?.next_cursor]);
 
   // Combined post list: base items from query + extra items loaded via cursor
+  const deleteMutation = useDeletePostMutation(user.id);
+  const [deleteTarget, setDeleteTarget] = React.useState<PostListItem | null>(null);
+
   const postsList: PostListItem[] = React.useMemo(() => {
     const base = data?.items || [];
     if (extraItems.length === 0) return base;
@@ -464,6 +475,31 @@ export function PostsClient({ user }: PostsClientProps) {
                         <span>Open full page</span>
                       </Link>
                     </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    {post.status === "publishing" ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div>
+                            <DropdownMenuItem
+                              disabled
+                              className="text-destructive focus:text-destructive opacity-50 cursor-not-allowed"
+                            >
+                              <Trash2Icon className="size-4 mr-2" />
+                              <span>Delete</span>
+                            </DropdownMenuItem>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>Being published right now</TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      <DropdownMenuItem
+                        onClick={() => setDeleteTarget(post)}
+                        className="cursor-pointer text-destructive focus:text-destructive focus:bg-destructive/10"
+                      >
+                        <Trash2Icon className="size-4 mr-2" />
+                        <span>Delete</span>
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -697,6 +733,33 @@ export function PostsClient({ user }: PostsClientProps) {
         userId={user.id}
         post={publishPostTarget}
         onPublished={() => refetch()}
+      />
+
+      {/* Delete post confirmation dialog */}
+      <DeletePostDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        postTitle={
+          deleteTarget
+            ? deleteTarget.topic_title || deleteTarget.caption_preview.split("\n")[0] || ""
+            : ""
+        }
+        isDeleting={deleteMutation.isPending}
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          const targetId = deleteTarget.id;
+          try {
+            await deleteMutation.mutateAsync(targetId);
+            setExtraItems((prev) => prev.filter((item) => item.id !== targetId));
+            setDeleteTarget(null);
+            toast.success("Post deleted");
+          } catch (err) {
+            setDeleteTarget(null);
+            toast.error(err instanceof Error ? err.message : "Could not delete post.");
+          }
+        }}
       />
     </div>
   );

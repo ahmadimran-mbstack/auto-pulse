@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   ArrowLeftIcon,
@@ -11,6 +12,8 @@ import {
   CheckCircle2Icon,
   HelpCircleIcon,
   SendIcon,
+  SquarePenIcon,
+  Trash2Icon,
 } from "lucide-react";
 import { FaLinkedin } from "react-icons/fa6";
 import {
@@ -47,7 +50,9 @@ import {
   usePostImageQuery,
   useSubmitDecisionMutation,
   useRetryPublicationMutation,
+  useDeletePostMutation,
 } from "@/lib/queries";
+import { ApiClientError } from "@/lib/api";
 import {
   formatRunDate,
   formatDecisionDeadline,
@@ -56,6 +61,7 @@ import {
 import { cn } from "@/lib/utils";
 import { getStatusBannerStyle } from "@/components/app/StatusBadge";
 import { PublishDraftDialog } from "@/components/app/PublishDraftDialog";
+import { DeletePostDialog } from "@/components/app/DeletePostDialog";
 
 interface PostDetailClientProps {
   id: string;
@@ -72,6 +78,7 @@ function extractHostname(urlStr: string): string {
 }
 
 export function PostDetailClient({ id }: PostDetailClientProps) {
+  const router = useRouter();
   const { user } = useUser();
 
   // Load post details and 480px branded image in parallel
@@ -113,13 +120,15 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
   // Mutations
   const decisionMutation = useSubmitDecisionMutation(user.id);
   const retryMutation = useRetryPublicationMutation(user.id);
+  const deleteMutation = useDeletePostMutation(user.id);
 
-  // Modal state for outcome_unknown retry confirmation & draft publish
+  // Modal state for outcome_unknown retry confirmation, draft publish & delete
   const [showConfirmModal, setShowConfirmModal] = React.useState(false);
   const [confirmedNotPosted, setConfirmedNotPosted] = React.useState(false);
   const [showTrace, setShowTrace] = React.useState(false);
   const [showPublishDialog, setShowPublishDialog] = React.useState(false);
   const [isPostingNow, setIsPostingNow] = React.useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = React.useState(false);
 
   // Poll post data every 10 seconds while status is "publishing"
   React.useEffect(() => {
@@ -139,13 +148,20 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
   }
 
   if (postError || !post) {
+    const isNotFound =
+      (error instanceof ApiClientError && error.status === 404) || !post;
     return (
       <div className="p-6 md:p-8 space-y-4 max-w-lg mx-auto">
         <ErrorState
+          title={isNotFound ? "Post not found" : "Something went wrong"}
           message={
-            error instanceof Error ? error.message : "We could not load this post."
+            isNotFound
+              ? "This post does not exist or may have been deleted."
+              : error instanceof Error
+                ? error.message
+                : "We could not load this post."
           }
-          onRetry={() => refetch()}
+          onRetry={isNotFound ? undefined : () => refetch()}
         />
         <div>
           <Button asChild variant="outline" size="sm">
@@ -264,6 +280,18 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
               <span>How this was written</span>
             </Button>
             <PostDecisionBadge post={post} layout="horizontal" />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={post.status === "publishing" || deleteMutation.isPending}
+              onClick={() => setShowDeleteDialog(true)}
+              title={post.status === "publishing" ? "Being published right now" : "Delete post"}
+              className="gap-1.5 h-8 text-xs text-destructive hover:text-destructive border-destructive/30 hover:bg-destructive/10"
+            >
+              <Trash2Icon className="size-3.5" />
+              <span>Delete</span>
+            </Button>
           </div>
         }
       />
@@ -283,7 +311,17 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
               </AlertDescription>
             </div>
           </div>
-          <div className="shrink-0 self-start sm:self-center">
+          <div className="flex items-center gap-2 flex-wrap shrink-0 self-start sm:self-center">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isPostingNow}
+              onClick={() => router.push(`/app/playground?tab=composer&fromPost=${encodeURIComponent(post.id)}`)}
+              className="h-9 px-3.5 text-sm font-medium rounded-md gap-2"
+            >
+              <SquarePenIcon className="size-4 shrink-0" />
+              <span>Send to composer</span>
+            </Button>
             <Button
               type="button"
               onClick={() => setShowPublishDialog(true)}
@@ -669,6 +707,25 @@ export function PostDetailClient({ id }: PostDetailClientProps) {
         post={post}
         onPublished={() => refetch()}
         onPendingChange={setIsPostingNow}
+      />
+
+      {/* Delete Post Confirmation Dialog */}
+      <DeletePostDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        postTitle={post.topic_title || post.caption.split("\n")[0] || ""}
+        isDeleting={deleteMutation.isPending}
+        onConfirm={async () => {
+          try {
+            await deleteMutation.mutateAsync(post.id);
+            setShowDeleteDialog(false);
+            toast.success("Post deleted");
+            router.push("/app/posts");
+          } catch (err) {
+            setShowDeleteDialog(false);
+            toast.error(err instanceof Error ? err.message : "Could not delete post.");
+          }
+        }}
       />
     </div>
   );

@@ -88,6 +88,11 @@ export function subscribeReconnecting(listener: (reconnecting: boolean) => void)
 type AuthSessionCheckResult = "valid" | "invalid" | "network_error";
 let _inFlightSessionCheck: Promise<AuthSessionCheckResult> | null = null;
 let _signOutInProgress = false;
+let _suspendedCacheClearer: (() => void) | null = null;
+
+export function registerSuspendedCacheClearer(fn: () => void): void {
+  _suspendedCacheClearer = fn;
+}
 
 // Checks with Neon Auth once whether the session is genuinely invalid.
 // Returns "invalid" ONLY when the auth server clearly reports no active session.
@@ -406,17 +411,22 @@ export async function apiCall<T>(
 
     if (
       response.status === 403 &&
-      (errorCode === "ACCOUNT_SUSPENDED" ||
+      (errorCode === "account_suspended" ||
+        errorCode === "ACCOUNT_SUSPENDED" ||
         errorCode === "ACCOUNT_DISABLED" ||
         errorCode === "ACCOUNT_DELETED")
     ) {
       clearCachedToken();
+      _suspendedCacheClearer?.();
       if (!_signOutInProgress) {
         _signOutInProgress = true;
         try {
           await authClient.signOut();
         } catch {
           // Ignore cleanup error
+        }
+        if (typeof document !== "undefined") {
+          document.cookie = "autopulse_signed_out=true; path=/; max-age=86400; SameSite=Lax";
         }
         if (typeof window !== "undefined") {
           try {
@@ -429,7 +439,11 @@ export async function apiCall<T>(
           } catch {
             // Storage access may be restricted
           }
-          window.location.replace(`/auth/sign-in?error=${encodeURIComponent(errorCode)}`);
+          const queryError =
+            errorCode === "account_suspended" || errorCode === "ACCOUNT_SUSPENDED"
+              ? "suspended"
+              : errorCode;
+          window.location.replace(`/auth/sign-in?error=${encodeURIComponent(queryError)}`);
         }
       }
     }
@@ -493,6 +507,12 @@ export async function submitManualPayment(payload: {
   return apiCall("/api/billing/payments", {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+export async function getMe() {
+  return apiCall<import("@/lib/auth/post-auth").MeResponse>("/me", {
+    method: "GET",
   });
 }
 
@@ -742,6 +762,12 @@ export async function getPosts(
 export async function getPost(id: string): Promise<PostDetail> {
   return apiCall<PostDetail>(`/posts/${id}`, {
     method: "GET",
+  });
+}
+
+export async function deletePost(id: string): Promise<{ deleted: boolean; id: string }> {
+  return apiCall<{ deleted: boolean; id: string }>(`/posts/${encodeURIComponent(id)}`, {
+    method: "DELETE",
   });
 }
 

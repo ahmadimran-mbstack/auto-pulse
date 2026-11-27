@@ -31,13 +31,13 @@ def get_approval_and_post_by_token(db: Session, token: str):
     if not approval:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "not_found", "message": "Approval token not found"},
+            detail={"code": "not_found", "message": "This post no longer exists"},
         )
     post = db.query(Post).filter(Post.id == approval.post_id).first()
     if not post:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "not_found", "message": "Associated post not found"},
+            detail={"code": "not_found", "message": "This post no longer exists"},
         )
     return approval, post, token_hash
 

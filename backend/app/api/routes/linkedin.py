@@ -3,8 +3,10 @@ import json
 import logging
 import re
 from typing import Optional
+import uuid
 import zoneinfo
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.auth import User, current_user
@@ -48,7 +50,28 @@ async def _execute_direct_post(
     ai_score: Optional[int] = None,
     image_headline: Optional[str] = None,
     sources_json: Optional[str] = None,
+    source_post_id: Optional[str] = None,
 ) -> LinkedInPostResponse:
+    # 0. Validate optional source_post_id (must be valid UUID and never belong to another user)
+    source_post_uuid: Optional[uuid.UUID] = None
+    if source_post_id and source_post_id.strip():
+        try:
+            source_post_uuid = uuid.UUID(source_post_id.strip())
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"error": "validation_error", "message": "Invalid source_post_id."},
+            )
+        other_owner = db.execute(
+            text("SELECT 1 FROM posts WHERE id = :id AND user_id != :uid LIMIT 1"),
+            {"id": source_post_uuid, "uid": user.id},
+        ).fetchone()
+        if other_owner:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"error": "not_found", "message": "Source post not found."},
+            )
+
     # 1. Validate content presence
     if not content or not content.strip():
         raise HTTPException(
@@ -296,6 +319,30 @@ async def _execute_direct_post(
         updated_at=now_utc,
     )
     db.add(publication)
+
+    # If published from a draft sent to composer, atomically mark that draft published
+    if post_urn and not publish_error_msg and source_post_uuid is not None:
+        updated_source = db.execute(
+            text(
+                "UPDATE posts "
+                "SET status = 'published', topic_url = :topic_url, decided_at = COALESCE(decided_at, now()), updated_at = now() "
+                "WHERE id = :source_id AND user_id = :user_id AND status = 'draft' "
+                "RETURNING id"
+            ),
+            {"source_id": source_post_uuid, "user_id": user.id, "topic_url": post_topic_url},
+        ).fetchone()
+        if updated_source:
+            db.execute(
+                text(
+                    "INSERT INTO post_publications (user_id, post_id, platform, status, attempts, external_id, published_at, created_at, updated_at) "
+                    "VALUES (:uid, :pid, 'linkedin', 'published', 1, :ext_id, :now_utc, :now_utc, :now_utc) "
+                    "ON CONFLICT (post_id, platform) DO UPDATE SET "
+                    "status = 'published', external_id = EXCLUDED.external_id, error_code = NULL, "
+                    "error_detail = NULL, published_at = EXCLUDED.published_at, updated_at = EXCLUDED.updated_at"
+                ),
+                {"uid": user.id, "pid": source_post_uuid, "ext_id": post_urn, "now_utc": now_utc},
+            )
+
     db.commit()
     db.refresh(post)
 
@@ -337,6 +384,7 @@ async def post_to_linkedin_api(
     ai_score: Optional[int] = Form(None),
     image_headline: Optional[str] = Form(None),
     sources_json: Optional[str] = Form(None),
+    source_post_id: Optional[str] = Form(None),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> LinkedInPostResponse:
@@ -351,6 +399,7 @@ async def post_to_linkedin_api(
         ai_score=ai_score,
         image_headline=image_headline,
         sources_json=sources_json,
+        source_post_id=source_post_id,
     )
 
 
@@ -369,6 +418,7 @@ async def post_to_linkedin_connections(
     ai_score: Optional[int] = Form(None),
     image_headline: Optional[str] = Form(None),
     sources_json: Optional[str] = Form(None),
+    source_post_id: Optional[str] = Form(None),
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> LinkedInPostResponse:
@@ -383,6 +433,7 @@ async def post_to_linkedin_connections(
         ai_score=ai_score,
         image_headline=image_headline,
         sources_json=sources_json,
+        source_post_id=source_post_id,
     )
 
 

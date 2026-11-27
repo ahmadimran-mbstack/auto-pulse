@@ -270,3 +270,99 @@ export function formatDecisionTime(isoStr?: string | null): string {
   }
 }
 
+// Reverse-map Unicode mathematical bold/italic & combining underline back to ASCII + HTML tags
+const UNICODE_FORMAT_REV: Record<string, { ch: string; fmt: "b" | "i" }> = (() => {
+  const map: Record<string, { ch: string; fmt: "b" | "i" }> = {
+    "\u210B": { ch: "H", fmt: "i" },
+    "\u210E": { ch: "h", fmt: "i" },
+  };
+  for (let i = 0; i < 26; i++) {
+    map[String.fromCodePoint(0x1d400 + i)] = { ch: String.fromCharCode(65 + i), fmt: "b" };
+    map[String.fromCodePoint(0x1d41a + i)] = { ch: String.fromCharCode(97 + i), fmt: "b" };
+    if (i !== 7) {
+      map[String.fromCodePoint(0x1d434 + i)] = { ch: String.fromCharCode(65 + i), fmt: "i" };
+      map[String.fromCodePoint(0x1d44e + i)] = { ch: String.fromCharCode(97 + i), fmt: "i" };
+    }
+  }
+  for (let i = 0; i < 10; i++) {
+    map[String.fromCodePoint(0x1d7ce + i)] = { ch: String.fromCharCode(48 + i), fmt: "b" };
+  }
+  return map;
+})();
+
+function escapeHtmlBasic(str: string): string {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function convertUnicodeFormattingToHtml(line: string): string {
+  let out = "";
+  let openFmt: "b" | "i" | null = null;
+  let inUnderline = false;
+
+  const closeAll = () => {
+    if (inUnderline) {
+      out += "</u>";
+      inUnderline = false;
+    }
+    if (openFmt) {
+      out += `</${openFmt}>`;
+      openFmt = null;
+    }
+  };
+
+  const chars = Array.from(line);
+  for (let idx = 0; idx < chars.length; idx++) {
+    const ch = chars[idx];
+    const nextIsUnderline = chars[idx + 1] === "\u0332";
+    if (ch === "\u0332") continue;
+
+    const mapped = UNICODE_FORMAT_REV[ch];
+    const targetFmt = mapped ? mapped.fmt : null;
+    const baseChar = mapped ? mapped.ch : ch;
+
+    if (targetFmt !== openFmt || nextIsUnderline !== inUnderline) {
+      closeAll();
+      if (targetFmt) {
+        out += `<${targetFmt}>`;
+        openFmt = targetFmt;
+      }
+      if (nextIsUnderline) {
+        out += "<u>";
+        inUnderline = true;
+      }
+    }
+
+    out += escapeHtmlBasic(baseChar);
+    if (nextIsUnderline) idx++;
+  }
+  closeAll();
+  return out;
+}
+
+/**
+ * Convert saved plain/markdown/unicode-formatted post text (+ optional hashtags)
+ * into RichPostEditor HTML while preserving every line break, blank line, bullet, and hashtag.
+ */
+export function postTextToEditorHtml(caption: string, hashtags?: string[] | null): string {
+  let fullText = (caption || "").replace(/\r\n/g, "\n");
+  if (hashtags && hashtags.length > 0) {
+    const normalizedTags = hashtags
+      .map((t) => (t.startsWith("#") ? t : `#${t}`))
+      .filter((t) => !fullText.toLowerCase().includes(t.toLowerCase()));
+    if (normalizedTags.length > 0) {
+      fullText = fullText.trimEnd() + "\n\n" + normalizedTags.join(" ");
+    }
+  }
+
+  return fullText
+    .split("\n")
+    .map((line) => {
+      let htmlLine = convertUnicodeFormattingToHtml(line);
+      // Map Markdown **bold** and *italic* (avoiding bullet "* " at start of line)
+      htmlLine = htmlLine.replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>");
+      htmlLine = htmlLine.replace(/(^|[^\w*])\*([^*\s][^*\n]*?)\*(?!\*)/g, "$1<i>$2</i>");
+      return htmlLine;
+    })
+    .join("<br>");
+}
+

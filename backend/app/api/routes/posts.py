@@ -1,5 +1,6 @@
 import base64
 import datetime
+import logging
 from typing import Any, Dict, List, Optional
 import uuid
 import zoneinfo
@@ -37,6 +38,7 @@ from app.services.prompts import PROMPT_VERSION
 from app.services.search import get_search_adapter
 
 router = APIRouter(prefix="/posts", tags=["posts"])
+logger = logging.getLogger(__name__)
 
 
 # Helper to compute publish_at in UTC from user run_date, post_time, and timezone
@@ -282,6 +284,58 @@ def get_post(
         key_facts=p.key_facts,
         has_image=post_has_image(p.image_spec),
     )
+
+
+@router.delete("/{post_id}")
+def delete_post(
+    post_id: uuid.UUID,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Atomically delete a caller-owned post unless it is currently publishing."""
+    deleted_row = db.execute(
+        text(
+            "DELETE FROM posts "
+            "WHERE id = :id AND user_id = :user_id AND status NOT IN ('publishing') "
+            "RETURNING id, status"
+        ),
+        {"id": post_id, "user_id": user.id},
+    ).fetchone()
+
+    if not deleted_row:
+        existing = db.execute(
+            text("SELECT status FROM posts WHERE id = :id AND user_id = :user_id"),
+            {"id": post_id, "user_id": user.id},
+        ).fetchone()
+        if existing and existing.status == "publishing":
+            raise HTTPException(
+                status_code=http_status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "post_publishing",
+                    "message": "This post is being published right now. Try again in a minute.",
+                },
+            )
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail={"code": "not_found", "message": "Post not found"},
+        )
+
+    # Clean up post-scoped dependent records while preserving billing/usage logs
+    db.execute(text("DELETE FROM approvals WHERE post_id = :id"), {"id": post_id})
+    db.execute(text("DELETE FROM post_publications WHERE post_id = :id"), {"id": post_id})
+    db.execute(text("DELETE FROM slack_approval_messages WHERE post_id = :id"), {"id": post_id})
+    db.execute(text("UPDATE generation_runs SET post_id = NULL WHERE post_id = :id"), {"id": post_id})
+    try:
+        db.execute(text("UPDATE test_lab_runs SET post_id = NULL WHERE post_id = :id"), {"id": post_id})
+    except Exception:
+        pass
+    db.commit()
+
+    from app.services.analytics import invalidate_analytics_cache
+    invalidate_analytics_cache(str(user.id))
+
+    logger.info(f"Post deleted user_id={user.id} post_id={post_id} status={deleted_row.status}")
+    return {"deleted": True, "id": str(post_id)}
 
 
 # GET /posts/{id}/agent-trace: agent execution trace for caller's post

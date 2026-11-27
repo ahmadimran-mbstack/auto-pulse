@@ -31,6 +31,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { AppTabsList, AppTabsTrigger } from "@/components/app/AppTabs";
 import { PageContainer } from "@/components/app/PageContainer";
@@ -44,8 +54,11 @@ import { TestLabPanel } from "@/features/test-lab/TestLabPanel"; // TEST_LAB_REM
 import {
   useLinkedInStatusQuery,
   usePostToLinkedInMutation,
+  usePostDetailQuery,
 } from "@/lib/queries";
-import { startLinkedInConnection } from "@/lib/api";
+import { startLinkedInConnection, fetchPostImageBlob } from "@/lib/api";
+import { postTextToEditorHtml } from "@/lib/posts";
+import type { PostDetail } from "@/types/posts";
 import { ApiClientError } from "@/lib/api";
 import type { LinkedInPostResponse } from "@/types/connections";
 import { cn } from "@/lib/utils";
@@ -126,8 +139,9 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
 
   // Keep the active Playground tab synced with the URL ?tab= parameter
   const rawTab = searchParams.get("tab");
+  const fromPostParam = searchParams.get("fromPost")?.trim() || "";
   const activeTab: "agents" | "composer" | "test-lab" =
-    rawTab === "composer"
+    rawTab === "composer" || Boolean(fromPostParam)
       ? "composer"
       : env.enableTestLab && rawTab === "test-lab" // TEST_LAB_REMOVE
         ? "test-lab"
@@ -157,8 +171,113 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
     image_headline?: string;
     sources?: any[];
   } | null>(null);
+  const [sourcePostId, setSourcePostId] = React.useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const saved = sessionStorage.getItem("linkedin_playground_draft");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return typeof parsed.sourcePostId === "string" ? parsed.sourcePostId : null;
+      }
+    } catch {
+      // Ignore sessionStorage parsing errors
+    }
+    return null;
+  });
+  const [pendingReplacePost, setPendingReplacePost] = React.useState<PostDetail | null>(null);
+  const handledFromPostRef = React.useRef<string | null>(null);
+
+  const {
+    data: fromPostData,
+    isLoading: isFromPostLoading,
+    isError: isFromPostError,
+  } = usePostDetailQuery(user.id, fromPostParam);
 
   const queryClient = useQueryClient();
+
+  const clearFromPostParam = React.useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (!params.has("fromPost")) return;
+    params.delete("fromPost");
+    if (!params.has("tab")) {
+      params.set("tab", "composer");
+    }
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }, [pathname, router, searchParams]);
+
+  const applyDraftPostToComposer = React.useCallback(
+    async (draftPost: PostDetail) => {
+      const htmlFormatted = postTextToEditorHtml(draftPost.caption, draftPost.hashtags);
+      setContentHtml(htmlFormatted);
+      setPlainText(draftPost.caption);
+      setSourcePostId(draftPost.id);
+      setPublishedPost(null);
+      setDraftMeta({
+        topic_title: draftPost.topic_title,
+        ai_score: draftPost.ai_score ?? undefined,
+        sources: draftPost.sources,
+      });
+
+      if (draftPost.has_image !== false) {
+        try {
+          const blob = await fetchPostImageBlob(draftPost.id, 1200);
+          const ext = blob.type === "image/jpeg" ? "jpg" : "png";
+          const file = new File([blob], `post-${draftPost.id}.${ext}`, {
+            type: blob.type || "image/png",
+          });
+          setImagePreviewUrl((prev) => {
+            if (prev) URL.revokeObjectURL(prev);
+            return URL.createObjectURL(blob);
+          });
+          setImageFile(file);
+        } catch {
+          // If image fetch fails, leave image slot empty without blocking text load
+        }
+      } else {
+        setImagePreviewUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return null;
+        });
+        setImageFile(null);
+      }
+    },
+    []
+  );
+
+  // Load draft from ?fromPost=<id> into composer and clean URL after load
+  React.useEffect(() => {
+    if (!fromPostParam || isFromPostLoading) return;
+    if (handledFromPostRef.current === fromPostParam) return;
+
+    if (isFromPostError || !fromPostData || fromPostData.status !== "draft") {
+      handledFromPostRef.current = fromPostParam;
+      clearFromPostParam();
+      toast.error("That draft is not available anymore.");
+      return;
+    }
+
+    handledFromPostRef.current = fromPostParam;
+    const hasUnsavedText = plainText.trim().length > 0 || contentHtml.trim().length > 0;
+    if (hasUnsavedText) {
+      Promise.resolve().then(() => setPendingReplacePost(fromPostData));
+      return;
+    }
+
+    Promise.resolve().then(() => {
+      void applyDraftPostToComposer(fromPostData);
+      clearFromPostParam();
+    });
+  }, [
+    fromPostParam,
+    isFromPostLoading,
+    isFromPostError,
+    fromPostData,
+    plainText,
+    contentHtml,
+    applyDraftPostToComposer,
+    clearFromPostParam,
+  ]);
 
   const handleUseInComposer = (text: string, meta?: any) => {
     setPlainText(text);
@@ -229,10 +348,14 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
       if (draftMeta?.sources && draftMeta.sources.length > 0) {
         formData.append("sources_json", JSON.stringify(draftMeta.sources));
       }
+      if (sourcePostId) {
+        formData.append("source_post_id", sourcePostId);
+      }
 
       try {
         const response = await postMutation.mutateAsync(formData);
         setPublishedPost(response);
+        setSourcePostId(null);
         // Refresh posts and dashboard cache so published post displays immediately
         queryClient.invalidateQueries({ queryKey: ["posts"] });
         queryClient.invalidateQueries({ queryKey: ["dashboard"] });
@@ -267,7 +390,7 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
         }
       }
     },
-    [contentHtml, visibility, plainText, statusData?.connected, imageFile, draftMeta, postMutation, queryClient]
+    [contentHtml, visibility, plainText, statusData?.connected, imageFile, draftMeta, sourcePostId, postMutation, queryClient]
   );
 
   // Handle OAuth return redirect and draft auto-publishing
@@ -348,6 +471,7 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
             content: contentHtml,
             plainText,
             visibility,
+            sourcePostId,
             autoPost: true,
           })
         );
@@ -377,6 +501,7 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
     handleRemoveImage();
     setVisibility("PUBLIC");
     setPublishedPost(null);
+    setSourcePostId(null);
     setShowClearDialog(false);
     if (typeof window !== "undefined") {
       sessionStorage.removeItem("linkedin_playground_draft");
@@ -610,19 +735,28 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
                   </span>
                 </div>
 
-                <RichPostEditor
-                  value={contentHtml}
-                  onChange={(html, text) => {
-                    setContentHtml(html);
-                    setPlainText(text);
-                  }}
-                  onSubmitShortcut={() => {
-                    if (!isSubmitDisabled) {
-                      handlePublish();
-                    }
-                  }}
-                  disabled={isPosting}
-                />
+                {Boolean(fromPostParam) && isFromPostLoading ? (
+                  <div className="rounded-md border border-input bg-card p-4 space-y-3">
+                    <Skeleton className="h-4 w-2/3" />
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-5/6" />
+                    <Skeleton className="h-4 w-1/2" />
+                  </div>
+                ) : (
+                  <RichPostEditor
+                    value={contentHtml}
+                    onChange={(html, text) => {
+                      setContentHtml(html);
+                      setPlainText(text);
+                    }}
+                    onSubmitShortcut={() => {
+                      if (!isSubmitDisabled) {
+                        handlePublish();
+                      }
+                    }}
+                    disabled={isPosting}
+                  />
+                )}
               </div>
 
               {/* 3. Post Visibility Selector */}
@@ -802,6 +936,48 @@ export function PlaygroundClient({ user }: PlaygroundClientProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Replace Unsaved Draft Confirmation AlertDialog */}
+      <AlertDialog
+        open={Boolean(pendingReplacePost)}
+        onOpenChange={(open) => {
+          if (!open && pendingReplacePost) {
+            setPendingReplacePost(null);
+            clearFromPostParam();
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Replace what you wrote?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved text in the composer. Replacing it will load the selected draft
+              instead.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                setPendingReplacePost(null);
+                clearFromPostParam();
+              }}
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingReplacePost) {
+                  void applyDraftPostToComposer(pendingReplacePost);
+                  setPendingReplacePost(null);
+                  clearFromPostParam();
+                }
+              }}
+            >
+              Replace
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </PageContainer>
   );
 }

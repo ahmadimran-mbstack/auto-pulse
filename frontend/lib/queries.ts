@@ -10,9 +10,12 @@ import {
 import {
   ApiClientError,
   setReconnecting,
+  registerSuspendedCacheClearer,
+  getMe,
   getDashboard,
   getPosts,
   getPost,
+  deletePost,
   fetchPostImageBlob,
   getProfile,
   patchProfile,
@@ -105,9 +108,14 @@ export function clearAllAppCaches(): void {
 
 export const clearClientState = clearAllAppCaches;
 
+registerSuspendedCacheClearer(() => {
+  queryClient.clear();
+});
+
 // Canonical query key factories strictly namespaced by signed-in user id
 export const queryKeys = {
   all: (userId: string) => ["autopulse", userId || "anonymous"] as const,
+  me: (userId: string) => ["autopulse", userId || "anonymous", "me"] as const,
   dashboard: (userId: string) =>
     ["autopulse", userId || "anonymous", "dashboard"] as const,
   posts: (userId: string, params?: GetPostsParams) =>
@@ -132,6 +140,19 @@ export const queryKeys = {
     ["autopulse", userId || "anonymous", "analytics", range] as const,
 };
 
+
+// 0. Me Query (Single source of truth for id, email, is_admin, status, onboarding_completed)
+export function useMeQuery(userId: string) {
+  return useQuery<import("@/lib/auth/post-auth").MeResponse>({
+    queryKey: queryKeys.me(userId),
+    queryFn: () => getMe(),
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
+    refetchOnWindowFocus: false,
+    retry: false,
+    enabled: !!userId,
+  });
+}
 
 // 1. Dashboard Overview Query (Freshness: 30s, refetches on window focus)
 export function useDashboardQuery(userId: string) {
@@ -427,6 +448,20 @@ export function usePostToLinkedInMutation(userId: string) {
       qc.invalidateQueries({ queryKey: queryKeys.linkedinStatus(userId) });
       qc.invalidateQueries({ queryKey: queryKeys.posts(userId) });
       qc.invalidateQueries({ queryKey: queryKeys.dashboard(userId) });
+    },
+  });
+}
+
+// Shared mutation to delete a post and refresh posts/dashboard/analytics caches
+export function useDeletePostMutation(userId: string) {
+  const qc = useQueryClient();
+  return useMutation<{ deleted: boolean; id: string }, Error, string>({
+    mutationFn: (postId: string) => deletePost(postId),
+    onSuccess: (_res, postId) => {
+      qc.removeQueries({ queryKey: queryKeys.post(userId, postId) });
+      qc.invalidateQueries({ queryKey: queryKeys.posts(userId) });
+      qc.invalidateQueries({ queryKey: queryKeys.dashboard(userId) });
+      qc.invalidateQueries({ queryKey: queryKeys.analytics(userId) });
     },
   });
 }

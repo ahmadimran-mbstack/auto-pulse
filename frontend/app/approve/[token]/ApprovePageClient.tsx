@@ -164,10 +164,10 @@ export function ApprovePageClient({ token }: ApprovePageClientProps) {
             tabIndex={-1}
             className="text-h2 font-display text-foreground outline-none"
           >
-            This link is not valid.
+            This post no longer exists
           </h1>
           <p className="text-body text-muted-foreground">
-            The link you followed may be incorrect, expired, or belongs to another draft.
+            The link you followed may be incorrect, expired, or the draft was deleted.
           </p>
           <div>
             <Button variant="link" asChild className="p-0 text-primary">
