@@ -14,11 +14,63 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-EMAIL_CONNECT_TIMEOUT_SECONDS = 5.0
-EMAIL_READ_TIMEOUT_SECONDS = 15.0
+EMAIL_CONNECT_TIMEOUT_SECONDS = 20.0
+EMAIL_READ_TIMEOUT_SECONDS = 20.0
 
 _http_client_lock = threading.Lock()
 _http_client: Optional[httpx.Client] = None
+
+# Short-lived in-memory store for raw approval tokens so they are NEVER persisted in email_logs
+_PENDING_APPROVAL_TOKENS_LOCK = threading.Lock()
+_PENDING_APPROVAL_TOKENS: dict[str, str] = {}
+
+
+def store_pending_approval_token(key: str, raw_token: str) -> None:
+    if not key or not raw_token:
+        return
+    with _PENDING_APPROVAL_TOKENS_LOCK:
+        _PENDING_APPROVAL_TOKENS[key] = raw_token
+
+
+def get_pending_approval_token(key: Optional[str]) -> Optional[str]:
+    if not key:
+        return None
+    with _PENDING_APPROVAL_TOKENS_LOCK:
+        return _PENDING_APPROVAL_TOKENS.get(key)
+
+
+def pop_pending_approval_token(key: Optional[str]) -> Optional[str]:
+    if not key:
+        return None
+    with _PENDING_APPROVAL_TOKENS_LOCK:
+        return _PENDING_APPROVAL_TOKENS.pop(key, None)
+
+
+def format_from_address() -> str:
+    raw = (settings.EMAIL_FROM or "").strip()
+    if not raw:
+        return "AutoPulse <noreply@mbstack.net>"
+    if "<" in raw and ">" in raw:
+        return raw
+    return f"AutoPulse <{raw}>"
+
+
+def apply_email_headers(msg: EmailMessage, idempotency_key: Optional[str] = None) -> None:
+    if "From" not in msg or not str(msg["From"]).strip():
+        msg["From"] = format_from_address()
+    else:
+        cur = str(msg["From"]).strip()
+        if "<" not in cur:
+            del msg["From"]
+            msg["From"] = f"AutoPulse <{cur}>"
+    support = (settings.SUPPORT_EMAIL or "").strip()
+    if support and "Reply-To" not in msg:
+        msg["Reply-To"] = support
+    if idempotency_key:
+        if "Resend-Idempotency-Key" not in msg:
+            msg["Resend-Idempotency-Key"] = idempotency_key
+        if "Idempotency-Key" not in msg:
+            msg["Idempotency-Key"] = idempotency_key
 
 
 class EmailDeliveryError(RuntimeError):
@@ -310,6 +362,8 @@ def send_email_message(
             provider="none",
         )
 
+    apply_email_headers(msg, idempotency_key=idempotency_key)
+
     # Fallback: if primary failed 3 times in a row and a second provider is configured, use it
     chosen = providers[1] if (attempt_number >= 4 and len(providers) > 1) else providers[0]
 
@@ -323,9 +377,39 @@ def send_email_message(
     return msg_id, "smtp", response_ms
 
 
-# Build and send the approval notification email
-def send_approval_email(
+def _enqueue_via_outbox(
+    *,
     to_email: str,
+    notification_type: str,
+    payload: dict,
+    idempotency_key: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> None:
+    """Queue an email in email_logs for fast background delivery (or deliver inline in pytest)."""
+    import uuid
+    from app.db.session import SessionLocal
+    from app.models.admin import EmailLog
+    from app.services.notifications import _is_test_env, deliver_email_log, send_user_notification
+
+    effective_uid = user_id or f"system:{notification_type}"
+    effective_idem = idempotency_key or f"{notification_type}:{to_email}:{uuid.uuid4().hex}"
+
+    with SessionLocal() as db:
+        res = send_user_notification(
+            user_id=effective_uid,
+            to_email=to_email,
+            notification_type=notification_type,
+            payload=payload,
+            idempotency_key=effective_idem,
+            db=db,
+        )
+        if _is_test_env() and res.get("status") == "queued" and res.get("id"):
+            row = db.query(EmailLog).filter(EmailLog.id == uuid.UUID(res["id"])).first()
+            if row is not None and row.status == "queued":
+                deliver_email_log(db, row)
+
+
+def render_approval_email(
     display_name: str,
     weekday: str,
     time_str: str,
@@ -333,16 +417,13 @@ def send_approval_email(
     topic_title: str,
     caption: str,
     raw_token: str,
-    idempotency_key: Optional[str] = None,
     needs_review: bool = False,
     first_comment: Optional[str] = None,
     publish_notice: Optional[str] = None,
     has_image: bool = True,
-) -> None:
-    # Subject line matching specification
+) -> Tuple[str, str, str]:
     subject = f"Approve your LinkedIn post for {weekday} {time_str}"
 
-    # Public image and decision link targets
     approve_url = f"{settings.APP_BASE_URL.rstrip('/')}/approve/{raw_token}"
     image_url = f"{settings.APP_BASE_URL.rstrip('/')}/public/approvals/{raw_token}/image.png"
 
@@ -370,7 +451,6 @@ def send_approval_email(
 
     notice_line = publish_notice or f"This post will publish before {local_deadline} if you approve. If you do not approve before then, it will be skipped and not published."
 
-    # Plain text version (contains exactly one link: the decision link)
     plain_text = (
         f"Hi {display_name},\n\n"
         f"{notice_line}{review_notice_plain}\n\n"
@@ -381,7 +461,6 @@ def send_approval_email(
         f"You received this email because you enabled automated LinkedIn posting on AutoPulse."
     )
 
-    # HTML-escaped text preserving paragraphs and line breaks
     escaped_display_name = html.escape(display_name)
     escaped_topic = html.escape(topic_title)
     escaped_caption = html.escape(caption).replace("\n", "<br />")
@@ -394,7 +473,6 @@ def send_approval_email(
         else ""
     )
 
-    # HTML version contains exactly ONE <a ...> link (the review button) and optional <img> tag
     html_content = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -423,28 +501,48 @@ def send_approval_email(
   </div>
 </body>
 </html>"""
-
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = settings.EMAIL_FROM
-    msg["To"] = to_email
-    if idempotency_key:
-        msg["Resend-Idempotency-Key"] = idempotency_key
-        msg["Idempotency-Key"] = idempotency_key
-
-    msg.set_content(plain_text)
-    msg.add_alternative(html_content, subtype="html")
-
-    # Send message using configured provider (Resend HTTP API or fast SMTP)
-    send_email_message(msg, idempotency_key=idempotency_key)
+    return subject, plain_text, html_content
 
 
-# Alert user when Slack authentication is revoked or invalid
-def send_slack_disconnect_alert_email(
+# Build and queue the approval notification email (never stores raw_token in email_logs)
+def send_approval_email(
     to_email: str,
     display_name: str,
-    error_reason: str,
+    weekday: str,
+    time_str: str,
+    local_deadline: str,
+    topic_title: str,
+    caption: str,
+    raw_token: str,
+    idempotency_key: Optional[str] = None,
+    needs_review: bool = False,
+    first_comment: Optional[str] = None,
+    publish_notice: Optional[str] = None,
+    has_image: bool = True,
 ) -> None:
+    import uuid
+    idem = idempotency_key or f"approval:{uuid.uuid4().hex}"
+    store_pending_approval_token(idem, raw_token)
+    _enqueue_via_outbox(
+        to_email=to_email,
+        notification_type="approval_request",
+        payload={
+            "display_name": display_name,
+            "weekday": weekday,
+            "time_str": time_str,
+            "local_deadline": local_deadline,
+            "topic_title": topic_title,
+            "caption": caption,
+            "needs_review": needs_review,
+            "first_comment": first_comment,
+            "publish_notice": publish_notice,
+            "has_image": has_image,
+        },
+        idempotency_key=idem,
+    )
+
+
+def render_slack_disconnect_alert_email(display_name: str, error_reason: str) -> Tuple[str, str, str]:
     subject = "Action required: Your AutoPulse Slack integration was disconnected"
     plain_text = (
         f"Hi {display_name},\n\n"
@@ -468,24 +566,30 @@ def send_slack_disconnect_alert_email(
   </div>
 </body>
 </html>"""
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = settings.EMAIL_FROM
-    msg["To"] = to_email
-    msg.set_content(plain_text)
-    msg.add_alternative(html_content, subtype="html")
-    send_email_message(msg)
+    return subject, plain_text, html_content
 
 
-def send_reminder_email(
+# Alert user when Slack authentication is revoked or invalid
+def send_slack_disconnect_alert_email(
     to_email: str,
+    display_name: str,
+    error_reason: str,
+) -> None:
+    _enqueue_via_outbox(
+        to_email=to_email,
+        notification_type="slack_disconnect",
+        payload={"display_name": display_name, "error_reason": error_reason},
+    )
+
+
+def render_reminder_email(
     display_name: str,
     publish_date_str: str,
     publish_time_str: str,
     tz_label: str,
     topic_title: str,
     post_id: str,
-) -> None:
+) -> Tuple[str, str, str]:
     subject = f"Reminder: approve your {publish_time_str} LinkedIn post (publishes in 30m)"
     review_url = f"{settings.APP_BASE_URL.rstrip('/')}/app/posts/{post_id}"
     plain_text = (
@@ -504,21 +608,38 @@ def send_reminder_email(
     <div style="margin-top:20px;"><a href="{review_url}" style="display:inline-block;background:#0284c7;color:#fff;text-decoration:none;padding:12px 22px;font-size:14px;font-weight:600;border-radius:8px;">Review and decide</a></div>
   </div>
 </body></html>"""
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = settings.EMAIL_FROM
-    msg["To"] = to_email
-    msg.set_content(plain_text)
-    msg.add_alternative(html_content, subtype="html")
-    send_email_message(msg)
+    return subject, plain_text, html_content
 
 
-def send_skipped_notice_email(
+def send_reminder_email(
     to_email: str,
+    display_name: str,
+    publish_date_str: str,
+    publish_time_str: str,
+    tz_label: str,
+    topic_title: str,
+    post_id: str,
+) -> None:
+    _enqueue_via_outbox(
+        to_email=to_email,
+        notification_type="approval_reminder",
+        payload={
+            "display_name": display_name,
+            "publish_date_str": publish_date_str,
+            "publish_time_str": publish_time_str,
+            "tz_label": tz_label,
+            "topic_title": topic_title,
+            "post_id": post_id,
+        },
+        idempotency_key=f"approval_reminder:{post_id}",
+    )
+
+
+def render_skipped_notice_email(
     display_name: str,
     publish_time_str: str,
     post_id: str,
-) -> None:
+) -> Tuple[str, str, str]:
     subject = f"Skipped: your {publish_time_str} LinkedIn post was not approved"
     dashboard_url = f"{settings.APP_BASE_URL.rstrip('/')}/app/posts/{post_id}"
     plain_text = (
@@ -534,24 +655,33 @@ def send_skipped_notice_email(
     <div style="margin-top:20px;"><a href="{dashboard_url}" style="display:inline-block;background:#0284c7;color:#fff;text-decoration:none;padding:12px 22px;font-size:14px;font-weight:600;border-radius:8px;">Open dashboard</a></div>
   </div>
 </body></html>"""
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = settings.EMAIL_FROM
-    msg["To"] = to_email
-    msg.set_content(plain_text)
-    msg.add_alternative(html_content, subtype="html")
-    send_email_message(msg)
+    return subject, plain_text, html_content
 
 
-
-def send_spend_alert_email(
+def send_skipped_notice_email(
     to_email: str,
+    display_name: str,
+    publish_time_str: str,
+    post_id: str,
+) -> None:
+    _enqueue_via_outbox(
+        to_email=to_email,
+        notification_type="post_skipped",
+        payload={
+            "display_name": display_name,
+            "publish_time_str": publish_time_str,
+            "post_id": post_id,
+        },
+        idempotency_key=f"post_skipped:{post_id}",
+    )
+
+
+def render_spend_alert_email(
     user_email: str,
     plan_id: str,
     spend_usd: float,
     limit_usd: float,
-) -> None:
-    """Alert ops once per user per day when a user hits their plan's daily spend limit."""
+) -> Tuple[str, str, str]:
     subject = f"[AutoPulse Alert] Daily spend limit reached: {user_email} ({plan_id})"
     plain_text = (
         f"User {user_email} on plan '{plan_id}' hit their daily spend limit.\n\n"
@@ -567,23 +697,35 @@ def send_spend_alert_email(
     <p style="color:#cbd5e1;font-size:14px;">Today's spend: <strong>${spend_usd:.4f}</strong> / Limit: <strong>${limit_usd:.2f}</strong></p>
   </div>
 </body></html>"""
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = settings.EMAIL_FROM
-    msg["To"] = to_email
-    msg.set_content(plain_text)
-    msg.add_alternative(html_content, subtype="html")
-    send_email_message(msg)
+    return subject, plain_text, html_content
 
 
-def send_subscription_reminder_email(
+def send_spend_alert_email(
     to_email: str,
+    user_email: str,
+    plan_id: str,
+    spend_usd: float,
+    limit_usd: float,
+) -> None:
+    """Alert ops once per user per day when a user hits their plan's daily spend limit."""
+    _enqueue_via_outbox(
+        to_email=to_email,
+        notification_type="spend_alert",
+        payload={
+            "user_email": user_email,
+            "plan_id": plan_id,
+            "spend_usd": float(spend_usd),
+            "limit_usd": float(limit_usd),
+        },
+    )
+
+
+def render_subscription_reminder_email(
     display_name: str,
     reminder_type: str,
     plan_name: str,
     target_date_str: str,
-) -> None:
-    """Send trial (1d) or renewal (5d, 1d) reminder email."""
+) -> Tuple[str, str, str]:
     billing_url = f"{settings.APP_BASE_URL.rstrip('/')}/app/billing"
     if reminder_type == "trial_1d":
         from app.core.plans import TRIAL_DAYS
@@ -613,10 +755,24 @@ def send_subscription_reminder_email(
     <div style="margin-top:20px;"><a href="{billing_url}" style="display:inline-block;background:#0284c7;color:#fff;text-decoration:none;padding:12px 22px;font-size:14px;font-weight:600;border-radius:8px;">View Plan &amp; Billing</a></div>
   </div>
 </body></html>"""
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = settings.EMAIL_FROM
-    msg["To"] = to_email
-    msg.set_content(plain_text)
-    msg.add_alternative(html_content, subtype="html")
-    send_email_message(msg)
+    return subject, plain_text, html_content
+
+
+def send_subscription_reminder_email(
+    to_email: str,
+    display_name: str,
+    reminder_type: str,
+    plan_name: str,
+    target_date_str: str,
+) -> None:
+    """Send trial (1d) or renewal (5d, 1d) reminder email."""
+    _enqueue_via_outbox(
+        to_email=to_email,
+        notification_type="subscription_reminder",
+        payload={
+            "display_name": display_name,
+            "reminder_type": reminder_type,
+            "plan_name": plan_name,
+            "target_date_str": target_date_str,
+        },
+    )

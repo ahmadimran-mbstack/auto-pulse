@@ -19,12 +19,24 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models.admin import EmailLog
-from app.services.email import EmailDeliveryError, send_email_message, send_smtp_message
+from app.services.email import (
+    EmailDeliveryError,
+    apply_email_headers,
+    get_pending_approval_token,
+    pop_pending_approval_token,
+    render_approval_email,
+    render_reminder_email,
+    render_skipped_notice_email,
+    render_slack_disconnect_alert_email,
+    render_spend_alert_email,
+    render_subscription_reminder_email,
+    send_email_message,
+)
 
 logger = logging.getLogger(__name__)
 
 _EMAIL_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="autopulse-email")
-_BACKOFF_SECONDS = (10, 30, 120, 600, 3600)
+_BACKOFF_SECONDS = (5, 30, 120)
 _EMAIL_ADDR_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
@@ -61,6 +73,7 @@ def _wrap_html(subject: str, body_html: str) -> str:
 def render_notification_template(
     notification_type: str,
     payload: Dict[str, Any],
+    idempotency_key: Optional[str] = None,
 ) -> Tuple[str, str, str]:
     """Render (subject, plain_text, html_body) for templates 1-7."""
     app_url = settings.APP_BASE_URL.rstrip("/")
@@ -386,6 +399,67 @@ def render_notification_template(
         )
         return subject, plain, _wrap_html(subject, body)
 
+    if notification_type == "approval_request":
+        raw_token = get_pending_approval_token(idempotency_key)
+        if not raw_token:
+            raise EmailDeliveryError(
+                "Approval token is no longer in memory for this queued approval email",
+                retryable=False,
+                provider="internal",
+            )
+        return render_approval_email(
+            display_name=str(payload.get("display_name") or "there"),
+            weekday=str(payload.get("weekday") or ""),
+            time_str=str(payload.get("time_str") or ""),
+            local_deadline=str(payload.get("local_deadline") or ""),
+            topic_title=str(payload.get("topic_title") or ""),
+            caption=str(payload.get("caption") or ""),
+            raw_token=raw_token,
+            needs_review=bool(payload.get("needs_review", False)),
+            first_comment=payload.get("first_comment"),
+            publish_notice=payload.get("publish_notice"),
+            has_image=bool(payload.get("has_image", True)),
+        )
+
+    if notification_type == "slack_disconnect":
+        return render_slack_disconnect_alert_email(
+            display_name=str(payload.get("display_name") or "there"),
+            error_reason=str(payload.get("error_reason") or "unknown"),
+        )
+
+    if notification_type == "approval_reminder":
+        return render_reminder_email(
+            display_name=str(payload.get("display_name") or "there"),
+            publish_date_str=str(payload.get("publish_date_str") or ""),
+            publish_time_str=str(payload.get("publish_time_str") or ""),
+            tz_label=str(payload.get("tz_label") or ""),
+            topic_title=str(payload.get("topic_title") or ""),
+            post_id=str(payload.get("post_id") or ""),
+        )
+
+    if notification_type == "post_skipped":
+        return render_skipped_notice_email(
+            display_name=str(payload.get("display_name") or "there"),
+            publish_time_str=str(payload.get("publish_time_str") or ""),
+            post_id=str(payload.get("post_id") or ""),
+        )
+
+    if notification_type == "spend_alert":
+        return render_spend_alert_email(
+            user_email=str(payload.get("user_email") or ""),
+            plan_id=str(payload.get("plan_id") or ""),
+            spend_usd=float(payload.get("spend_usd") or 0.0),
+            limit_usd=float(payload.get("limit_usd") or 0.0),
+        )
+
+    if notification_type == "subscription_reminder":
+        return render_subscription_reminder_email(
+            display_name=str(payload.get("display_name") or "there"),
+            reminder_type=str(payload.get("reminder_type") or "renewal_5d"),
+            plan_name=str(payload.get("plan_name") or ""),
+            target_date_str=str(payload.get("target_date_str") or ""),
+        )
+
     raise ValueError(f"Unsupported notification type: {notification_type}")
 
 
@@ -395,14 +469,15 @@ def _build_email_message(
     payload: Dict[str, Any],
     idempotency_key: Optional[str] = None,
 ) -> Tuple[str, EmailMessage]:
-    subject, plain_text, html_content = render_notification_template(notification_type, payload)
+    subject, plain_text, html_content = render_notification_template(
+        notification_type,
+        payload,
+        idempotency_key=idempotency_key,
+    )
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = settings.EMAIL_FROM
     msg["To"] = to_email
-    if idempotency_key:
-        msg["Resend-Idempotency-Key"] = idempotency_key
-        msg["Idempotency-Key"] = idempotency_key
+    apply_email_headers(msg, idempotency_key=idempotency_key)
     msg.set_content(plain_text)
     msg.add_alternative(html_content, subtype="html")
     return subject, msg
@@ -482,7 +557,7 @@ def claim_next_email_log(db: Session) -> Optional[EmailLog]:
 def deliver_email_log(db: Session, log_row: EmailLog) -> EmailLog:
     """Deliver one claimed EmailLog row, recording timing, retries, and real errors."""
     attempt_num = int(log_row.attempts or 0) + 1
-    max_attempts = int(log_row.max_attempts or 5)
+    max_attempts = int(log_row.max_attempts or 4)
     now_utc = datetime.datetime.now(datetime.timezone.utc)
 
     to_clean = (log_row.to_email or "").strip()
@@ -644,7 +719,11 @@ def send_user_notification(
                         "error": existing.error,
                     }
 
-        subject, _, _ = render_notification_template(notification_type, payload)
+        subject, _, _ = render_notification_template(
+        notification_type,
+        payload,
+        idempotency_key=idempotency_key,
+    )
 
         log_row = EmailLog(
             user_id=user_id,
@@ -654,7 +733,7 @@ def send_user_notification(
             status="queued",
             error=None,
             attempts=0,
-            max_attempts=5,
+            max_attempts=4,
             next_attempt_at=datetime.datetime.now(datetime.timezone.utc),
             idempotency_key=idempotency_key,
             payload=payload,

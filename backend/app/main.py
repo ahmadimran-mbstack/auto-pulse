@@ -380,6 +380,15 @@ def _run_scheduler_cycle():
 @app.on_event("startup")
 def start_automated_scheduler():
     import os, sys
+    from app.services.email import get_available_providers
+
+    if not (settings.EMAIL_FROM or "").strip():
+        logger.warning("Email startup check: EMAIL_FROM is missing; outgoing emails will use a fallback address.")
+    if not get_available_providers():
+        logger.warning("Email startup check: neither EMAIL_API_KEY nor SMTP_HOST is configured; outgoing emails will fail.")
+    elif (settings.EMAIL_PROVIDER or "").strip().lower() == "resend" and not (settings.EMAIL_API_KEY or "").strip():
+        logger.warning("Email startup check: EMAIL_PROVIDER is set to 'resend' but EMAIL_API_KEY is missing.")
+
     if os.environ.get("PYTEST_CURRENT_TEST") or "pytest" in sys.modules:
         logger.info("Skipping background scheduler in test environment")
         return
