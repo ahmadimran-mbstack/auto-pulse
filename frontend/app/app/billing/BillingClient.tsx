@@ -395,7 +395,12 @@ export function BillingClient({
             Upgrade or switch anytime. Your new plan starts after payment verification.
           </p>
         </div>
-        <PlanCards currentPlanId={ent?.plan_id} excludeTrial hasPendingPayment={hasPending} />
+        <PlanCards
+          currentPlanId={ent?.plan_id}
+          currentStatus={ent?.status}
+          excludeTrial
+          hasPendingPayment={hasPending}
+        />
       </div>
 
       {billingQuery.isError ? (

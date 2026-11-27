@@ -12,6 +12,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { DOWNGRADE_TOOLTIP, isPlanDowngrade } from "@/lib/plan-rank";
 import { cn } from "@/lib/utils";
 import type { PublicPlan, PublicPlansResponse } from "@/types/plans";
 import { ScrollReveal } from "./scroll-reveal";
@@ -118,7 +119,7 @@ function renderCell(val: CellValue) {
 
 export function PricingPageClient({ data }: { data: PublicPlansResponse }) {
   const [interval, setInterval] = React.useState<"monthly" | "annual">("monthly");
-  const { isLoaded, isSignedIn } = useSessionStatus();
+  const { isLoaded, isSignedIn, currentPlanId, currentStatus } = useSessionStatus();
   const getPlanHref = (planId: string) => {
     if (planId === "trial") {
       return isLoaded && isSignedIn ? "/app" : "/auth/sign-up";
@@ -479,23 +480,52 @@ export function PricingPageClient({ data }: { data: PublicPlansResponse }) {
                         </div>
 
                         <div className="pt-8 mt-6">
-                          <Button
-                            asChild
-                            className={cn(
-                              "w-full rounded-xl text-xs font-medium",
-                              isPopular
-                                ? "bg-[var(--lp-ice)] text-[#08090C] hover:bg-[var(--lp-ice)]/90"
-                                : "bg-white text-[#08090C] hover:bg-white/90"
-                            )}
-                          >
-                            <Link href={getPlanHref(plan.id)}>
-                              {isFree
-                                ? isSignedIn
-                                  ? "Go to dashboard"
-                                  : "Start free trial"
-                                : `Choose ${plan.name}`}
-                            </Link>
-                          </Button>
+                          {isLoaded &&
+                          isSignedIn &&
+                          isPlanDowngrade({
+                            targetPlanId: plan.id,
+                            currentPlanId,
+                            currentStatus,
+                            plans,
+                          }) ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex w-full">
+                                  <Button
+                                    type="button"
+                                    disabled
+                                    className={cn(
+                                      "w-full rounded-xl text-xs font-medium",
+                                      isPopular
+                                        ? "bg-[var(--lp-ice)] text-[#08090C]"
+                                        : "bg-white text-[#08090C]"
+                                    )}
+                                  >
+                                    {isFree ? "Go to dashboard" : `Choose ${plan.name}`}
+                                  </Button>
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent>{DOWNGRADE_TOOLTIP}</TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            <Button
+                              asChild
+                              className={cn(
+                                "w-full rounded-xl text-xs font-medium",
+                                isPopular
+                                  ? "bg-[var(--lp-ice)] text-[#08090C] hover:bg-[var(--lp-ice)]/90"
+                                  : "bg-white text-[#08090C] hover:bg-white/90"
+                              )}
+                            >
+                              <Link href={getPlanHref(plan.id)}>
+                                {isFree
+                                  ? isSignedIn
+                                    ? "Go to dashboard"
+                                    : "Start free trial"
+                                  : `Choose ${plan.name}`}
+                              </Link>
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </div>

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import User, current_user
 from app.core.config import settings
 from app.core.limiter import rate_limit
-from app.core.plans import compute_plan_price, get_plans, get_purchasable_plan_ids
+from app.core.plans import compute_plan_price, get_plan_entries, get_plans, get_purchasable_plan_ids
 from app.db.session import get_db
 from app.models.subscription import Payment
 from app.services.entitlements import get_effective_plan
@@ -24,6 +24,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/billing", tags=["billing"])
 
 _TX_ID_RE = re.compile(r"^[A-Z0-9]{6,30}$")
+
+
+def _plan_rank_cents(plan_id: str, entries: Dict[str, Any]) -> int:
+    if plan_id == "trial":
+        return 0
+    entry = entries.get(plan_id)
+    if not entry or entry.is_system:
+        return 0
+    return int(entry.monthly_price_cents or 0)
 
 
 class PaymentSubmitRequest(BaseModel):
@@ -182,6 +191,22 @@ def submit_payment(
                 "message": "Transaction ID must be 6 to 30 letters and numbers.",
             },
         )
+
+    eff = get_effective_plan(db, user.id, bypass_cache=True)
+    current_plan_id = eff["plan_id"]
+    current_status = eff["status"]
+    if current_status == "active" and current_plan_id != "trial":
+        entries = get_plan_entries()
+        current_rank = _plan_rank_cents(current_plan_id, entries)
+        target_rank = _plan_rank_cents(plan_id, entries)
+        if current_rank > 0 and target_rank < current_rank:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "downgrade_not_allowed",
+                    "message": "You can only upgrade from your current plan.",
+                },
+            )
 
     usd_cents, amount_pkr = compute_plan_price(plan_id, interval)
     if (

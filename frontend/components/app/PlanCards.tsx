@@ -18,11 +18,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePublicPlans } from "@/lib/queries";
+import { DOWNGRADE_TOOLTIP, isPlanDowngrade } from "@/lib/plan-rank";
 import { cn } from "@/lib/utils";
 import type { PlanId } from "@/types/plans";
 
 interface PlanCardsProps {
   currentPlanId?: PlanId;
+  currentStatus?: string;
   highlightPlanId?: string | null;
   excludeTrial?: boolean;
   hasPendingPayment?: boolean;
@@ -30,6 +32,7 @@ interface PlanCardsProps {
 
 export function PlanCards({
   currentPlanId,
+  currentStatus,
   highlightPlanId,
   excludeTrial = false,
   hasPendingPayment = false,
@@ -87,6 +90,12 @@ export function PlanCards({
       >
         {plans.map((plan) => {
           const isCurrent = currentPlanId === plan.id;
+          const isDowngrade = isPlanDowngrade({
+            targetPlanId: plan.id,
+            currentPlanId,
+            currentStatus,
+            plans: data.plans,
+          });
           const isHighlighted = highlightPlanId === plan.id;
           const isFree = Boolean(plan.is_system || plan.monthly_price_usd === 0);
           const isAnnual = interval === "annual" && plan.annual_price_usd !== null;
@@ -243,6 +252,17 @@ export function PlanCards({
                   >
                     {isCurrent ? "Current plan" : "Included"}
                   </Button>
+                ) : isDowngrade ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="w-full">
+                        <Button className="w-full" variant="secondary" disabled>
+                          {ctaLabel}
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>{DOWNGRADE_TOOLTIP}</TooltipContent>
+                  </Tooltip>
                 ) : hasPendingPayment ? (
                   <Tooltip>
                     <TooltipTrigger asChild>

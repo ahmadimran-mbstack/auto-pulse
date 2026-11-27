@@ -47,7 +47,9 @@ import {
   getCheckoutInfo,
   submitManualPayment,
 } from "@/lib/api";
+import { toast } from "sonner";
 import { usePublicPlans } from "@/lib/queries";
+import { isPlanDowngrade } from "@/lib/plan-rank";
 import { cn } from "@/lib/utils";
 import type { BillingPaymentItem, PaymentMethod } from "@/types/plans";
 
@@ -134,6 +136,11 @@ export function CheckoutClient() {
           checkoutQuery.refetch();
           return;
         }
+        if (err.status === 409 && err.code === "downgrade_not_allowed") {
+          toast.error(err.message);
+          setFormError({ message: err.message });
+          return;
+        }
         setFormError({ message: err.message });
       } else {
         setFormError({
@@ -181,6 +188,41 @@ export function CheckoutClient() {
           </div>
           <Skeleton className="lg:col-span-5 h-80 rounded-lg" />
         </div>
+      </div>
+    );
+  }
+
+  const isDowngrade = Boolean(
+    selectedPlanObj &&
+      statusQuery.data &&
+      isPlanDowngrade({
+        targetPlanId: selectedPlanObj.id,
+        currentPlanId: statusQuery.data.plan_id,
+        currentStatus: statusQuery.data.status,
+        plans: publicPlansQuery.data?.plans,
+      })
+  );
+
+  if (isDowngrade) {
+    return (
+      <div className="px-4 sm:px-6 lg:px-8 py-6 max-w-5xl mx-auto space-y-6">
+        <PageHeader
+          title="Checkout"
+          description="Complete your plan upgrade with Easypaisa or JazzCash."
+        />
+        <Card className="rounded-lg border-border bg-card">
+          <CardHeader>
+            <CardTitle className="text-base">Plan downgrade not allowed</CardTitle>
+            <CardDescription>
+              You can only upgrade from your current plan ({statusQuery.data?.plan_name}).
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild>
+              <Link href="/app/billing">Back to billing</Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }

@@ -5,12 +5,19 @@ import Link from "next/link";
 import { Check, Minus } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { DOWNGRADE_TOOLTIP, isPlanDowngrade } from "@/lib/plan-rank";
 import type { PublicPlansResponse } from "@/types/plans";
 import { useSessionStatus } from "./use-session-status";
 
 export function LandingPricingCards({ data }: { data: PublicPlansResponse }) {
   const [interval, setInterval] = React.useState<"monthly" | "annual">("monthly");
-  const { isLoaded, isSignedIn } = useSessionStatus();
+  const { isLoaded, isSignedIn, currentPlanId, currentStatus } = useSessionStatus();
   const trialDays = data.trial_days ?? 3;
   const annualPct = Math.round((data.annual_discount ?? 0.05) * 100);
 
@@ -25,7 +32,8 @@ export function LandingPricingCards({ data }: { data: PublicPlansResponse }) {
   };
 
   return (
-    <div className="space-y-10">
+    <TooltipProvider>
+      <div className="space-y-10">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6">
         <div className="space-y-2 max-w-xl">
           <p className="text-3xl md:text-5xl font-normal tracking-tight text-[var(--lp-text-heading)]">
@@ -189,18 +197,42 @@ export function LandingPricingCards({ data }: { data: PublicPlansResponse }) {
               </div>
 
               <div className="pt-6 mt-6 border-t border-[var(--lp-border-hairline)]">
-                <Link
-                  href={getPlanHref(plan.id, isFreeTrial)}
-                  className="inline-flex w-full items-center justify-center rounded-lg border border-[var(--lp-border-hairline)] bg-[var(--lp-ice)] px-4 py-2 text-xs font-medium text-[#08090C] transition-opacity hover:opacity-90"
-                >
-                  {isFreeTrial
-                    ? isSignedIn
-                      ? "Go to dashboard"
-                      : "Start free trial"
-                    : isSignedIn
-                      ? `Choose ${plan.name}`
-                      : `Get ${plan.name}`}
-                </Link>
+                {isLoaded &&
+                isSignedIn &&
+                isPlanDowngrade({
+                  targetPlanId: plan.id,
+                  currentPlanId,
+                  currentStatus,
+                  plans: data.plans,
+                }) ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex w-full">
+                        <button
+                          type="button"
+                          disabled
+                          className="inline-flex w-full items-center justify-center rounded-lg border border-[var(--lp-border-hairline)] bg-[var(--lp-ice)] px-4 py-2 text-xs font-medium text-[#08090C] opacity-50 cursor-not-allowed"
+                        >
+                          {isFreeTrial ? "Go to dashboard" : `Choose ${plan.name}`}
+                        </button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>{DOWNGRADE_TOOLTIP}</TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <Link
+                    href={getPlanHref(plan.id, isFreeTrial)}
+                    className="inline-flex w-full items-center justify-center rounded-lg border border-[var(--lp-border-hairline)] bg-[var(--lp-ice)] px-4 py-2 text-xs font-medium text-[#08090C] transition-opacity hover:opacity-90"
+                  >
+                    {isFreeTrial
+                      ? isSignedIn
+                        ? "Go to dashboard"
+                        : "Start free trial"
+                      : isSignedIn
+                        ? `Choose ${plan.name}`
+                        : `Get ${plan.name}`}
+                  </Link>
+                )}
               </div>
             </div>
           );
@@ -216,5 +248,6 @@ export function LandingPricingCards({ data }: { data: PublicPlansResponse }) {
         </Link>
       </div>
     </div>
+    </TooltipProvider>
   );
 }
