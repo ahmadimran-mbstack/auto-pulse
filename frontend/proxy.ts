@@ -11,6 +11,7 @@ export const config = {
     "/app/:path*",
     "/onboarding/:path*",
     "/admin/:path*",
+    "/auth/callback",
     "/auth/sign-in",
     "/auth/sign-up",
   ],
