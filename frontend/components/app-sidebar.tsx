@@ -23,9 +23,7 @@ import {
   LifeBuoy,
 } from "lucide-react";
 
-import { useQuery } from "@tanstack/react-query";
-import { getAdminMe } from "@/lib/api";
-import { useDashboardQuery, prefetchDashboard, prefetchPosts, prefetchConnections, prefetchProfile, prefetchAnalytics } from "@/lib/queries";
+import { useMeQuery, useDashboardQuery, prefetchDashboard, prefetchPosts, prefetchConnections, prefetchProfile, prefetchAnalytics } from "@/lib/queries";
 import { SidebarNoticeCard } from "@/components/app/sidebar-notice-card";
 import { SidebarUserRow } from "@/components/app/sidebar-user-row";
 import { CommandPalette } from "@/components/app/command-palette";
@@ -57,13 +55,8 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
   // Fetch dashboard connections to pass to notice card
   const { data: dashboardData, isLoading, isError } = useDashboardQuery(user.id);
 
-  // Check admin status for showing the Admin link (real enforcement is on the backend)
-  const { data: adminMe } = useQuery({
-    queryKey: ["admin-me"],
-    queryFn: getAdminMe,
-    retry: false,
-    staleTime: 60_000,
-  });
+  // Check admin status from /me (cached 5m; real enforcement is on the backend)
+  const { data: me } = useMeQuery(user.id);
 
   // Global keyboard shortcut for 'F' to open command palette
   React.useEffect(() => {
@@ -216,6 +209,24 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
                   );
                 })}
 
+                {/* Admin + Settings live in the bottom Account group */}
+                {group.label === "Account" && me?.is_admin && (
+                  <Link
+                    href="/admin"
+                    data-slot="sidebar-nav-item"
+                    data-active={pathname.startsWith("/admin")}
+                    aria-current={pathname.startsWith("/admin") ? "page" : undefined}
+                    onClick={() => onNavigate?.()}
+                    className={cn(
+                      "flex h-9 items-center gap-3 rounded-lg px-3 text-sm",
+                      SIDEBAR_NAV_ITEM_CLASSES
+                    )}
+                  >
+                    <Shield className="size-4 shrink-0" strokeWidth={1.5} />
+                    <span className="truncate">Admin</span>
+                  </Link>
+                )}
+
                 {/* Settings lives inside the Account group */}
                 {group.label === "Account" && (
                   <div>
@@ -296,28 +307,6 @@ export function AppSidebar({ user, className, onNavigate }: AppSidebarProps) {
               </div>
             ))}
           </div>
-
-          {adminMe?.is_admin && (
-            <div className="mt-auto pt-3 border-t border-sidebar-border space-y-0.5">
-              <p className="px-3 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
-                Admin
-              </p>
-              <Link
-                href="/admin"
-                data-slot="sidebar-nav-item"
-                data-active={pathname.startsWith("/admin")}
-                aria-current={pathname.startsWith("/admin") ? "page" : undefined}
-                onClick={() => onNavigate?.()}
-                className={cn(
-                  "flex h-9 items-center gap-3 rounded-lg px-3 text-sm",
-                  SIDEBAR_NAV_ITEM_CLASSES
-                )}
-              >
-                <Shield className="size-4 shrink-0" strokeWidth={1.5} />
-                <span className="truncate">Admin</span>
-              </Link>
-            </div>
-          )}
         </nav>
 
         {/* Pinned Bottom Notice Card and User Row */}

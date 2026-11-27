@@ -2,15 +2,11 @@ import * as React from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/server";
-import {
-  verifyOnboardingCookie,
-  ONBOARDING_COMPLETED_COOKIE,
-} from "@/lib/onboarding-cookie";
-import { isServerAdmin } from "@/lib/admin-server";
 import { AppQueryProvider } from "@/components/providers/query-provider";
 import { UserProvider, type AppUser } from "@/components/providers/user-provider";
 import { AppSidebarProvider } from "@/components/providers/sidebar-provider";
 import { AppShell } from "@/components/app/app-shell";
+import { AppGate } from "@/components/app/AppGate";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -37,43 +33,6 @@ export default async function AppShellLayout({
     redirect("/auth/sign-in");
   }
 
-  // Guard: Users who have not finished onboarding are redirected to /onboarding (admins bypass onboarding)
-  // Check the signed httpOnly cookie first to avoid hitting the database on every visit
-  const token = (session as any)?.session?.token;
-  const isAdmin = await isServerAdmin(token);
-  const completedCookie = cookieStore.get(ONBOARDING_COMPLETED_COOKIE)?.value;
-  const isCompletedByCookie = verifyOnboardingCookie(session.user.id, completedCookie);
-
-  if (!isAdmin && !isCompletedByCookie) {
-    // If the cookie is not present, check profile via backend to handle users switching devices
-    let backendComplete: boolean | null = null;
-
-    if (token) {
-      try {
-        const backendBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-        const profileRes = await fetch(`${backendBase.replace(/\/$/, "")}/profile`, {
-          headers: { Authorization: `Bearer ${token}` },
-          cache: "no-store",
-        });
-
-        if (profileRes.ok) {
-          const profileData = await profileRes.json();
-          backendComplete = Boolean(profileData?.onboarding_complete);
-        }
-      } catch {
-        // Backend lookup failed
-      }
-    }
-
-    // Only redirect if backend definitively reported that onboarding is NOT complete.
-    // If the backend call failed or returned 401 (e.g. server-side session token isn't a JWT),
-    // do not blindly redirect to /onboarding; allow AppDashboardClient to check using the
-    // client-side JWT to prevent circular redirect loops.
-    if (backendComplete === false) {
-      redirect("/onboarding");
-    }
-  }
-
   const user: AppUser = {
     id: session.user.id,
     name: session.user.name,
@@ -87,9 +46,11 @@ export default async function AppShellLayout({
     <AppQueryProvider>
       <UserProvider initialUser={user}>
         <AppSidebarProvider initialOpen={initialOpen}>
-          <AppShell user={user}>
-            {children}
-          </AppShell>
+          <AppGate user={user}>
+            <AppShell user={user}>
+              {children}
+            </AppShell>
+          </AppGate>
         </AppSidebarProvider>
       </UserProvider>
     </AppQueryProvider>

@@ -1,18 +1,42 @@
 import { authClient } from "@/lib/auth/client";
 import { env } from "@/lib/env";
+import { tokenCache } from "@/lib/token-cache";
 
-export interface PostAuthResult {
-  ok: boolean;
-  destination: string;
+export interface MeResponse {
+  id: string;
+  email: string | null;
+  name?: string | null;
+  is_admin: boolean;
+  status: "active" | "suspended" | string;
+  onboarding_completed: boolean;
+  customization_enabled?: boolean;
 }
 
 /**
- * Verifies that the browser has an active Neon Auth session cookie after login/OTP,
- * then checks admin status without triggering destructive sign-out side effects.
+ * Single shared post-auth routing helper used by every sign-in, sign-up, OAuth,
+ * and already-signed-in entry point.
  */
-export async function resolvePostAuthDestination(
-  fallbackPath: string = "/app"
-): Promise<PostAuthResult> {
+export function getPostAuthRoute(me: MeResponse): string {
+  if (me.status === "suspended") {
+    return "/auth/sign-in?error=suspended";
+  }
+  if (me.is_admin) {
+    return "/admin";
+  }
+  if (!me.onboarding_completed) {
+    return "/onboarding";
+  }
+  return "/app";
+}
+
+export type FetchMeResult =
+  | { ok: true; me: MeResponse }
+  | { ok: false; suspended?: boolean; unauthenticated?: boolean };
+
+/**
+ * Verifies the active Neon Auth session cookie, fetches a JWT, and calls GET /me once.
+ */
+export async function fetchMeWithSessionToken(): Promise<FetchMeResult> {
   let jwtToken: string | null = null;
   let hasSessionUser = false;
 
@@ -34,12 +58,12 @@ export async function resolvePostAuthDestination(
         hasSessionUser = true;
       }
     }
-  } catch (err) {
-    console.error("[auth] Failed to verify session after sign-in:", err);
+  } catch {
+    return { ok: false, unauthenticated: true };
   }
 
   if (!hasSessionUser) {
-    return { ok: false, destination: fallbackPath };
+    return { ok: false, unauthenticated: true };
   }
 
   if (!jwtToken) {
@@ -53,35 +77,71 @@ export async function resolvePostAuthDestination(
           jwtToken = tokenRes.data.token;
         }
       }
-    } catch (err) {
-      console.warn("[auth] authClient.token() failed during post-auth check:", err);
+    } catch {
+      // Token retrieval failed
     }
   }
 
-  if (jwtToken) {
-    try {
-      const baseApiUrl = env.apiUrl.replace(/\/+$/, "");
-      const adminRes = await fetch(`${baseApiUrl}/api/admin/me`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${jwtToken}`,
-        },
-        cache: "no-store",
-        signal: AbortSignal.timeout(4000),
-      });
+  if (!jwtToken) {
+    return { ok: false, unauthenticated: true };
+  }
 
-      if (adminRes.ok) {
-        const data = (await adminRes.json().catch(() => null)) as {
-          is_admin?: boolean;
-        } | null;
-        if (data?.is_admin) {
-          return { ok: true, destination: "/admin" };
-        }
+  try {
+    const baseApiUrl = env.apiUrl.replace(/\/+$/, "");
+    const meRes = await fetch(`${baseApiUrl}/me`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${jwtToken}`,
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(8000),
+    });
+
+    if (meRes.status === 403) {
+      const errJson = await meRes.json().catch(() => ({}));
+      const code = errJson?.error?.code || errJson?.detail?.code || "";
+      if (code === "account_suspended" || code === "ACCOUNT_SUSPENDED") {
+        return { ok: false, suspended: true };
       }
-    } catch (err) {
-      console.warn("[auth] Admin status check failed, using fallback route:", err);
+      return { ok: false };
+    }
+
+    if (!meRes.ok) {
+      return { ok: false };
+    }
+
+    const me = (await meRes.json()) as MeResponse;
+    return { ok: true, me };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/**
+ * Signs out cleanly, clears token/query caches, and sets signed-out sentinel cookie
+ * so leftover session cookies do not trigger redirect loops.
+ */
+export async function performSuspendedSignOut(clearCache?: () => void): Promise<void> {
+  tokenCache.clear();
+  clearCache?.();
+  try {
+    await authClient.signOut();
+  } catch {
+    // Ignore sign-out errors
+  }
+  if (typeof document !== "undefined") {
+    document.cookie = "autopulse_signed_out=true; path=/; max-age=86400; SameSite=Lax";
+  }
+  if (typeof window !== "undefined") {
+    try {
+      const theme = localStorage.getItem("theme");
+      const nextTheme = localStorage.getItem("next-theme");
+      localStorage.clear();
+      sessionStorage.clear();
+      if (theme) localStorage.setItem("theme", theme);
+      if (nextTheme) localStorage.setItem("next-theme", nextTheme);
+    } catch {
+      // Storage access may be restricted
     }
   }
-
-  return { ok: true, destination: fallbackPath };
 }

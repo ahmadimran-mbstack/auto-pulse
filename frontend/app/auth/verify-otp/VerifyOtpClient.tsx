@@ -146,9 +146,20 @@ export function VerifyOtpClient({ email }: VerifyOtpClientProps) {
           : null;
       const safeReturn = returnTo && returnTo.startsWith("/app/") ? returnTo : "/onboarding";
 
-      const { resolvePostAuthDestination } = await import("@/lib/auth/post-auth");
-      const resolved = await resolvePostAuthDestination(safeReturn);
-      if (!resolved.ok) {
+      const {
+        fetchMeWithSessionToken,
+        getPostAuthRoute,
+        performSuspendedSignOut,
+      } = await import("@/lib/auth/post-auth");
+      const { queryClient, queryKeys } = await import("@/lib/queries");
+
+      const meResult = await fetchMeWithSessionToken();
+      if (!meResult.ok) {
+        if (meResult.suspended) {
+          await performSuspendedSignOut(() => queryClient.clear());
+          router.replace("/auth/sign-in?error=suspended");
+          return;
+        }
         console.error("[auth] Email verified but active session could not be verified.");
         authToast.error(
           "Signed in, but we could not open your dashboard. Please try again.",
@@ -158,11 +169,17 @@ export function VerifyOtpClient({ email }: VerifyOtpClientProps) {
         return;
       }
 
-      authToast.success("Email verified. Redirecting to setup...", {
+      const me = meResult.me;
+      queryClient.setQueryData(queryKeys.me(me.id), me);
+      const dest =
+        !me.is_admin && me.onboarding_completed && safeReturn.startsWith("/app/")
+          ? safeReturn
+          : getPostAuthRoute(me);
+
+      authToast.success("Email verified. Redirecting...", {
         id: "verify-otp-verified",
       });
-      router.refresh();
-      window.location.assign(resolved.destination);
+      router.replace(dest);
     } catch (err: unknown) {
       const message =
         err instanceof Error

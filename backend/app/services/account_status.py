@@ -16,8 +16,8 @@ ACCOUNT_STATUS_CACHE_TTL = 60
 
 _STATUS_CODE_MAP = {
     "suspended": (
-        "ACCOUNT_SUSPENDED",
-        "Your account has been suspended. Please contact support.",
+        "account_suspended",
+        "Your account has been suspended.",
     ),
     "disabled": (
         "ACCOUNT_DISABLED",
@@ -31,7 +31,7 @@ _STATUS_CODE_MAP = {
 
 
 def _status_cache_key(user_id: str) -> str:
-    return f"account_status:{user_id}"
+    return f"user_status:{user_id}"
 
 
 def invalidate_user_status_cache(user_id: str) -> None:

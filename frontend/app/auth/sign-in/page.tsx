@@ -6,12 +6,19 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AuthShell } from "../components/AuthShell";
 import { GoogleSignInButton } from "../components/GoogleSignInButton";
 import { authToast } from "@/lib/auth-toast";
-import { resolvePostAuthDestination } from "@/lib/auth/post-auth";
+import {
+  fetchMeWithSessionToken,
+  getPostAuthRoute,
+  performSuspendedSignOut,
+} from "@/lib/auth/post-auth";
+import { queryClient, queryKeys } from "@/lib/queries";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { AlertCircle, Eye, EyeOff, Loader2 } from "lucide-react";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -31,13 +38,49 @@ function SignInForm() {
 
   const urlError = searchParams.get("error");
   const urlMessage = searchParams.get("message");
+  const isSuspendedUrl =
+    urlError === "suspended" || urlError === "ACCOUNT_SUSPENDED";
+
+  const [suspendedAlert, setSuspendedAlert] = useState(isSuspendedUrl);
+  const [checkingSession, setCheckingSession] = useState(!isSuspendedUrl);
+
+  // Check for existing session / OAuth callback on mount unless ?error=suspended
+  useEffect(() => {
+    if (isSuspendedUrl) {
+      setSuspendedAlert(true);
+      setCheckingSession(false);
+      return;
+    }
+
+    let active = true;
+    fetchMeWithSessionToken()
+      .then(async (res) => {
+        if (!active) return;
+        if (res.ok) {
+          queryClient.setQueryData(queryKeys.me(res.me.id), res.me);
+          router.replace(getPostAuthRoute(res.me));
+          return;
+        }
+        if (res.suspended) {
+          await performSuspendedSignOut(() => queryClient.clear());
+          if (!active) return;
+          setSuspendedAlert(true);
+        }
+        setCheckingSession(false);
+      })
+      .catch(() => {
+        if (active) setCheckingSession(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isSuspendedUrl, router]);
 
   // Shows URL-based OAuth errors or password reset success notices as toasts
   useEffect(() => {
-    if (urlError === "ACCOUNT_SUSPENDED") {
-      authToast.error("Your account has been suspended. Please contact support.", {
-        id: "sign-in-account-suspended",
-      });
+    if (urlError === "suspended" || urlError === "ACCOUNT_SUSPENDED") {
+      return;
     } else if (urlError === "ACCOUNT_DISABLED") {
       authToast.error("Your account has been disabled. Please contact support.", {
         id: "sign-in-account-disabled",
@@ -169,8 +212,16 @@ function SignInForm() {
       // Clear any prior signed-out sentinel flag upon authenticating
       document.cookie = "autopulse_signed_out=; path=/; max-age=0; SameSite=Lax";
 
-      const result = await resolvePostAuthDestination("/app");
-      if (!result.ok) {
+      // b. Call /me ONCE with the new session token
+      const meResult = await fetchMeWithSessionToken();
+      if (!meResult.ok) {
+        if (meResult.suspended) {
+          // c. Suspended: sign out immediately, clear cache, stay on sign-in, show destructive Alert
+          await performSuspendedSignOut(() => queryClient.clear());
+          setSuspendedAlert(true);
+          setIsPending(false);
+          return;
+        }
         console.error("[auth] Sign-in succeeded but active session could not be verified.");
         authToast.error(
           "Signed in, but we could not open your dashboard. Please try again.",
@@ -180,8 +231,9 @@ function SignInForm() {
         return;
       }
 
-      router.refresh();
-      window.location.assign(result.destination);
+      // d. Active: seed React Query cache and navigate via getPostAuthRoute
+      queryClient.setQueryData(queryKeys.me(meResult.me.id), meResult.me);
+      router.replace(getPostAuthRoute(meResult.me));
     } catch {
       authToast.error(
         "Network error. Please check your connection and try again.",
@@ -191,8 +243,28 @@ function SignInForm() {
     }
   };
 
+  if (checkingSession) {
+    return (
+      <div className="w-full space-y-4 py-2" aria-busy="true" aria-label="Checking session">
+        <Skeleton className="h-10 w-full rounded-[8px]" />
+        <Skeleton className="h-4 w-16 mx-auto" />
+        <Skeleton className="h-10 w-full rounded-[8px]" />
+        <Skeleton className="h-10 w-full rounded-[8px]" />
+        <Skeleton className="h-10 w-full rounded-[8px]" />
+      </div>
+    );
+  }
+
   return (
     <div className="w-full font-normal">
+      {suspendedAlert && (
+        <Alert variant="destructive" className="mb-4 text-left">
+          <AlertCircle className="size-4" />
+          <AlertDescription>
+            Your account has been suspended. Contact support if you think this is a mistake.
+          </AlertDescription>
+        </Alert>
+      )}
       {/* Google Social Sign In */}
       <div className="w-full">
         <GoogleSignInButton text="Continue with Google" />
@@ -222,6 +294,7 @@ function SignInForm() {
               type="email"
               autoComplete="email"
               placeholder="name@company.com"
+              disabled={isPending}
               value={email}
               aria-invalid={Boolean(fieldErrors.email)}
               aria-describedby={fieldErrors.email ? "email-error" : undefined}
@@ -264,6 +337,7 @@ function SignInForm() {
                 type={showPassword ? "text" : "password"}
                 autoComplete="current-password"
                 placeholder="Enter your password"
+                disabled={isPending}
                 value={password}
                 aria-invalid={Boolean(fieldErrors.password)}
                 aria-describedby={fieldErrors.password ? "password-error" : undefined}

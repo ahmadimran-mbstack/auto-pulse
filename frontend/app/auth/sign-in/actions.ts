@@ -37,6 +37,6 @@ export async function signInWithEmail(
     };
   }
 
-  // Route verified users through server-side post-login check (admins -> /admin, others -> /app)
-  redirect("/auth/post-login");
+  // Redirect back to sign-in so client-side /me routing resolves destination
+  redirect("/auth/sign-in");
 }

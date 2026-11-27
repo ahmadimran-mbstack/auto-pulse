@@ -3,7 +3,7 @@
 import * as React from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -67,7 +67,8 @@ import {
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSignOut } from "@/hooks/use-sign-out";
-import { getAdminBadgeCounts, getAdminMe } from "@/lib/api";
+import { getAdminBadgeCounts } from "@/lib/api";
+import { useMeQuery } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 interface AdminNavItem {
@@ -365,14 +366,10 @@ export function AdminGate({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const crumb = getBreadcrumbLabel(pathname);
 
-  const { isLoading, isError, data } = useQuery({
-    queryKey: ["admin-me"],
-    queryFn: getAdminMe,
-    retry: false,
-    staleTime: 60_000,
-  });
+  const { isLoading, isError, data } = useMeQuery(user?.id || "");
 
   const { data: badges } = useQuery({
     queryKey: ["admin-badge-counts"],
@@ -383,13 +380,19 @@ export function AdminGate({
   });
 
   React.useEffect(() => {
+    if (!isLoading && (isError || !data?.is_admin)) {
+      router.replace("/app");
+    }
+  }, [isLoading, isError, data?.is_admin, router]);
+
+  React.useEffect(() => {
     if (typeof document !== "undefined" && data?.is_admin) {
       const pageLabel = crumb.detail || crumb.section;
       document.title = `${pageLabel} | Admin | AutoPulse`;
     }
   }, [crumb.section, crumb.detail, data?.is_admin]);
 
-  if (isLoading) {
+  if (isLoading || isError || !data?.is_admin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-6">
         <div className="space-y-3 w-48">
@@ -400,20 +403,11 @@ export function AdminGate({
     );
   }
 
-  if (isError || !data?.is_admin) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4 text-center">
-        <h1 className="text-4xl font-semibold tracking-tight">404</h1>
-        <p className="mt-2 text-sm text-muted-foreground">This page could not be found.</p>
-      </div>
-    );
-  }
-
   return (
     <SidebarProvider defaultOpen={defaultSidebarOpen}>
       <AdminSidebarInner
         user={user}
-        adminEmail={data.email}
+        adminEmail={data.email || user?.email || ""}
         pathname={pathname}
         badges={badges}
       />
