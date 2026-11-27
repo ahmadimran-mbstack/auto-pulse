@@ -37,12 +37,18 @@ import {
   Toolbar,
   UserAvatar,
 } from "@/components/admin/shared";
+import {
+  AdminModalField,
+  AdminModalSection,
+  FieldGrid,
+  InputWithAffix,
+  ToggleRow,
+} from "@/components/admin/modal-parts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -50,7 +56,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -836,180 +841,160 @@ export default function AdminPaymentsPage() {
           </>
         }
       >
-        <div className="space-y-6">
-          <section className="space-y-3">
-            <div className="border-b border-border pb-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Basics</p>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="whitespace-nowrap">User</Label>
-              <Input
-                ref={recordUserSearchRef}
-                placeholder="Search by email or name"
-                value={userSearch}
-                onChange={(e) => setUserSearch(e.target.value)}
-              />
-              {selectedUser ? (
-                <div className="flex items-center justify-between rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
-                  <span>
-                    Selected: <strong>{selectedUser.email}</strong>
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => setSelectedUser(null)}
-                  >
-                    Change
-                  </Button>
-                </div>
-              ) : (
-                <div className="max-h-36 overflow-y-auto rounded-md border border-border divide-y divide-border text-sm">
-                  {userSearchQuery.isLoading ? (
-                    <div className="p-2.5 text-muted-foreground">Searching users...</div>
-                  ) : (userSearchQuery.data?.items || []).length === 0 ? (
-                    <div className="p-2.5 text-muted-foreground">No matching users.</div>
-                  ) : (
-                    (userSearchQuery.data?.items || []).map((u) => (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => setSelectedUser(u)}
-                        className="w-full text-left px-3 py-2 hover:bg-accent flex items-center justify-between"
-                      >
-                        <span className="font-medium truncate">{u.email}</span>
-                        <PlanBadge planId={u.plan_id} planName={u.plan_name} />
-                      </button>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-          </section>
-
-          <section className="space-y-3">
-            <div className="border-b border-border pb-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Payment</p>
-            </div>
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-x-4 gap-y-5">
-              <div className="min-w-0 space-y-1.5">
-                <Label className="whitespace-nowrap">Plan</Label>
-                <Select
-                  value={recPlanId}
-                  onValueChange={(nextPlan) => {
-                    setRecPlanId(nextPlan);
-                    const nextPrice = defaultUsdFor(nextPlan, recInterval);
-                    if (nextPrice) setRecAmountUsd(nextPrice);
-                  }}
-                >
-                  <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {paidPlans.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="min-w-0 space-y-1.5">
-                <Label className="whitespace-nowrap">Interval</Label>
-                <Select
-                  value={recInterval}
-                  onValueChange={(v) => {
-                    const nextInt = v as "monthly" | "annual";
-                    setRecInterval(nextInt);
-                    const nextPrice = defaultUsdFor(recPlanId, nextInt);
-                    if (nextPrice) setRecAmountUsd(nextPrice);
-                  }}
-                >
-                  <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="monthly">Monthly</SelectItem>
-                    <SelectItem value="annual">Annual</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="min-w-0 space-y-1.5">
-                <Label className="whitespace-nowrap">Amount</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={recAmountUsd}
-                  onChange={(e) => setRecAmountUsd(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">USD.</p>
-              </div>
-              <div className="min-w-0 space-y-1.5">
-                <Label className="whitespace-nowrap">Method</Label>
-                <Select value={recMethod} onValueChange={setRecMethod}>
-                  <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="manual">Manual</SelectItem>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="bank_transfer">Bank transfer</SelectItem>
-                    <SelectItem value="easypaisa">Easypaisa</SelectItem>
-                    <SelectItem value="jazzcash">JazzCash</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="min-w-0 space-y-1.5">
-                <Label className="whitespace-nowrap">Transaction ID</Label>
-                <Input
-                  value={recTxId}
-                  onChange={(e) => setRecTxId(e.target.value)}
-                  placeholder="Optional"
-                />
-                <p className="text-xs text-muted-foreground">Leave blank to auto-generate MANUAL-... ID.</p>
-              </div>
-            </div>
-          </section>
-
-          <section className="space-y-3">
-            <div className="border-b border-border pb-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Subscription</p>
-            </div>
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-x-4 gap-y-5">
-              <div className="min-w-0 space-y-1.5">
-                <Label className="whitespace-nowrap">Paid date</Label>
-                <Input type="date" value={recPaidAt} onChange={(e) => setRecPaidAt(e.target.value)} />
-                <p className="text-xs text-muted-foreground">UTC.</p>
-              </div>
-              <div className="min-w-0 space-y-1.5">
-                <Label className="whitespace-nowrap">End date override</Label>
-                <Input type="date" value={recEndsAt} onChange={(e) => setRecEndsAt(e.target.value)} />
-                <p className="text-xs text-muted-foreground">Optional. Format: YYYY-MM-DD.</p>
-              </div>
-            </div>
-          </section>
-
-          <section className="space-y-3">
-            <div className="border-b border-border pb-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Features and access</p>
-            </div>
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-x-4 gap-y-3">
-              <label className="flex items-center justify-between rounded-md border border-border p-3 text-sm">
-                <span>Activate plan now</span>
-                <Switch checked={recActivate} onCheckedChange={setRecActivate} />
-              </label>
-              <label className="flex items-center justify-between rounded-md border border-border p-3 text-sm">
-                <span>Send approval email</span>
-                <Switch checked={recSendEmail} onCheckedChange={setRecSendEmail} />
-              </label>
-            </div>
-          </section>
-
-          <section className="space-y-1.5">
-            <Label className="whitespace-nowrap">Internal note</Label>
+        <AdminModalSection title="Basics">
+          <AdminModalField label="User" required>
             <Input
-              value={recNote}
-              onChange={(e) => setRecNote(e.target.value)}
-              placeholder="Optional"
+              ref={recordUserSearchRef}
+              placeholder="Search by email or name"
+              value={userSearch}
+              onChange={(e) => setUserSearch(e.target.value)}
             />
-          </section>
+            {selectedUser ? (
+              <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 px-4 py-2.5 text-sm">
+                <span>
+                  Selected: <strong>{selectedUser.email}</strong>
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => setSelectedUser(null)}
+                >
+                  Change
+                </Button>
+              </div>
+            ) : (
+              <div className="max-h-36 overflow-y-auto rounded-lg border border-border divide-y divide-border text-sm">
+                {userSearchQuery.isLoading ? (
+                  <div className="p-3 text-muted-foreground">Searching users...</div>
+                ) : (userSearchQuery.data?.items || []).length === 0 ? (
+                  <div className="p-3 text-muted-foreground">No matching users.</div>
+                ) : (
+                  (userSearchQuery.data?.items || []).map((u) => (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => setSelectedUser(u)}
+                      className="w-full text-left px-3 py-2.5 hover:bg-accent flex items-center justify-between gap-3"
+                    >
+                      <span className="font-medium truncate">{u.email}</span>
+                      <PlanBadge planId={u.plan_id} planName={u.plan_name} />
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </AdminModalField>
+        </AdminModalSection>
 
-          {recError && <p className="text-xs text-destructive">{recError}</p>}
-        </div>
+        <AdminModalSection title="Payment">
+          <FieldGrid cols={2}>
+            <AdminModalField label="Plan">
+              <Select
+                value={recPlanId}
+                onValueChange={(nextPlan) => {
+                  setRecPlanId(nextPlan);
+                  const nextPrice = defaultUsdFor(nextPlan, recInterval);
+                  if (nextPrice) setRecAmountUsd(nextPrice);
+                }}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {paidPlans.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </AdminModalField>
+            <AdminModalField label="Interval">
+              <Select
+                value={recInterval}
+                onValueChange={(v) => {
+                  const nextInt = v as "monthly" | "annual";
+                  setRecInterval(nextInt);
+                  const nextPrice = defaultUsdFor(recPlanId, nextInt);
+                  if (nextPrice) setRecAmountUsd(nextPrice);
+                }}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="annual">Annual</SelectItem>
+                </SelectContent>
+              </Select>
+            </AdminModalField>
+            <AdminModalField label="Amount" helper="USD.">
+              <InputWithAffix
+                prefix="$"
+                type="number"
+                step="0.01"
+                value={recAmountUsd}
+                onChange={(e) => setRecAmountUsd(e.target.value)}
+              />
+            </AdminModalField>
+            <AdminModalField label="Method">
+              <Select value={recMethod} onValueChange={setRecMethod}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="manual">Manual</SelectItem>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="bank_transfer">Bank transfer</SelectItem>
+                  <SelectItem value="easypaisa">Easypaisa</SelectItem>
+                  <SelectItem value="jazzcash">JazzCash</SelectItem>
+                </SelectContent>
+              </Select>
+            </AdminModalField>
+            <AdminModalField
+              label="Transaction ID"
+              helper="Leave blank to auto-generate MANUAL-... ID."
+              className="sm:col-span-2"
+            >
+              <Input
+                value={recTxId}
+                onChange={(e) => setRecTxId(e.target.value)}
+                placeholder="Optional"
+              />
+            </AdminModalField>
+          </FieldGrid>
+        </AdminModalSection>
+
+        <AdminModalSection title="Subscription">
+          <FieldGrid cols={2}>
+            <AdminModalField label="Paid date" helper="UTC.">
+              <Input type="date" value={recPaidAt} onChange={(e) => setRecPaidAt(e.target.value)} />
+            </AdminModalField>
+            <AdminModalField label="End date override" helper="Optional. Format: YYYY-MM-DD.">
+              <Input type="date" value={recEndsAt} onChange={(e) => setRecEndsAt(e.target.value)} />
+            </AdminModalField>
+          </FieldGrid>
+        </AdminModalSection>
+
+        <AdminModalSection title="Features and access">
+          <FieldGrid cols={2}>
+            <ToggleRow
+              label="Activate plan now"
+              checked={recActivate}
+              onCheckedChange={setRecActivate}
+            />
+            <ToggleRow
+              label="Send approval email"
+              checked={recSendEmail}
+              onCheckedChange={setRecSendEmail}
+            />
+          </FieldGrid>
+        </AdminModalSection>
+
+        <AdminModalField label="Internal note">
+          <Input
+            value={recNote}
+            onChange={(e) => setRecNote(e.target.value)}
+            placeholder="Optional"
+          />
+        </AdminModalField>
+
+        {recError && <p className="text-xs text-destructive">{recError}</p>}
       </StandardDialog>
 
       {/* Void Payment Dialog */}
@@ -1035,8 +1020,7 @@ export default function AdminPaymentsPage() {
         disabled={voidReason.trim().length < 2}
         onConfirm={() => voidMutation.mutate()}
       >
-        <div className="space-y-1.5">
-          <Label htmlFor="void-reason">Reason (required)</Label>
+        <AdminModalField label="Reason" htmlFor="void-reason" required>
           <Input
             ref={voidReasonRef}
             id="void-reason"
@@ -1044,40 +1028,42 @@ export default function AdminPaymentsPage() {
             onChange={(e) => setVoidReason(e.target.value)}
             placeholder="e.g. Duplicate entry or refund"
           />
-        </div>
+        </AdminModalField>
 
-        <div className="flex items-center justify-between rounded-md border border-border p-3 gap-3 text-xs">
-          <div>
-            <div className="font-medium">Revoke added subscription time</div>
-            <p className="text-muted-foreground mt-0.5">
+        <ToggleRow
+          label="Revoke added subscription time"
+          description={
+            <>
               Subtracts {voidTarget?.billing_interval === "annual" ? "12 months" : "1 month"} from
               period end.
+            </>
+          }
+          checked={voidRevoke}
+          onCheckedChange={setVoidRevoke}
+        >
+          {voidRevoke && (
+            <p className="text-xs text-foreground font-medium">
+              New end preview:{" "}
+              {voidUserDetailQuery.isLoading ? "Calculating..." : voidPreviewEnd}
             </p>
-            {voidRevoke && (
-              <p className="text-foreground mt-1 font-medium">
-                New end preview:{" "}
-                {voidUserDetailQuery.isLoading ? "Calculating..." : voidPreviewEnd}
-              </p>
-            )}
-          </div>
-          <Switch checked={voidRevoke} onCheckedChange={setVoidRevoke} />
-        </div>
+          )}
+        </ToggleRow>
 
-        <div className="flex items-center justify-between rounded-md border border-border p-3 text-xs">
-          <span>Notify user by email</span>
-          <Switch checked={voidSendEmail} onCheckedChange={setVoidSendEmail} />
-        </div>
+        <ToggleRow
+          label="Notify user by email"
+          checked={voidSendEmail}
+          onCheckedChange={setVoidSendEmail}
+        />
 
         {voidSendEmail && (
-          <div className="space-y-1.5">
-            <Label htmlFor="void-msg">Optional message to user</Label>
+          <AdminModalField label="Optional message to user" htmlFor="void-msg">
             <Textarea
               id="void-msg"
               rows={2}
               value={voidMessage}
               onChange={(e) => setVoidMessage(e.target.value)}
             />
-          </div>
+          </AdminModalField>
         )}
       </ConfirmDialog>
 
@@ -1148,26 +1134,24 @@ export default function AdminPaymentsPage() {
           {confirmReject?.amount_usd.toFixed(2)} (Rs {confirmReject?.amount_pkr.toLocaleString()})
         </DialogCallout>
 
-        <div className="space-y-2">
-          <Label>Quick presets</Label>
-          <div className="flex flex-wrap gap-1.5">
+        <AdminModalField label="Quick presets">
+          <div className="flex flex-wrap gap-2">
             {REJECT_PRESETS.map((preset) => (
               <Button
                 key={preset}
                 type="button"
                 size="sm"
                 variant={rejectReason === preset ? "default" : "outline"}
-                className="h-7 text-xs"
+                className="h-8 text-xs"
                 onClick={() => setRejectReason(preset)}
               >
                 {preset}
               </Button>
             ))}
           </div>
-        </div>
+        </AdminModalField>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="reject-reason">Reason (required)</Label>
+        <AdminModalField label="Reason" htmlFor="reject-reason" required>
           <Input
             ref={rejectReasonRef}
             id="reject-reason"
@@ -1175,7 +1159,7 @@ export default function AdminPaymentsPage() {
             onChange={(e) => setRejectReason(e.target.value)}
             placeholder="e.g. Transaction ID not found"
           />
-        </div>
+        </AdminModalField>
       </ConfirmDialog>
     </div>
   );

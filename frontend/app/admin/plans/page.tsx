@@ -15,6 +15,14 @@ import {
 import { toast } from "sonner";
 
 import {
+  AdminModalField,
+  AdminModalSection,
+  FieldGrid,
+  InputWithAffix,
+  RepeatList,
+  ToggleRow,
+} from "@/components/admin/modal-parts";
+import {
   ConfirmDialog,
   DataTableShell,
   DialogCallout,
@@ -31,7 +39,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -39,7 +46,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -48,7 +54,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   ApiClientError,
@@ -190,6 +195,13 @@ export default function AdminPlansPage() {
   const deleteSlugRef = React.useRef<HTMLInputElement | null>(null);
   const slugInputRef = React.useRef<HTMLInputElement | null>(null);
   const nameInputRef = React.useRef<HTMLInputElement | null>(null);
+  const errorRef = React.useRef<HTMLParagraphElement | null>(null);
+
+  React.useEffect(() => {
+    if (formError) {
+      errorRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [formError]);
 
   const data = plansQuery.data;
   const tiers = data?.rate_limit_tiers || ["trial", "starter", "pro", "business", "internal"];
@@ -668,274 +680,246 @@ export default function AdminPlansPage() {
           </>
         }
       >
-        <div className="space-y-4">
-          {dialogMode === "edit" && editingPlan && editingPlan.subscribers.total > 0 && (
-            <DialogCallout tone="warning" title="Active subscribers notice">
-              This plan currently has <strong>{editingPlan.subscribers.active}</strong> active (
-              <strong>{editingPlan.subscribers.total}</strong> total) subscriber(s). Limit edits apply
-              to them immediately.
-            </DialogCallout>
-          )}
+        {dialogMode === "edit" && editingPlan && editingPlan.subscribers.total > 0 && (
+          <DialogCallout tone="warning" title="Active subscribers notice">
+            This plan currently has <strong>{editingPlan.subscribers.active}</strong> active (
+            <strong>{editingPlan.subscribers.total}</strong> total) subscriber(s). Limit edits apply
+            to them immediately.
+          </DialogCallout>
+        )}
 
-          <div className="space-y-6">
-              <section className="space-y-3">
-                <div className="border-b border-border pb-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Basics</p>
-                </div>
-                <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-x-4 gap-y-5">
-                  <div className="min-w-0 space-y-1.5">
-                    <Label className="whitespace-nowrap">Slug</Label>
-                    <div className="relative">
-                      {dialogMode === "edit" && (
-                        <Lock className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                      )}
-                      <Input
-                        ref={slugInputRef}
-                        value={form.id}
-                        onChange={(e) => setForm({ ...form, id: e.target.value })}
-                        disabled={dialogMode === "edit"}
-                        placeholder="e.g. agency-plus"
-                        className={dialogMode === "edit" ? "pl-9" : undefined}
-                      />
-                    </div>
-                    {dialogMode === "edit" ? (
-                      <p className="text-xs text-muted-foreground">Slug is locked after creation.</p>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">Lowercase letters, numbers, and hyphens.</p>
-                    )}
-                  </div>
-
-                  <div className="min-w-0 space-y-1.5">
-                    <Label className="whitespace-nowrap">Name</Label>
-                    <Input
-                      ref={nameInputRef}
-                      value={form.name}
-                      onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="min-w-0 space-y-1.5">
-                    <Label className="whitespace-nowrap">Sort order</Label>
-                    <Input
-                      type="number"
-                      value={form.sortOrder}
-                      onChange={(e) => setForm({ ...form, sortOrder: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="min-w-0 space-y-1.5">
-                    <Label className="whitespace-nowrap">Rate tier</Label>
-                    <Select
-                      value={form.rateLimitTier}
-                      onValueChange={(v) => setForm({ ...form, rateLimitTier: v })}
-                    >
-                      <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {tiers.map((t) => (
-                          <SelectItem key={t} value={t}>
-                            {t}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </section>
-
-              <section className="space-y-3">
-                <div className="border-b border-border pb-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pricing</p>
-                </div>
-                <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-x-4 gap-y-5">
-                  <div className="min-w-0 space-y-1.5">
-                    <Label className="whitespace-nowrap">Monthly price</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={form.monthlyUsd}
-                      onChange={(e) => setForm({ ...form, monthlyUsd: e.target.value })}
-                    />
-                    <p className="text-xs text-muted-foreground">USD. Leave blank for no listed price.</p>
-                  </div>
-                </div>
-              </section>
-
-              <section className="space-y-3">
-                <div className="border-b border-border pb-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Limits</p>
-                </div>
-                <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-x-4 gap-y-5">
-                  <div className="min-w-0 space-y-1.5">
-                    <Label className="whitespace-nowrap">Scheduled posts</Label>
-                    <Input
-                      value={form.scheduledPosts}
-                      onChange={(e) => setForm({ ...form, scheduledPosts: e.target.value })}
-                    />
-                    <p className="text-xs text-muted-foreground">Per billing period. Blank means unlimited.</p>
-                  </div>
-                  <div className="min-w-0 space-y-1.5">
-                    <Label className="whitespace-nowrap">Playground runs</Label>
-                    <Input
-                      value={form.playgroundRuns}
-                      onChange={(e) => setForm({ ...form, playgroundRuns: e.target.value })}
-                    />
-                    <p className="text-xs text-muted-foreground">Per billing period.</p>
-                  </div>
-                  <div className="min-w-0 space-y-1.5">
-                    <Label className="whitespace-nowrap">Playground runs per day</Label>
-                    <Input
-                      value={form.playgroundPerDay}
-                      onChange={(e) => setForm({ ...form, playgroundPerDay: e.target.value })}
-                    />
-                  </div>
-                  <div className="min-w-0 space-y-1.5">
-                    <Label className="whitespace-nowrap">Max post days per week</Label>
-                    <Input
-                      value={form.maxPostDays}
-                      onChange={(e) => setForm({ ...form, maxPostDays: e.target.value })}
-                    />
-                  </div>
-                  <div className="min-w-0 space-y-1.5">
-                    <Label className="whitespace-nowrap">LinkedIn profiles</Label>
-                    <Input
-                      value={form.linkedinProfiles}
-                      onChange={(e) => setForm({ ...form, linkedinProfiles: e.target.value })}
-                    />
-                  </div>
-                  <div className="min-w-0 space-y-1.5">
-                    <Label className="whitespace-nowrap">Docs token limit</Label>
-                    <Input
-                      value={form.docsTokenLimit}
-                      onChange={(e) => setForm({ ...form, docsTokenLimit: e.target.value })}
-                    />
-                  </div>
-                  <div className="min-w-0 space-y-1.5">
-                    <Label className="whitespace-nowrap">Daily spend limit</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={form.dailySpendUsd}
-                      onChange={(e) => setForm({ ...form, dailySpendUsd: e.target.value })}
-                    />
-                    <p className="text-xs text-muted-foreground">USD.</p>
-                  </div>
-                </div>
-              </section>
-
-              <section className="space-y-3">
-                <div className="border-b border-border pb-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Features and access</p>
-                </div>
-                <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-x-4 gap-y-5">
-                  <div className="min-w-0 space-y-1.5">
-                    <Label className="whitespace-nowrap">Analytics level</Label>
-                    <Select
-                      value={form.analyticsLevel}
-                      onValueChange={(v) => setForm({ ...form, analyticsLevel: v })}
-                    >
-                      <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">none</SelectItem>
-                        <SelectItem value="basic">basic</SelectItem>
-                        <SelectItem value="full">full</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="min-w-0 space-y-1.5">
-                    <Label className="whitespace-nowrap">Support label</Label>
-                    <Input
-                      value={form.supportLabel}
-                      onChange={(e) => setForm({ ...form, supportLabel: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-x-4 gap-y-3">
-                  <label className="flex items-center justify-between rounded-md border border-border p-2.5 text-sm">
-                    <span>Approval by email</span>
-                    <Switch
-                      checked={form.approvalEmail}
-                      onCheckedChange={(v) => setForm({ ...form, approvalEmail: v })}
-                    />
-                  </label>
-                  <label className="flex items-center justify-between rounded-md border border-border p-2.5 text-sm">
-                    <span>Approval by Slack</span>
-                    <Switch
-                      checked={form.approvalSlack}
-                      onCheckedChange={(v) => setForm({ ...form, approvalSlack: v })}
-                    />
-                  </label>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label className="whitespace-nowrap">Extra features</Label>
-                  <Textarea
-                    rows={3}
-                    className="text-sm"
-                    value={form.extraFeaturesText}
-                    onChange={(e) => setForm({ ...form, extraFeaturesText: e.target.value })}
-                    placeholder={"Priority onboarding\nDedicated support channel"}
-                  />
-                  <p className="text-xs text-muted-foreground">One bullet per line.</p>
-                </div>
-              </section>
-
-              <section className="space-y-3">
-                <div className="border-b border-border pb-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Visibility</p>
-                </div>
-                <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-x-4 gap-y-3">
-                  <label className="flex items-center justify-between rounded-md border border-border p-2.5 text-sm">
-                    <span>Public listing</span>
-                    <Switch
-                      checked={form.isPublic}
-                      onCheckedChange={(v) => setForm({ ...form, isPublic: v })}
-                    />
-                  </label>
-                  <label className="flex items-center justify-between rounded-md border border-border p-2.5 text-sm">
-                    <span>Popular badge</span>
-                    <Switch
-                      checked={form.isPopular}
-                      onCheckedChange={(v) => setForm({ ...form, isPopular: v })}
-                    />
-                  </label>
-                </div>
-
-                {dialogMode === "edit" && editingPlan && (
-                  <div className="space-y-1">
-                    <Label className="whitespace-nowrap">Locked settings</Label>
-                    <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                      Plan length: {editingPlan.plan_length_days} days · System plan:{" "}
-                      {editingPlan.is_system ? "Yes" : "No"}
-                    </div>
-                  </div>
+        <AdminModalSection title="Basics">
+          <FieldGrid cols={2}>
+            <AdminModalField
+              label="Slug"
+              required={dialogMode === "create"}
+              helper={
+                dialogMode === "edit"
+                  ? "Slug is locked after creation."
+                  : "Lowercase letters, numbers, and hyphens."
+              }
+            >
+              <div className="relative">
+                {dialogMode === "edit" && (
+                  <Lock className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
                 )}
-              </section>
-
-              <section className="space-y-1.5">
-                <Label className="whitespace-nowrap">Change reason</Label>
                 <Input
-                  value={form.reason}
-                  onChange={(e) => setForm({ ...form, reason: e.target.value })}
-                  placeholder="e.g. Q4 pricing adjustment"
+                  ref={slugInputRef}
+                  value={form.id}
+                  onChange={(e) => setForm({ ...form, id: e.target.value })}
+                  disabled={dialogMode === "edit"}
+                  placeholder="e.g. agency-plus"
+                  className={dialogMode === "edit" ? "pl-9" : undefined}
                 />
-                <p className="text-xs text-muted-foreground">Required for audit logs.</p>
-              </section>
+              </div>
+            </AdminModalField>
 
-              <section>
-                <Accordion type="single" collapsible>
-                  <AccordionItem value="preview">
-                    <AccordionTrigger>Pricing card preview</AccordionTrigger>
-                    <AccordionContent>
-                      {previewCard}
-                    </AccordionContent>
-                  </AccordionItem>
-                </Accordion>
-              </section>
+            <AdminModalField label="Name" required>
+              <Input
+                ref={nameInputRef}
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+            </AdminModalField>
 
-              {formError && <p className="text-xs text-destructive">{formError}</p>}
-            </div>
-          </div>
+            <AdminModalField label="Sort order">
+              <Input
+                type="number"
+                value={form.sortOrder}
+                onChange={(e) => setForm({ ...form, sortOrder: e.target.value })}
+              />
+            </AdminModalField>
+
+            <AdminModalField label="Rate tier">
+              <Select
+                value={form.rateLimitTier}
+                onValueChange={(v) => setForm({ ...form, rateLimitTier: v })}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {tiers.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </AdminModalField>
+          </FieldGrid>
+        </AdminModalSection>
+
+        <AdminModalSection title="Pricing">
+          <FieldGrid cols={2}>
+            <AdminModalField
+              label="Monthly price"
+              helper="USD. Leave blank for no listed price."
+            >
+              <InputWithAffix
+                prefix="$"
+                suffix="/month"
+                type="number"
+                step="0.01"
+                value={form.monthlyUsd}
+                onChange={(e) => setForm({ ...form, monthlyUsd: e.target.value })}
+              />
+            </AdminModalField>
+          </FieldGrid>
+        </AdminModalSection>
+
+        <AdminModalSection title="Limits">
+          <FieldGrid cols={3}>
+            <AdminModalField
+              label="Scheduled posts"
+              helper="Per billing period. Blank means unlimited."
+            >
+              <InputWithAffix
+                suffix="posts"
+                value={form.scheduledPosts}
+                onChange={(e) => setForm({ ...form, scheduledPosts: e.target.value })}
+              />
+            </AdminModalField>
+
+            <AdminModalField label="Playground runs" helper="Per billing period.">
+              <InputWithAffix
+                suffix="runs"
+                value={form.playgroundRuns}
+                onChange={(e) => setForm({ ...form, playgroundRuns: e.target.value })}
+              />
+            </AdminModalField>
+
+            <AdminModalField label="Playground runs per day">
+              <InputWithAffix
+                suffix="runs"
+                value={form.playgroundPerDay}
+                onChange={(e) => setForm({ ...form, playgroundPerDay: e.target.value })}
+              />
+            </AdminModalField>
+
+            <AdminModalField label="Max post days per week">
+              <InputWithAffix
+                suffix="days"
+                value={form.maxPostDays}
+                onChange={(e) => setForm({ ...form, maxPostDays: e.target.value })}
+              />
+            </AdminModalField>
+
+            <AdminModalField label="LinkedIn profiles">
+              <Input
+                value={form.linkedinProfiles}
+                onChange={(e) => setForm({ ...form, linkedinProfiles: e.target.value })}
+              />
+            </AdminModalField>
+
+            <AdminModalField label="Docs token limit">
+              <Input
+                value={form.docsTokenLimit}
+                onChange={(e) => setForm({ ...form, docsTokenLimit: e.target.value })}
+              />
+            </AdminModalField>
+
+            <AdminModalField label="Daily spend limit" helper="USD.">
+              <InputWithAffix
+                prefix="$"
+                type="number"
+                step="0.01"
+                value={form.dailySpendUsd}
+                onChange={(e) => setForm({ ...form, dailySpendUsd: e.target.value })}
+              />
+            </AdminModalField>
+          </FieldGrid>
+        </AdminModalSection>
+
+        <AdminModalSection title="Features and access">
+          <FieldGrid cols={2}>
+            <AdminModalField label="Analytics level">
+              <Select
+                value={form.analyticsLevel}
+                onValueChange={(v) => setForm({ ...form, analyticsLevel: v })}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">none</SelectItem>
+                  <SelectItem value="basic">basic</SelectItem>
+                  <SelectItem value="full">full</SelectItem>
+                </SelectContent>
+              </Select>
+            </AdminModalField>
+
+            <AdminModalField label="Support label">
+              <Input
+                value={form.supportLabel}
+                onChange={(e) => setForm({ ...form, supportLabel: e.target.value })}
+              />
+            </AdminModalField>
+          </FieldGrid>
+
+          <FieldGrid cols={2}>
+            <ToggleRow
+              label="Approval by email"
+              checked={form.approvalEmail}
+              onCheckedChange={(v) => setForm({ ...form, approvalEmail: v })}
+            />
+            <ToggleRow
+              label="Approval by Slack"
+              checked={form.approvalSlack}
+              onCheckedChange={(v) => setForm({ ...form, approvalSlack: v })}
+            />
+          </FieldGrid>
+
+          <AdminModalField label="Extra features" helper="One bullet per row.">
+            <RepeatList
+              items={form.extraFeaturesText.split("\n")}
+              onChange={(rows) => setForm({ ...form, extraFeaturesText: rows.join("\n") })}
+              placeholder="Priority onboarding"
+              addLabel="Add feature"
+            />
+          </AdminModalField>
+        </AdminModalSection>
+
+        <AdminModalSection title="Visibility">
+          <FieldGrid cols={2}>
+            <ToggleRow
+              label="Public listing"
+              checked={form.isPublic}
+              onCheckedChange={(v) => setForm({ ...form, isPublic: v })}
+            />
+            <ToggleRow
+              label="Popular badge"
+              checked={form.isPopular}
+              onCheckedChange={(v) => setForm({ ...form, isPopular: v })}
+            />
+          </FieldGrid>
+
+          {dialogMode === "edit" && editingPlan && (
+            <AdminModalField label="Locked settings">
+              <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+                Plan length: {editingPlan.plan_length_days} days · System plan:{" "}
+                {editingPlan.is_system ? "Yes" : "No"}
+              </div>
+            </AdminModalField>
+          )}
+        </AdminModalSection>
+
+        <AdminModalField label="Change reason" required helper="Required for audit logs.">
+          <Input
+            value={form.reason}
+            onChange={(e) => setForm({ ...form, reason: e.target.value })}
+            placeholder="e.g. Q4 pricing adjustment"
+          />
+        </AdminModalField>
+
+        <Accordion type="single" collapsible>
+          <AccordionItem value="preview">
+            <AccordionTrigger>Pricing card preview</AccordionTrigger>
+            <AccordionContent>{previewCard}</AccordionContent>
+          </AccordionItem>
+        </Accordion>
+
+        {formError && (
+          <p ref={errorRef} className="text-xs font-medium text-destructive">
+            {formError}
+          </p>
+        )}
       </StandardDialog>
 
       {/* Archive / Restore Confirm Dialog */}
@@ -958,8 +942,7 @@ export default function AdminPlansPage() {
         disabled={archiveReason.trim().length < 2}
         onConfirm={() => archiveMutation.mutate()}
       >
-        <div className="space-y-1.5">
-          <Label htmlFor="archive-reason">Reason (required)</Label>
+        <AdminModalField label="Reason" required htmlFor="archive-reason">
           <Input
             ref={archiveReasonRef}
             id="archive-reason"
@@ -967,7 +950,7 @@ export default function AdminPlansPage() {
             onChange={(e) => setArchiveReason(e.target.value)}
             placeholder="e.g. Replaced by new tier"
           />
-        </div>
+        </AdminModalField>
       </ConfirmDialog>
 
       {/* Hard Delete Confirm Dialog */}
@@ -996,8 +979,7 @@ export default function AdminPlansPage() {
         }
         onConfirm={() => deleteMutation.mutate()}
       >
-        <div className="space-y-1.5">
-          <Label htmlFor="del-plan-slug">Confirm slug</Label>
+        <AdminModalField label="Confirm slug" required htmlFor="del-plan-slug">
           <Input
             ref={deleteSlugRef}
             id="del-plan-slug"
@@ -1005,15 +987,14 @@ export default function AdminPlansPage() {
             onChange={(e) => setDeleteConfirmSlug(e.target.value)}
             placeholder={deleteTarget?.id}
           />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="del-plan-reason">Reason (required)</Label>
+        </AdminModalField>
+        <AdminModalField label="Reason" required htmlFor="del-plan-reason">
           <Input
             id="del-plan-reason"
             value={deleteReason}
             onChange={(e) => setDeleteReason(e.target.value)}
           />
-        </div>
+        </AdminModalField>
       </ConfirmDialog>
     </div>
   );

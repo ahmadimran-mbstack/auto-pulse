@@ -6,9 +6,13 @@ import { Ban, Calendar, Layers, Loader2, ShieldAlert, Trash2 } from "lucide-reac
 import { toast } from "sonner";
 
 import { DialogCallout, StandardDialog } from "@/components/admin/shared";
+import {
+  AdminModalField,
+  FieldGrid,
+  ToggleRow,
+} from "@/components/admin/modal-parts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -16,7 +20,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   ApiClientError,
@@ -134,8 +137,7 @@ function UserStatusModalInner({
         </DialogCallout>
       )}
 
-      <div className="space-y-1.5">
-        <Label htmlFor="modal-status-select">New status</Label>
+      <AdminModalField label="New status" htmlFor="modal-status-select">
         <Select value={newStatus} onValueChange={(v) => setNewStatus(v as AccountStatus)}>
           <SelectTrigger id="modal-status-select">
             <SelectValue />
@@ -146,10 +148,14 @@ function UserStatusModalInner({
             <SelectItem value="disabled">Disabled</SelectItem>
           </SelectContent>
         </Select>
-      </div>
+      </AdminModalField>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="modal-status-reason">Reason (required)</Label>
+      <AdminModalField
+        label="Reason"
+        htmlFor="modal-status-reason"
+        required
+        error={reasonInvalid ? "Reason must be at least 2 characters." : undefined}
+      >
         <Input
           ref={reasonInputRef}
           id="modal-status-reason"
@@ -157,13 +163,9 @@ function UserStatusModalInner({
           value={reason}
           onChange={(e) => setReason(e.target.value)}
         />
-        {reasonInvalid && (
-          <p className="text-xs text-destructive">Reason must be at least 2 characters.</p>
-        )}
-      </div>
+      </AdminModalField>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="modal-status-msg">Message to user (optional)</Label>
+      <AdminModalField label="Message to user (optional)" htmlFor="modal-status-msg">
         <Textarea
           id="modal-status-msg"
           rows={3}
@@ -171,14 +173,14 @@ function UserStatusModalInner({
           value={adminMessage}
           onChange={(e) => setAdminMessage(e.target.value)}
         />
-      </div>
+      </AdminModalField>
 
-      <div className="flex items-center justify-between rounded-md border border-border p-3">
-        <Label htmlFor="modal-status-email" className="text-xs font-medium cursor-pointer">
-          Send email notification to user
-        </Label>
-        <Switch id="modal-status-email" checked={sendEmail} onCheckedChange={setSendEmail} />
-      </div>
+      <ToggleRow
+        id="modal-status-email"
+        label="Send email notification to user"
+        checked={sendEmail}
+        onCheckedChange={setSendEmail}
+      />
     </StandardDialog>
   );
 }
@@ -289,10 +291,16 @@ function UserDeleteModalInner({
         allowed by an admin. Payments, support tickets, email logs, and audit logs are preserved.
       </DialogCallout>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="modal-confirm-email">
-          Type <span className="font-mono font-semibold">{userEmail}</span> to confirm
-        </Label>
+      <AdminModalField
+        label={
+          <span>
+            Type <span className="font-mono font-semibold">{userEmail}</span> to confirm
+          </span>
+        }
+        htmlFor="modal-confirm-email"
+        required
+        error={emailMismatch ? "Email confirmation does not match." : undefined}
+      >
         <Input
           ref={confirmEmailRef}
           id="modal-confirm-email"
@@ -300,23 +308,18 @@ function UserDeleteModalInner({
           value={confirmEmail}
           onChange={(e) => setConfirmEmail(e.target.value)}
         />
-        {emailMismatch && (
-          <p className="text-xs text-destructive">Email confirmation does not match.</p>
-        )}
-      </div>
+      </AdminModalField>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="modal-delete-reason">Reason (required)</Label>
+      <AdminModalField label="Reason" htmlFor="modal-delete-reason" required>
         <Input
           id="modal-delete-reason"
           placeholder="e.g., Account removal requested by user"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
         />
-      </div>
+      </AdminModalField>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="modal-delete-msg">Message to user (optional)</Label>
+      <AdminModalField label="Message to user (optional)" htmlFor="modal-delete-msg">
         <Textarea
           id="modal-delete-msg"
           rows={3}
@@ -324,14 +327,14 @@ function UserDeleteModalInner({
           value={adminMessage}
           onChange={(e) => setAdminMessage(e.target.value)}
         />
-      </div>
+      </AdminModalField>
 
-      <div className="flex items-center justify-between rounded-md border border-border p-3">
-        <Label htmlFor="modal-delete-email" className="text-xs font-medium cursor-pointer">
-          Send account deleted email notification
-        </Label>
-        <Switch id="modal-delete-email" checked={sendEmail} onCheckedChange={setSendEmail} />
-      </div>
+      <ToggleRow
+        id="modal-delete-email"
+        label="Send account deleted email notification"
+        checked={sendEmail}
+        onCheckedChange={setSendEmail}
+      />
     </StandardDialog>
   );
 }
@@ -470,9 +473,8 @@ function ChangePlanModalInner({
         </>
       }
     >
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-x-4 gap-y-5">
-        <div className="min-w-0 space-y-1.5">
-          <Label htmlFor="modal-plan-select">Plan</Label>
+      <FieldGrid cols={2}>
+        <AdminModalField label="Plan" htmlFor="modal-plan-select">
           <Select value={planId} onValueChange={setPlanId}>
             <SelectTrigger id="modal-plan-select">
               <SelectValue />
@@ -489,11 +491,10 @@ function ChangePlanModalInner({
               )}
             </SelectContent>
           </Select>
-        </div>
+        </AdminModalField>
 
         {isPaidPlan && (
-          <div className="min-w-0 space-y-1.5">
-            <Label htmlFor="modal-plan-interval">Interval</Label>
+          <AdminModalField label="Interval" htmlFor="modal-plan-interval">
             <Select value={interval} onValueChange={(v) => setInterval(v as "monthly" | "annual")}>
               <SelectTrigger id="modal-plan-interval">
                 <SelectValue />
@@ -503,24 +504,19 @@ function ChangePlanModalInner({
                 <SelectItem value="annual">Annual ({annualPct}% off)</SelectItem>
               </SelectContent>
             </Select>
-          </div>
+          </AdminModalField>
         )}
-      </div>
+      </FieldGrid>
 
-      <div className="flex items-center justify-between rounded-md border border-border p-3 gap-3">
-        <div>
-          <Label htmlFor="modal-reset-quota" className="text-xs font-medium cursor-pointer">
-            Reset quota cycle
-          </Label>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            Sets quota cycle start to now (0 posts used in the new window).
-          </p>
-        </div>
-        <Switch id="modal-reset-quota" checked={resetQuota} onCheckedChange={setResetQuota} />
-      </div>
+      <ToggleRow
+        id="modal-reset-quota"
+        label="Reset quota cycle"
+        description="Sets quota cycle start to now (0 posts used in the new window)."
+        checked={resetQuota}
+        onCheckedChange={setResetQuota}
+      />
 
-      <div className="space-y-1.5">
-        <Label htmlFor="modal-plan-reason">Reason (required)</Label>
+      <AdminModalField label="Reason" htmlFor="modal-plan-reason" required>
         <Input
           ref={reasonInputRef}
           id="modal-plan-reason"
@@ -528,10 +524,9 @@ function ChangePlanModalInner({
           value={reason}
           onChange={(e) => setReason(e.target.value)}
         />
-      </div>
+      </AdminModalField>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="modal-plan-msg">Message to user (optional)</Label>
+      <AdminModalField label="Message to user (optional)" htmlFor="modal-plan-msg">
         <Textarea
           id="modal-plan-msg"
           rows={2}
@@ -539,14 +534,14 @@ function ChangePlanModalInner({
           value={adminMessage}
           onChange={(e) => setAdminMessage(e.target.value)}
         />
-      </div>
+      </AdminModalField>
 
-      <div className="flex items-center justify-between rounded-md border border-border p-3">
-        <Label htmlFor="modal-plan-email" className="text-xs font-medium cursor-pointer">
-          Send plan changed email notification
-        </Label>
-        <Switch id="modal-plan-email" checked={sendEmail} onCheckedChange={setSendEmail} />
-      </div>
+      <ToggleRow
+        id="modal-plan-email"
+        label="Send plan changed email notification"
+        checked={sendEmail}
+        onCheckedChange={setSendEmail}
+      />
     </StandardDialog>
   );
 }
@@ -647,8 +642,7 @@ function SetEndDateModalInner({
         </>
       }
     >
-      <div className="space-y-1.5">
-        <Label htmlFor="modal-end-date">End date (UTC)</Label>
+      <AdminModalField label="End date (UTC)" htmlFor="modal-end-date" required>
         <Input
           ref={endDateRef}
           id="modal-end-date"
@@ -656,24 +650,23 @@ function SetEndDateModalInner({
           value={dateValue}
           onChange={(e) => setDateValue(e.target.value)}
         />
-      </div>
+      </AdminModalField>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="modal-end-reason">Reason (min 5 characters)</Label>
+      <AdminModalField label="Reason (min 5 characters)" htmlFor="modal-end-reason" required>
         <Input
           id="modal-end-reason"
           placeholder="e.g. Extended 14 days for onboarding delay"
           value={reason}
           onChange={(e) => setReason(e.target.value)}
         />
-      </div>
+      </AdminModalField>
 
-      <div className="flex items-center justify-between rounded-md border border-border p-3 gap-3">
-        <Label htmlFor="modal-end-force" className="text-xs font-medium cursor-pointer">
-          Allow setting a date in the past (force)
-        </Label>
-        <Switch id="modal-end-force" checked={force} onCheckedChange={setForce} />
-      </div>
+      <ToggleRow
+        id="modal-end-force"
+        label="Allow setting a date in the past (force)"
+        checked={force}
+        onCheckedChange={setForce}
+      />
     </StandardDialog>
   );
 }

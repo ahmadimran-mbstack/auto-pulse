@@ -4,31 +4,23 @@ import * as React from "react";
 import { AlertTriangle, Info, Loader2, ShieldAlert, type LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
+  AdminModalBody,
+  AdminModalContent,
+  AdminModalFooter,
+  AdminModalHeader,
+  InfoBox,
+  type AdminModalSize,
+} from "@/components/admin/modal-parts";
 
 type DialogTone = "default" | "info" | "warning" | "danger";
 
-const ICON_TONE_CLASSES: Record<DialogTone, string> = {
-  default: "bg-secondary text-foreground",
-  info: "bg-sky-500/10 text-sky-700 dark:text-sky-300",
-  warning: "bg-amber-500/10 text-amber-800 dark:text-amber-300",
-  danger: "bg-red-500/10 text-red-700 dark:text-red-300",
-};
-
-const CALLOUT_CLASSES: Record<"warning" | "danger" | "info", string> = {
-  warning:
-    "border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200",
-  danger:
-    "border-red-500/30 bg-red-500/10 text-red-900 dark:text-red-200",
-  info:
-    "border-sky-500/30 bg-sky-500/10 text-sky-900 dark:text-sky-200",
+const MAX_WIDTH_TO_SIZE: Record<string, AdminModalSize> = {
+  "sm:max-w-md": "sm",
+  "sm:max-w-lg": "md",
+  "sm:max-w-2xl": "lg",
+  "sm:max-w-3xl": "xl",
 };
 
 export function StandardDialog({
@@ -39,6 +31,7 @@ export function StandardDialog({
   icon: Icon,
   tone = "default",
   maxWidth = "sm:max-w-md",
+  size,
   contentClassName,
   bodyClassName,
   footerClassName,
@@ -53,6 +46,7 @@ export function StandardDialog({
   icon?: LucideIcon;
   tone?: DialogTone;
   maxWidth?: string;
+  size?: AdminModalSize;
   contentClassName?: string;
   bodyClassName?: string;
   footerClassName?: string;
@@ -62,15 +56,13 @@ export function StandardDialog({
 }) {
   const DisplayIcon =
     Icon || (tone === "danger" ? ShieldAlert : tone === "warning" ? AlertTriangle : Info);
+  const resolvedSize = size ?? MAX_WIDTH_TO_SIZE[maxWidth] ?? "md";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className={cn(
-          "flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-1rem)] flex-col overflow-hidden p-0",
-          maxWidth,
-          contentClassName
-        )}
+      <AdminModalContent
+        size={resolvedSize}
+        className={contentClassName}
         onOpenAutoFocus={(event) => {
           if (!initialFocusRef?.current) return;
           event.preventDefault();
@@ -89,49 +81,19 @@ export function StandardDialog({
           });
         }}
       >
-        <DialogHeader className="shrink-0 border-b border-border px-6 pt-5 pb-4">
-          <div className="flex items-start gap-3">
-            <div
-              className={cn(
-                "flex size-9 shrink-0 items-center justify-center rounded-lg mt-0.5",
-                ICON_TONE_CLASSES[tone]
-              )}
-            >
-              <DisplayIcon className="size-4" strokeWidth={1.75} aria-hidden="true" />
-            </div>
-            <div className="space-y-1 min-w-0 text-left">
-              <DialogTitle className="text-base font-semibold leading-snug">{title}</DialogTitle>
-              {description && (
-                <DialogDescription className="text-xs leading-relaxed">
-                  {description}
-                </DialogDescription>
-              )}
-            </div>
-          </div>
-        </DialogHeader>
+        <AdminModalHeader
+          title={title}
+          description={description}
+          icon={DisplayIcon}
+          tone={tone}
+        />
 
-        <div
-          className={cn(
-            "min-h-0 flex-1 overflow-y-auto px-6 py-4 text-sm [&_input]:h-10 [&_input]:w-full [&_input]:text-sm [&_textarea]:w-full [&_textarea]:resize-none [&_label]:text-sm [&_label]:font-medium [&_label]:whitespace-nowrap **:data-[slot=select-trigger]:h-10 **:data-[slot=select-trigger]:w-full",
-            bodyClassName
-          )}
-        >
-          {children}
-        </div>
+        <AdminModalBody className={bodyClassName}>{children}</AdminModalBody>
 
         {footer && (
-          <div
-            className={cn(
-              "shrink-0 border-t border-border bg-muted/20 px-6 py-4",
-              footerClassName
-            )}
-          >
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end *:w-full sm:*:w-auto">
-              {footer}
-            </div>
-          </div>
+          <AdminModalFooter className={footerClassName}>{footer}</AdminModalFooter>
         )}
-      </DialogContent>
+      </AdminModalContent>
     </Dialog>
   );
 }
@@ -146,10 +108,9 @@ export function DialogCallout({
   children: React.ReactNode;
 }) {
   return (
-    <div className={cn("rounded-md border px-3.5 py-2.5 text-xs space-y-1", CALLOUT_CLASSES[tone])}>
-      <p className="font-semibold">{title}</p>
-      <div className="leading-relaxed opacity-95">{children}</div>
-    </div>
+    <InfoBox tone={tone} title={title}>
+      {children}
+    </InfoBox>
   );
 }
 
