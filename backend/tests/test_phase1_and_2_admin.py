@@ -128,7 +128,7 @@ def test_email_logs_sent_failed_and_idempotency(monkeypatch):
     idem = f"idem-{uuid.uuid4()}"
     try:
         with SessionLocal() as db:
-            with patch.object(notifications, "send_smtp_message", return_value="<id-1@mbstack.net>") as mock_send:
+            with patch("app.services.email.send_smtp_message", return_value="<id-1@mbstack.net>") as mock_send:
                 r1 = notifications.send_user_notification(
                     user_id=uid,
                     to_email="u@example.com",
@@ -137,8 +137,24 @@ def test_email_logs_sent_failed_and_idempotency(monkeypatch):
                     idempotency_key=idem,
                     db=db,
                 )
-                assert r1["status"] == "sent"
-                assert r1["provider_message_id"] == "<id-1@mbstack.net>"
+                assert r1["status"] == "queued"
+                # Duplicate enqueue while queued does not create a second row
+                r_dup = notifications.send_user_notification(
+                    user_id=uid,
+                    to_email="u@example.com",
+                    notification_type="reactivated",
+                    payload={"display_name": "U"},
+                    idempotency_key=idem,
+                    db=db,
+                )
+                assert r_dup["status"] == "queued"
+                assert r_dup["id"] == r1["id"]
+
+                row1 = db.query(EmailLog).filter(EmailLog.id == uuid.UUID(r1["id"])).first()
+                delivered1 = notifications.deliver_email_log(db, row1)
+                assert delivered1.status == "sent"
+                assert delivered1.provider_message_id == "<id-1@mbstack.net>"
+
                 r2 = notifications.send_user_notification(
                     user_id=uid,
                     to_email="u@example.com",
@@ -150,7 +166,7 @@ def test_email_logs_sent_failed_and_idempotency(monkeypatch):
                 assert r2["status"] == "skipped"
                 assert mock_send.call_count == 1
 
-            with patch.object(notifications, "send_smtp_message", side_effect=RuntimeError("550 Rejected")):
+            with patch("app.services.email.send_smtp_message", side_effect=RuntimeError("550 Rejected")):
                 r3 = notifications.send_user_notification(
                     user_id=uid,
                     to_email="u@example.com",
@@ -158,8 +174,12 @@ def test_email_logs_sent_failed_and_idempotency(monkeypatch):
                     payload={"display_name": "U"},
                     db=db,
                 )
-                assert r3["status"] == "failed"
-                assert "550 Rejected" in (r3["error"] or "")
+                assert r3["status"] == "queued"
+                row3 = db.query(EmailLog).filter(EmailLog.id == uuid.UUID(r3["id"])).first()
+                delivered3 = notifications.deliver_email_log(db, row3)
+                assert delivered3.status == "queued"  # retryable until max_attempts
+                assert "550 Rejected" in (delivered3.error or "")
+                assert delivered3.next_attempt_at is not None
     finally:
         with SessionLocal() as db:
             db.query(EmailLog).filter(EmailLog.user_id == uid).delete(synchronize_session=False)
@@ -299,22 +319,29 @@ def test_phase2_users_status_workers_delete_and_resend(seed_admin_and_user, ed25
     )
     assert prot_res.status_code in (400, 403)
 
-    # 4. Suspend user (simulate email failure on first try to test failed email_status + Resend)
-    with patch.object(notifications, "send_smtp_message", side_effect=RuntimeError("SMTP timeout")):
-        susp_res = client.patch(
-            f"/api/admin/users/{user_id}/status",
-            headers={"Authorization": f"Bearer {admin_token}"},
-            json={
-                "status": "suspended",
-                "expected_status": "active",
-                "reason": "Manual abuse check",
-                "send_email": True,
-                "admin_message": "Contact support.",
-            },
-        )
+    # 4. Suspend user (queue email, then simulate permanent failure to test failed email_status + Resend)
+    susp_res = client.patch(
+        f"/api/admin/users/{user_id}/status",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={
+            "status": "suspended",
+            "expected_status": "active",
+            "reason": "Manual abuse check",
+            "send_email": True,
+            "admin_message": "Contact support.",
+        },
+    )
     assert susp_res.status_code == 200
     assert susp_res.json()["account_status"] == "suspended"
-    assert susp_res.json()["email_status"] == "failed"
+    assert susp_res.json()["email_status"] == "queued"
+
+    with SessionLocal() as db:
+        queued_log = db.query(EmailLog).filter(EmailLog.user_id == user_id, EmailLog.status == "queued").first()
+        assert queued_log is not None
+        from app.services.email import EmailDeliveryError
+        with patch("app.services.email.send_smtp_message", side_effect=EmailDeliveryError("550 Invalid", retryable=False)):
+            notifications.deliver_email_log(db, queued_log)
+        assert queued_log.status == "failed"
 
     # 5. Concurrent expected_status mismatch returns 409
     conflict_res = client.patch(
@@ -335,26 +362,31 @@ def test_phase2_users_status_workers_delete_and_resend(seed_admin_and_user, ed25
         with pytest.raises(HTTPException) as dec_exc:
             decide_approval(db, decision="approved", decided_via="dashboard", post_id=appr.post_id, user_id=user_id)
         assert dec_exc.value.status_code == 403
-        assert dec_exc.value.detail["code"] == "ACCOUNT_SUSPENDED"
+        assert dec_exc.value.detail["code"] == "account_suspended"
 
     me_blocked = client.get("/me", headers={"Authorization": f"Bearer {user_token}"})
     assert me_blocked.status_code == 403
-    assert me_blocked.json()["error"]["code"] == "ACCOUNT_SUSPENDED"
+    assert me_blocked.json()["error"]["code"] == "account_suspended"
 
-    # 7. Resend failed email log
+    # 7. Resend failed email log (re-queues and then delivers via outbox)
     with SessionLocal() as db:
         failed_log = db.query(EmailLog).filter(EmailLog.user_id == user_id, EmailLog.status == "failed").first()
         assert failed_log is not None
         log_id = str(failed_log.id)
 
-    with patch("app.services.admin_users.send_smtp_message", return_value="<resend-1@mbstack.net>"):
-        resend_res = client.post(
-            f"/api/admin/users/{user_id}/notifications/{log_id}/resend",
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
+    resend_res = client.post(
+        f"/api/admin/users/{user_id}/notifications/{log_id}/resend",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
     assert resend_res.status_code == 200
-    assert resend_res.json()["status"] == "sent"
-    assert resend_res.json()["attempts"] == 2
+    assert resend_res.json()["status"] == "queued"
+
+    with SessionLocal() as db:
+        requeued_log = db.query(EmailLog).filter(EmailLog.id == uuid.UUID(log_id)).first()
+        with patch("app.services.email.send_smtp_message", return_value="<resend-1@mbstack.net>"):
+            notifications.deliver_email_log(db, requeued_log)
+        assert requeued_log.status == "sent"
+        assert requeued_log.attempts == 2
 
     # 8. Delete user: confirm email mismatch fails, exact match succeeds, payments/email_logs/audit_logs preserved
     bad_del = client.request(

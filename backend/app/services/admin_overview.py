@@ -100,6 +100,37 @@ def _apply_per_admin_alerts(
     kpis["pending_payments_alert_usd"] = (
         round(int(pending_alert_row.usd_cents or 0) / 100.0, 2) if pending_alert_row else 0.0
     )
+
+    # 24h email delivery metrics (median send time & failure rate)
+    email_stats = db.execute(
+        text(
+            """
+            SELECT
+                COUNT(*) FILTER (WHERE status = 'sent')::int AS sent_24h,
+                COUNT(*) FILTER (WHERE status = 'failed')::int AS failed_24h,
+                COUNT(*) FILTER (WHERE status IN ('queued', 'sending'))::int AS queued_now,
+                PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY total_duration_ms)
+                    FILTER (WHERE status = 'sent' AND total_duration_ms IS NOT NULL) AS median_send_ms
+            FROM email_logs
+            WHERE created_at >= now() - interval '24 hours'
+            """
+        )
+    ).fetchone()
+    sent_24h = int(email_stats.sent_24h or 0) if email_stats else 0
+    failed_24h = int(email_stats.failed_24h or 0) if email_stats else 0
+    finished_24h = sent_24h + failed_24h
+    kpis["email_median_send_ms_24h"] = (
+        int(round(float(email_stats.median_send_ms)))
+        if (email_stats and email_stats.median_send_ms is not None)
+        else None
+    )
+    kpis["email_failure_rate_24h"] = (
+        round((failed_24h / finished_24h) * 100.0, 1) if finished_24h > 0 else 0.0
+    )
+    kpis["email_sent_24h"] = sent_24h
+    kpis["email_failed_24h"] = failed_24h
+    kpis["email_queued_now"] = int(email_stats.queued_now or 0) if email_stats else 0
+
     payload["kpis"] = kpis
     return payload
 

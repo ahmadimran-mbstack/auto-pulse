@@ -349,10 +349,10 @@ def test_4_5_6_suspended_user_token_approvals_slack_and_publish_claim(phase6_env
     )
     assert s_res.status_code == 200
 
-    # Test 4: old token rejected with ACCOUNT_SUSPENDED
+    # Test 4: old token rejected with account_suspended
     me_res = client.get("/me", headers={"Authorization": f"Bearer {user_token}"})
     assert me_res.status_code == 403
-    assert me_res.json()["error"]["code"] == "ACCOUNT_SUSPENDED"
+    assert me_res.json()["error"]["code"] == "account_suspended"
 
     # Test 5a: email approval link does nothing
     link_res = client.post(
@@ -360,7 +360,7 @@ def test_4_5_6_suspended_user_token_approvals_slack_and_publish_claim(phase6_env
         json={"decision": "approved"},
     )
     assert link_res.status_code == 403
-    assert link_res.json()["error"]["code"] == "ACCOUNT_SUSPENDED"
+    assert link_res.json()["error"]["code"] == "account_suspended"
 
     # Test 5b: Slack button does nothing
     with SessionLocal() as db:
@@ -376,7 +376,7 @@ def test_4_5_6_suspended_user_token_approvals_slack_and_publish_claim(phase6_env
                 db=db,
             )
         assert slack_res["status"] == "error"
-        assert slack_res["detail"] == "ACCOUNT_SUSPENDED"
+        assert slack_res["detail"] == "account_suspended"
 
     # Test 6: publish claim refuses suspended user even if a publication row is still pending
     with SessionLocal() as db:
@@ -418,7 +418,7 @@ def test_8_email_idempotency_never_sends_twice(phase6_env):
     uid = phase6_env["user_id"]
     idem = f"p6-idem-{uuid.uuid4()}"
     with SessionLocal() as db:
-        with patch.object(notifications, "send_smtp_message", return_value="<idem@mbstack.net>") as mock_smtp:
+        with patch("app.services.email.send_smtp_message", return_value="<idem@mbstack.net>") as mock_smtp:
             r1 = notifications.send_user_notification(
                 user_id=uid,
                 to_email=phase6_env["user_email"],
@@ -427,6 +427,9 @@ def test_8_email_idempotency_never_sends_twice(phase6_env):
                 idempotency_key=idem,
                 db=db,
             )
+            assert r1["status"] == "queued"
+            row = db.query(EmailLog).filter(EmailLog.id == uuid.UUID(r1["id"])).first()
+            notifications.deliver_email_log(db, row)
             r2 = notifications.send_user_notification(
                 user_id=uid,
                 to_email=phase6_env["user_email"],
@@ -435,7 +438,7 @@ def test_8_email_idempotency_never_sends_twice(phase6_env):
                 idempotency_key=idem,
                 db=db,
             )
-            assert r1["status"] == "sent"
+            assert row.status == "sent"
             assert r2["status"] == "skipped"
             assert mock_smtp.call_count == 1
 

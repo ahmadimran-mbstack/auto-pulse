@@ -142,15 +142,14 @@ def test_phase3_payments_list_approve_reject_audit_and_emails(seed_payment_users
     assert data["items"][0]["transaction_id"] == tx1
     assert data["pending_count"] >= 2
 
-    # 2. Approve p1 (with mocked SMTP success)
-    with patch.object(notifications, "send_smtp_message", return_value="<pay-ok@mbstack.net>"):
-        app_res = client.post(
-            f"/api/admin/payments/{p1_id}/approve",
-            headers={"Authorization": f"Bearer {admin_token}"},
-        )
+    # 2. Approve p1 (queues email immediately, then delivers via outbox)
+    app_res = client.post(
+        f"/api/admin/payments/{p1_id}/approve",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
     assert app_res.status_code == 200
     assert app_res.json()["status"] == "approved"
-    assert app_res.json()["email_status"] == "sent"
+    assert app_res.json()["email_status"] == "queued"
 
     # Concurrent second approve -> 409
     app_again = client.post(
@@ -159,24 +158,35 @@ def test_phase3_payments_list_approve_reject_audit_and_emails(seed_payment_users
     )
     assert app_again.status_code == 409
 
-    # 3. Reject p2 when SMTP fails -> rejection still succeeds with email_status='failed'
-    with patch.object(notifications, "send_smtp_message", side_effect=RuntimeError("SMTP refused")):
-        rej_res = client.post(
-            f"/api/admin/payments/{p2_id}/reject",
-            headers={"Authorization": f"Bearer {admin_token}"},
-            json={"reason": "Transaction ID not found in JazzCash"},
-        )
+    # 3. Reject p2 -> rejection still succeeds with email_status='queued', even if SMTP fails later
+    rej_res = client.post(
+        f"/api/admin/payments/{p2_id}/reject",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"reason": "Transaction ID not found in JazzCash"},
+    )
     assert rej_res.status_code == 200
     assert rej_res.json()["status"] == "rejected"
-    assert rej_res.json()["email_status"] == "failed"
-    assert "SMTP refused" in (rej_res.json()["email_error"] or "")
+    assert rej_res.json()["email_status"] == "queued"
 
-    # 4. Verify audit logs and email_logs with idempotency keys
+    # 4. Verify audit logs and deliver queued emails via outbox (p1 succeeds, p2 permanent fail)
+    from app.models.admin import EmailLog
+    from app.services.email import EmailDeliveryError
     with SessionLocal() as db:
         a1 = db.query(AdminAuditLog).filter(AdminAuditLog.target_id == p1_id, AdminAuditLog.action == "payment.approved").first()
         a2 = db.query(AdminAuditLog).filter(AdminAuditLog.target_id == p2_id, AdminAuditLog.action == "payment.rejected").first()
-        assert a1 is not None and a1.email_status == "sent"
-        assert a2 is not None and a2.email_status == "failed"
+        assert a1 is not None and a1.email_status == "queued"
+        assert a2 is not None and a2.email_status == "queued"
+
+        e1 = db.query(EmailLog).filter(EmailLog.idempotency_key == f"payment_approved:{p1_id}").first()
+        e2 = db.query(EmailLog).filter(EmailLog.idempotency_key == f"payment_rejected:{p2_id}").first()
+        assert e1 is not None and e2 is not None
+        with patch("app.services.email.send_smtp_message", return_value="<pay-ok@mbstack.net>"):
+            notifications.deliver_email_log(db, e1)
+        assert e1.status == "sent"
+        with patch("app.services.email.send_smtp_message", side_effect=EmailDeliveryError("SMTP refused", retryable=False)):
+            notifications.deliver_email_log(db, e2)
+        assert e2.status == "failed"
+        assert "SMTP refused" in (e2.error or "")
 
         e1 = db.query(EmailLog).filter(EmailLog.idempotency_key == f"payment_approved:{p1_id}").first()
         e2 = db.query(EmailLog).filter(EmailLog.idempotency_key == f"payment_rejected:{p2_id}").first()

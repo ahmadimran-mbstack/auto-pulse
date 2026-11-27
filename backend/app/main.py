@@ -384,7 +384,30 @@ def start_automated_scheduler():
         logger.info("Skipping background scheduler in test environment")
         return
     asyncio.create_task(_background_scheduler_loop())
+    asyncio.create_task(_background_email_outbox_loop())
     from app.jobs.customization_worker import start_customization_worker
     start_customization_worker()
+
+
+async def _background_email_outbox_loop():
+    """Poll the email_logs outbox every 10s for retries and stuck-row recovery."""
+    logger.info("AutoPulse email outbox worker loop started (interval: 10s)")
+    await asyncio.sleep(3)
+    while True:
+        try:
+            await asyncio.to_thread(_run_email_outbox_cycle)
+        except asyncio.CancelledError:
+            logger.info("AutoPulse email outbox worker loop cancelled")
+            break
+        except Exception as exc:
+            logger.error(f"Error in email outbox cycle: {exc}", exc_info=True)
+        await asyncio.sleep(10)
+
+
+def _run_email_outbox_cycle():
+    from app.db.session import SessionLocal
+    from app.services.notifications import process_email_outbox
+    with SessionLocal() as db:
+        process_email_outbox(db, max_batch=25)
 
 

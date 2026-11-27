@@ -125,7 +125,11 @@ class Settings(BaseSettings):
         return None
 
     # Day 5: Email delivery settings
-    EMAIL_API_KEY: Optional[str] = None
+    EMAIL_API_KEY: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("EMAIL_API_KEY", "RESEND_API_KEY"),
+    )
+    EMAIL_PROVIDER: str = "auto"  # auto | resend | smtp
     EMAIL_FROM: str = "AutoPulse <noreply@autopulse.app>"
     APP_BASE_URL: str = "https://autopulse-three.vercel.app"
     OPS_ALERT_EMAIL: Optional[str] = None

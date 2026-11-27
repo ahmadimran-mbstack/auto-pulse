@@ -121,6 +121,32 @@ export default function AdminOverviewPage() {
           <div className="flex flex-wrap items-center gap-2">
             {data && (
               <div className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-muted-foreground">
+                {k && (
+                  <>
+                    <span
+                      className="hidden sm:inline-flex items-center gap-1 text-[11px]"
+                      title="24h email delivery median send time and failure rate"
+                    >
+                      Email 24h:{" "}
+                      <span className="font-medium text-foreground tabular-nums">
+                        {k.email_median_send_ms_24h != null
+                          ? `${(k.email_median_send_ms_24h / 1000).toFixed(1)}s`
+                          : "—"}
+                      </span>
+                      <span>·</span>
+                      <span
+                        className={
+                          (k.email_failure_rate_24h ?? 0) > 5
+                            ? "font-medium text-red-600 dark:text-red-400 tabular-nums"
+                            : "font-medium text-foreground tabular-nums"
+                        }
+                      >
+                        {(k.email_failure_rate_24h ?? 0).toFixed(1)}% failed
+                      </span>
+                    </span>
+                    <span className="hidden sm:inline text-border">|</span>
+                  </>
+                )}
                 <Badge variant="outline" className="h-5 text-[10px] font-medium">
                   {data.cached ? "Cached 60s" : "Live"}
                 </Badge>

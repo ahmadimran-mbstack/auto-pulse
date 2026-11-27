@@ -127,26 +127,25 @@ def test_phase4_plan_change_end_date_subscribers_usage_and_plans(seed_phase4_use
     assert internal_res.status_code == 403
 
     # 2. Change user from trial (no subscription row yet) -> starter with reset_quota_cycle=True
-    with patch.object(notifications, "send_smtp_message", return_value="<plan-1@mbstack.net>"):
-        plan_res = client.patch(
-            f"/api/admin/users/{uid}/plan",
-            headers={"Authorization": f"Bearer {admin_token}"},
-            json={
-                "plan_id": "starter",
-                "billing_interval": "monthly",
-                "expected_plan_id": "trial",
-                "reset_quota_cycle": True,
-                "reason": "Manual upgrade to Starter",
-                "send_email": True,
-                "admin_message": "Welcome to Starter!",
-            },
-        )
+    plan_res = client.patch(
+        f"/api/admin/users/{uid}/plan",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={
+            "plan_id": "starter",
+            "billing_interval": "monthly",
+            "expected_plan_id": "trial",
+            "reset_quota_cycle": True,
+            "reason": "Manual upgrade to Starter",
+            "send_email": True,
+            "admin_message": "Welcome to Starter!",
+        },
+    )
     assert plan_res.status_code == 200
     body = plan_res.json()
     assert body["plan_id"] == "starter"
     assert body["current_period_start"] is not None
     assert body["current_period_end"] is None  # Plan change does not alter end date
-    assert body["email_status"] == "sent"
+    assert body["email_status"] == "queued"
 
     # 3. Stale expected_plan_id -> 409 Conflict
     stale_res = client.patch(

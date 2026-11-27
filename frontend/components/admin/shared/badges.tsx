@@ -72,6 +72,8 @@ const CENTRAL_STATUS_MAP: Record<string, { tone: StatusTone; label?: string }> =
   under_review: { tone: "pending", label: "Under review" },
   "under review": { tone: "pending", label: "Under review" },
   queued: { tone: "pending", label: "Queued" },
+  sending: { tone: "pending", label: "Sending" },
+  unknown: { tone: "warning", label: "Unknown" },
 
   // Info
   open: { tone: "info", label: "Open" },

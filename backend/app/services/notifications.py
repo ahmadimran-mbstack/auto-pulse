@@ -1,23 +1,42 @@
-"""Transactional user notification service with idempotency and email_logs auditing."""
+"""Transactional user notification service with outbox queue, retries, idempotency, and metrics."""
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+import datetime
 from email.message import EmailMessage
 import html
 import logging
+import os
+import random
+import re
+import sys
+import time
 from typing import Any, Dict, Optional, Tuple
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models.admin import EmailLog
-from app.services.email import send_smtp_message
+from app.services.email import EmailDeliveryError, send_email_message, send_smtp_message
 
 logger = logging.getLogger(__name__)
 
 _EMAIL_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="autopulse-email")
+_BACKOFF_SECONDS = (10, 30, 120, 600, 3600)
+_EMAIL_ADDR_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _is_test_env() -> bool:
+    return bool(os.environ.get("PYTEST_CURRENT_TEST") or "pytest" in sys.modules)
+
+
+def _compute_backoff_seconds(attempt_number: int) -> float:
+    idx = max(0, min(attempt_number - 1, len(_BACKOFF_SECONDS) - 1))
+    base = float(_BACKOFF_SECONDS[idx])
+    jitter = random.uniform(0.0, min(30.0, base * 0.15))
+    return base + jitter
 
 
 def _wrap_html(subject: str, body_html: str) -> str:
@@ -370,6 +389,226 @@ def render_notification_template(
     raise ValueError(f"Unsupported notification type: {notification_type}")
 
 
+def _build_email_message(
+    to_email: str,
+    notification_type: str,
+    payload: Dict[str, Any],
+    idempotency_key: Optional[str] = None,
+) -> Tuple[str, EmailMessage]:
+    subject, plain_text, html_content = render_notification_template(notification_type, payload)
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = settings.EMAIL_FROM
+    msg["To"] = to_email
+    if idempotency_key:
+        msg["Resend-Idempotency-Key"] = idempotency_key
+        msg["Idempotency-Key"] = idempotency_key
+    msg.set_content(plain_text)
+    msg.add_alternative(html_content, subtype="html")
+    return subject, msg
+
+
+def _trigger_outbox_drain() -> None:
+    """Fire-and-forget outbox drain on the background thread pool."""
+    if _is_test_env():
+        return
+    try:
+        _EMAIL_EXECUTOR.submit(_drain_outbox_in_background)
+    except Exception as exc:
+        logger.warning(f"Failed to submit background email drain: {exc}")
+
+
+def _drain_outbox_in_background() -> None:
+    try:
+        with SessionLocal() as db:
+            process_email_outbox(db, max_batch=25)
+    except Exception as exc:
+        logger.error(f"Background email outbox drain failed: {exc}", exc_info=True)
+
+
+def reap_stuck_email_logs(db: Session, stuck_minutes: int = 5) -> int:
+    """Move rows stuck in 'sending' for longer than stuck_minutes back to 'queued'."""
+    res = db.execute(
+        text(
+            """
+            UPDATE email_logs
+            SET status = 'queued',
+                locked_at = NULL,
+                next_attempt_at = now(),
+                updated_at = now(),
+                error = COALESCE(error, 'Recovered from stuck sending state (>5m)')
+            WHERE status = 'sending'
+              AND locked_at IS NOT NULL
+              AND locked_at < now() - make_interval(mins => :mins)
+            """
+        ),
+        {"mins": stuck_minutes},
+    )
+    reaped = int(res.rowcount or 0)
+    if reaped:
+        db.commit()
+        logger.warning(f"Recovered {reaped} stuck email_logs row(s) from 'sending' back to 'queued'")
+    return reaped
+
+
+def claim_next_email_log(db: Session) -> Optional[EmailLog]:
+    """Atomically claim one due 'queued' email_logs row into 'sending'."""
+    row = db.execute(
+        text(
+            """
+            UPDATE email_logs
+            SET status = 'sending',
+                locked_at = now(),
+                updated_at = now()
+            WHERE id = (
+                SELECT id
+                FROM email_logs
+                WHERE status = 'queued'
+                  AND (next_attempt_at IS NULL OR next_attempt_at <= now())
+                ORDER BY created_at ASC
+                FOR UPDATE SKIP LOCKED
+                LIMIT 1
+            )
+            RETURNING id
+            """
+        )
+    ).fetchone()
+    if not row:
+        return None
+    db.commit()
+    return db.scalars(select(EmailLog).where(EmailLog.id == row.id)).first()
+
+
+def deliver_email_log(db: Session, log_row: EmailLog) -> EmailLog:
+    """Deliver one claimed EmailLog row, recording timing, retries, and real errors."""
+    attempt_num = int(log_row.attempts or 0) + 1
+    max_attempts = int(log_row.max_attempts or 5)
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+
+    to_clean = (log_row.to_email or "").strip()
+    if not _EMAIL_ADDR_RE.match(to_clean):
+        log_row.attempts = attempt_num
+        log_row.status = "failed"
+        log_row.error = f"Invalid recipient email address: {to_clean!r}"
+        log_row.locked_at = None
+        log_row.next_attempt_at = None
+        log_row.updated_at = now_utc
+        db.commit()
+        db.refresh(log_row)
+        logger.warning(f"Email permanently failed (invalid address) id={log_row.id} to={to_clean!r}")
+        return log_row
+
+    try:
+        subject, msg = _build_email_message(
+            to_email=to_clean,
+            notification_type=log_row.type,
+            payload=log_row.payload or {},
+            idempotency_key=log_row.idempotency_key,
+        )
+        if not log_row.subject:
+            log_row.subject = subject
+
+        t0 = time.perf_counter()
+        provider_msg_id, provider_name, provider_ms = send_email_message(
+            msg,
+            attempt_number=attempt_num,
+            idempotency_key=log_row.idempotency_key,
+        )
+        if provider_ms <= 0:
+            provider_ms = int((time.perf_counter() - t0) * 1000)
+
+        sent_at = datetime.datetime.now(datetime.timezone.utc)
+        created_at = log_row.created_at or sent_at
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=datetime.timezone.utc)
+        total_ms = max(0, int((sent_at - created_at).total_seconds() * 1000))
+
+        log_row.attempts = attempt_num
+        log_row.status = "sent"
+        log_row.sent_at = sent_at
+        log_row.locked_at = None
+        log_row.next_attempt_at = None
+        log_row.error = None
+        log_row.provider = provider_name
+        log_row.provider_response_ms = provider_ms
+        log_row.total_duration_ms = total_ms
+        log_row.provider_message_id = provider_msg_id
+        log_row.updated_at = sent_at
+        db.commit()
+        db.refresh(log_row)
+        logger.info(
+            f"Email delivered id={log_row.id} type={log_row.type} to={to_clean} "
+            f"provider={provider_name} provider_ms={provider_ms} total_ms={total_ms} attempts={attempt_num}"
+        )
+    except Exception as exc:
+        err_text = str(exc).strip()[:1000] or type(exc).__name__
+        unknown_outcome = isinstance(exc, EmailDeliveryError) and exc.unknown_outcome
+        retryable = exc.retryable if isinstance(exc, EmailDeliveryError) else True
+        provider_name = exc.provider if isinstance(exc, EmailDeliveryError) else "smtp"
+
+        log_row.attempts = attempt_num
+        log_row.provider = provider_name
+        log_row.locked_at = None
+        log_row.error = err_text
+        log_row.updated_at = now_utc
+
+        if unknown_outcome:
+            log_row.status = "unknown"
+            log_row.next_attempt_at = None
+            logger.error(
+                f"Email outcome unknown id={log_row.id} type={log_row.type} to={to_clean} "
+                f"provider={provider_name} attempts={attempt_num}: {err_text}"
+            )
+        elif retryable and attempt_num < max_attempts:
+            delay = _compute_backoff_seconds(attempt_num)
+            log_row.status = "queued"
+            log_row.next_attempt_at = now_utc + datetime.timedelta(seconds=delay)
+            logger.warning(
+                f"Email delivery failed (will retry in {delay:.1f}s) id={log_row.id} "
+                f"type={log_row.type} to={to_clean} provider={provider_name} "
+                f"attempt={attempt_num}/{max_attempts}: {err_text}"
+            )
+        else:
+            log_row.status = "failed"
+            log_row.next_attempt_at = None
+            logger.error(
+                f"Email delivery permanently failed id={log_row.id} type={log_row.type} to={to_clean} "
+                f"provider={provider_name} attempt={attempt_num}/{max_attempts}: {err_text}"
+            )
+
+        db.commit()
+        db.refresh(log_row)
+
+    try:
+        from app.services.admin_overview import invalidate_admin_overview_cache
+        invalidate_admin_overview_cache()
+    except Exception:
+        pass
+
+    return log_row
+
+
+def process_email_outbox(db: Session, max_batch: int = 25) -> Dict[str, int]:
+    """Recover stuck rows and process up to max_batch due queued emails."""
+    reaped = reap_stuck_email_logs(db)
+    counts = {"reaped": reaped, "processed": 0, "sent": 0, "requeued": 0, "failed": 0, "unknown": 0}
+    for _ in range(max_batch):
+        row = claim_next_email_log(db)
+        if row is None:
+            break
+        result = deliver_email_log(db, row)
+        counts["processed"] += 1
+        if result.status == "sent":
+            counts["sent"] += 1
+        elif result.status == "queued":
+            counts["requeued"] += 1
+        elif result.status == "failed":
+            counts["failed"] += 1
+        elif result.status == "unknown":
+            counts["unknown"] += 1
+    return counts
+
+
 def send_user_notification(
     user_id: Optional[str],
     to_email: str,
@@ -378,7 +617,7 @@ def send_user_notification(
     idempotency_key: Optional[str] = None,
     db: Optional[Session] = None,
 ) -> Dict[str, Any]:
-    """Send a transactional email through SMTP and always log the outcome in email_logs."""
+    """Queue a transactional email in email_logs (outbox) and trigger non-blocking delivery."""
     own_db = False
     if db is None:
         db = SessionLocal()
@@ -389,44 +628,34 @@ def send_user_notification(
             existing = db.scalars(
                 select(EmailLog).where(EmailLog.idempotency_key == idempotency_key)
             ).first()
-            if existing and existing.status == "sent":
-                return {
-                    "id": str(existing.id),
-                    "status": "skipped",
-                    "provider_message_id": existing.provider_message_id,
-                    "error": None,
-                }
+            if existing:
+                if existing.status == "sent":
+                    return {
+                        "id": str(existing.id),
+                        "status": "skipped",
+                        "provider_message_id": existing.provider_message_id,
+                        "error": None,
+                    }
+                if existing.status in ("queued", "sending"):
+                    return {
+                        "id": str(existing.id),
+                        "status": existing.status,
+                        "provider_message_id": existing.provider_message_id,
+                        "error": existing.error,
+                    }
 
-        subject, plain_text, html_content = render_notification_template(notification_type, payload)
-
-        msg = EmailMessage()
-        msg["Subject"] = subject
-        msg["From"] = settings.EMAIL_FROM
-        msg["To"] = to_email
-        if idempotency_key:
-            msg["Idempotency-Key"] = idempotency_key
-        msg.set_content(plain_text)
-        msg.add_alternative(html_content, subtype="html")
-
-        status_val = "failed"
-        provider_message_id: Optional[str] = None
-        error_text: Optional[str] = None
-
-        try:
-            provider_message_id = send_smtp_message(msg)
-            status_val = "sent"
-        except Exception as exc:
-            error_text = str(exc)[:500]
-            logger.warning(f"Failed to send {notification_type} email to {to_email}: {error_text}")
+        subject, _, _ = render_notification_template(notification_type, payload)
 
         log_row = EmailLog(
             user_id=user_id,
             to_email=to_email,
             type=notification_type,
-            status=status_val,
-            error=error_text,
-            attempts=1,
-            provider_message_id=provider_message_id,
+            subject=subject,
+            status="queued",
+            error=None,
+            attempts=0,
+            max_attempts=5,
+            next_attempt_at=datetime.datetime.now(datetime.timezone.utc),
             idempotency_key=idempotency_key,
             payload=payload,
         )
@@ -434,11 +663,13 @@ def send_user_notification(
         db.commit()
         db.refresh(log_row)
 
+        _trigger_outbox_drain()
+
         return {
             "id": str(log_row.id),
-            "status": status_val,
-            "provider_message_id": provider_message_id,
-            "error": error_text,
+            "status": "queued",
+            "provider_message_id": None,
+            "error": None,
         }
     finally:
         if own_db:
@@ -451,9 +682,9 @@ async def send_user_notification_async(
     notification_type: str,
     payload: Dict[str, Any],
     idempotency_key: Optional[str] = None,
-    timeout_seconds: float = 25.0,
+    timeout_seconds: float = 5.0,
 ) -> Dict[str, Any]:
-    """Non-blocking wrapper around send_user_notification with a timeout."""
+    """Non-blocking wrapper around send_user_notification (queues in DB and returns immediately)."""
     loop = asyncio.get_running_loop()
     return await asyncio.wait_for(
         loop.run_in_executor(

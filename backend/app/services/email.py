@@ -1,24 +1,178 @@
 import html
 import logging
 import smtplib
+import socket
+import threading
+import time
 from email.message import EmailMessage
 from email.utils import make_msgid
-from typing import Optional
+from typing import Optional, Tuple
+
+import httpx
+
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+EMAIL_CONNECT_TIMEOUT_SECONDS = 5.0
+EMAIL_READ_TIMEOUT_SECONDS = 15.0
 
-import json
-from pathlib import Path
-import subprocess
+_http_client_lock = threading.Lock()
+_http_client: Optional[httpx.Client] = None
 
-# Low-level helper to dispatch an email via nodemailer SMTP with smtplib fallback.
-# Raises RuntimeError if SMTP is unconfigured or the server rejects/fails the message.
-# Returns the SMTP Message-ID when accepted by the server.
+
+class EmailDeliveryError(RuntimeError):
+    """Structured email delivery error for retry and status classification."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        retryable: bool = True,
+        unknown_outcome: bool = False,
+        status_code: Optional[int] = None,
+        provider: str = "smtp",
+    ) -> None:
+        super().__init__(message)
+        self.retryable = retryable
+        self.unknown_outcome = unknown_outcome
+        self.status_code = status_code
+        self.provider = provider
+
+
+def _get_http_client() -> httpx.Client:
+    """Return a shared persistent httpx.Client with connection pooling and sane timeouts."""
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        with _http_client_lock:
+            if _http_client is None or _http_client.is_closed:
+                _http_client = httpx.Client(
+                    timeout=httpx.Timeout(
+                        EMAIL_READ_TIMEOUT_SECONDS,
+                        connect=EMAIL_CONNECT_TIMEOUT_SECONDS,
+                    ),
+                    limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+                )
+    return _http_client
+
+
+def _extract_bodies(msg: EmailMessage) -> Tuple[str, str]:
+    body_text = ""
+    body_html = ""
+    if msg.is_multipart():
+        for part in msg.walk():
+            content_type = part.get_content_type()
+            payload = part.get_payload(decode=True)
+            if payload:
+                decoded = payload.decode(part.get_content_charset() or "utf-8", errors="replace")
+                if content_type == "text/plain" and not body_text:
+                    body_text = decoded
+                elif content_type == "text/html" and not body_html:
+                    body_html = decoded
+    else:
+        content = msg.get_content()
+        if msg.get_content_type() == "text/html":
+            body_html = str(content)
+        else:
+            body_text = str(content)
+    return body_text, body_html
+
+
+def _ensure_message_id(msg: EmailMessage) -> str:
+    if "Message-ID" not in msg:
+        domain = None
+        if settings.EMAIL_FROM and "@" in settings.EMAIL_FROM:
+            domain = settings.EMAIL_FROM.split("@", 1)[1].rstrip("> ").strip()
+        msg["Message-ID"] = make_msgid(domain=domain or None)
+    return str(msg["Message-ID"])
+
+
+def send_resend_message(
+    msg: EmailMessage,
+    idempotency_key: Optional[str] = None,
+) -> Tuple[str, int]:
+    """Send an email via Resend HTTP API using a persistent pooled httpx.Client."""
+    api_key = (settings.EMAIL_API_KEY or "").strip()
+    if not api_key:
+        raise EmailDeliveryError(
+            "EMAIL_API_KEY is not configured",
+            retryable=False,
+            provider="resend",
+        )
+
+    body_text, body_html = _extract_bodies(msg)
+    payload = {
+        "from": str(msg["From"]),
+        "to": [str(msg["To"])],
+        "subject": str(msg["Subject"] or ""),
+    }
+    if body_html:
+        payload["html"] = body_html
+    if body_text:
+        payload["text"] = body_text
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    idem = idempotency_key or msg.get("Idempotency-Key") or msg.get("Resend-Idempotency-Key")
+    if idem:
+        headers["Idempotency-Key"] = str(idem)
+
+    client = _get_http_client()
+    t0 = time.perf_counter()
+    try:
+        resp = client.post("https://api.resend.com/emails", json=payload, headers=headers)
+    except httpx.ReadTimeout as exc:
+        elapsed_ms = int((time.perf_counter() - t0) * 1000)
+        raise EmailDeliveryError(
+            f"Resend API read timed out after {elapsed_ms}ms (delivery outcome unknown): {exc}",
+            retryable=False,
+            unknown_outcome=True,
+            provider="resend",
+        ) from exc
+    except (httpx.ConnectTimeout, httpx.ConnectError, httpx.PoolTimeout) as exc:
+        raise EmailDeliveryError(
+            f"Resend API connection error: {exc}",
+            retryable=True,
+            unknown_outcome=False,
+            provider="resend",
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise EmailDeliveryError(
+            f"Resend API HTTP error: {exc}",
+            retryable=True,
+            unknown_outcome=False,
+            provider="resend",
+        ) from exc
+
+    elapsed_ms = int((time.perf_counter() - t0) * 1000)
+    if 200 <= resp.status_code < 300:
+        data = resp.json() if resp.content else {}
+        msg_id = str(data.get("id") or _ensure_message_id(msg))
+        logger.info(f"Email sent via Resend HTTP API in {elapsed_ms}ms (message_id={msg_id})")
+        return msg_id, elapsed_ms
+
+    detail = resp.text[:400] if resp.text else f"HTTP {resp.status_code}"
+    if resp.status_code == 429 or resp.status_code >= 500:
+        raise EmailDeliveryError(
+            f"Resend API HTTP {resp.status_code}: {detail}",
+            retryable=True,
+            status_code=resp.status_code,
+            provider="resend",
+        )
+    raise EmailDeliveryError(
+        f"Resend API rejected message (HTTP {resp.status_code}): {detail}",
+        retryable=False,
+        status_code=resp.status_code,
+        provider="resend",
+    )
+
+
 def send_smtp_message(msg: EmailMessage) -> str:
+    """Send an email directly via Python smtplib using implicit SSL on 465 or STARTTLS on 587."""
     host = settings.SMTP_HOST
-    port = settings.SMTP_PORT
+    port = int(settings.SMTP_PORT or 587)
     user = settings.SMTP_USER
     password = settings.SMTP_PASSWORD
     use_tls = settings.SMTP_USE_TLS
@@ -26,110 +180,147 @@ def send_smtp_message(msg: EmailMessage) -> str:
     if not host:
         raise RuntimeError("SMTP_HOST is not configured")
 
-    if "Message-ID" not in msg:
-        domain = None
-        if settings.EMAIL_FROM and "@" in settings.EMAIL_FROM:
-            domain = settings.EMAIL_FROM.split("@", 1)[1].rstrip("> ").strip()
-        msg["Message-ID"] = make_msgid(domain=domain or None)
-    message_id = str(msg["Message-ID"])
-
-    # First attempt dispatch via nodemailer SMTP helper script
-    script_path = Path(__file__).resolve().parent.parent.parent / "scripts" / "send_mail.js"
-    if script_path.exists():
-        try:
-            body_text = ""
-            body_html = ""
-            if msg.is_multipart():
-                for part in msg.walk():
-                    content_type = part.get_content_type()
-                    payload = part.get_payload(decode=True)
-                    if payload:
-                        decoded = payload.decode(part.get_content_charset() or "utf-8", errors="replace")
-                        if content_type == "text/plain":
-                            body_text = decoded
-                        elif content_type == "text/html":
-                            body_html = decoded
-            else:
-                body_text = msg.get_content()
-
-            headers = {}
-            for h in ("Resend-Idempotency-Key", "Idempotency-Key"):
-                if h in msg:
-                    headers[h] = msg[h]
-
-            payload_data = {
-                "from": msg["From"],
-                "to": msg["To"],
-                "subject": msg["Subject"],
-                "text": body_text,
-                "html": body_html,
-                "headers": headers,
-                "messageId": message_id,
-                "smtp": {
-                    "host": host,
-                    "port": port,
-                    "user": user,
-                    "pass": password,
-                    "use_tls": use_tls,
-                },
-            }
-
-            result = subprocess.run(
-                ["node", str(script_path)],
-                input=json.dumps(payload_data),
-                text=True,
-                capture_output=True,
-                check=False,
-                timeout=20,
-            )
-            if result.returncode == 0:
-                stdout = (result.stdout or "").strip()
-                try:
-                    parsed = json.loads(stdout.splitlines()[-1]) if stdout else {}
-                    if parsed.get("messageId"):
-                        message_id = str(parsed["messageId"])
-                except Exception:
-                    pass
-                logger.info(f"Email dispatched successfully via nodemailer SMTP (message_id={message_id})")
-                return message_id
-            else:
-                err_msg = (result.stderr or result.stdout or "").strip() or f"exit code {result.returncode}"
-                logger.warning(f"nodemailer SMTP helper failed ({err_msg}), falling back to smtplib")
-        except Exception as exc:
-            logger.warning(f"nodemailer SMTP helper error ({exc}), falling back to smtplib")
-
-    # Standard smtplib fallback
+    message_id = _ensure_message_id(msg)
     server = None
-    try:
-        # Connect with standard SMTP and upgrade via STARTTLS if supported
-        server = smtplib.SMTP(host, port, timeout=15)
-        server.ehlo()
-        if use_tls and server.has_extn("STARTTLS"):
-            server.starttls()
-            server.ehlo()
-    except Exception as exc:
-        logger.debug(f"Standard SMTP/STARTTLS failed, attempting direct SSL: {exc}")
-        if server:
-            try:
-                server.close()
-            except Exception:
-                pass
-        # Fallback to direct SSL for servers requiring immediate TLS handshake
-        server = smtplib.SMTP_SSL(host, port, timeout=15)
-        server.ehlo()
+    in_send_phase = False
+    t0 = time.perf_counter()
 
     try:
+        if port == 465:
+            server = smtplib.SMTP_SSL(host, port, timeout=EMAIL_CONNECT_TIMEOUT_SECONDS)
+            if server.sock:
+                server.sock.settimeout(EMAIL_READ_TIMEOUT_SECONDS)
+            server.ehlo()
+        else:
+            server = smtplib.SMTP(host, port, timeout=EMAIL_CONNECT_TIMEOUT_SECONDS)
+            if server.sock:
+                server.sock.settimeout(EMAIL_READ_TIMEOUT_SECONDS)
+            server.ehlo()
+            if use_tls and server.has_extn("STARTTLS"):
+                server.starttls()
+                server.ehlo()
+
         if user and password:
             server.login(user, password)
+
+        in_send_phase = True
         refused = server.send_message(msg)
         if refused:
-            raise RuntimeError(f"SMTP server refused recipient(s): {refused}")
+            raise EmailDeliveryError(
+                f"SMTP server refused recipient(s): {refused}",
+                retryable=False,
+                provider="smtp",
+            )
+        elapsed_ms = int((time.perf_counter() - t0) * 1000)
+        logger.info(f"Email sent via SMTP ({host}:{port}) in {elapsed_ms}ms (message_id={message_id})")
         return message_id
+    except EmailDeliveryError:
+        raise
+    except smtplib.SMTPRecipientsRefused as exc:
+        raise EmailDeliveryError(
+            f"SMTP recipients refused: {exc.recipients}",
+            retryable=False,
+            provider="smtp",
+        ) from exc
+    except smtplib.SMTPAuthenticationError as exc:
+        raise EmailDeliveryError(
+            f"SMTP authentication failed ({exc.smtp_code}): {exc.smtp_error}",
+            retryable=False,
+            status_code=exc.smtp_code,
+            provider="smtp",
+        ) from exc
+    except smtplib.SMTPResponseException as exc:
+        code = int(exc.smtp_code or 0)
+        is_transient = 400 <= code < 500
+        err_msg = exc.smtp_error.decode("utf-8", errors="replace") if isinstance(exc.smtp_error, bytes) else str(exc.smtp_error)
+        raise EmailDeliveryError(
+            f"SMTP error {code}: {err_msg}",
+            retryable=is_transient,
+            status_code=code,
+            provider="smtp",
+        ) from exc
+    except (TimeoutError, socket.timeout) as exc:
+        elapsed_ms = int((time.perf_counter() - t0) * 1000)
+        if in_send_phase:
+            raise EmailDeliveryError(
+                f"SMTP send timed out after {elapsed_ms}ms (delivery outcome unknown): {exc}",
+                retryable=False,
+                unknown_outcome=True,
+                provider="smtp",
+            ) from exc
+        raise EmailDeliveryError(
+            f"SMTP connection/handshake timed out after {elapsed_ms}ms: {exc}",
+            retryable=True,
+            unknown_outcome=False,
+            provider="smtp",
+        ) from exc
+    except (OSError, smtplib.SMTPException) as exc:
+        raise EmailDeliveryError(
+            f"SMTP transport error: {exc}",
+            retryable=True,
+            unknown_outcome=False,
+            provider="smtp",
+        ) from exc
     finally:
-        try:
-            server.quit()
-        except Exception:
-            pass
+        if server is not None:
+            try:
+                server.quit()
+            except Exception:
+                try:
+                    server.close()
+                except Exception:
+                    pass
+
+
+def get_available_providers() -> list[str]:
+    """Return ordered list of configured email providers."""
+    providers: list[str] = []
+    pref = (settings.EMAIL_PROVIDER or "auto").strip().lower()
+    has_resend = bool((settings.EMAIL_API_KEY or "").strip())
+    has_smtp = bool((settings.SMTP_HOST or "").strip())
+
+    if pref == "smtp":
+        if has_smtp:
+            providers.append("smtp")
+        if has_resend:
+            providers.append("resend")
+    else:
+        if has_resend:
+            providers.append("resend")
+        if has_smtp:
+            providers.append("smtp")
+    return providers
+
+
+def send_email_message(
+    msg: EmailMessage,
+    *,
+    attempt_number: int = 1,
+    idempotency_key: Optional[str] = None,
+) -> Tuple[str, str, int]:
+    """Send an email using the configured primary provider (with fallback after 3 failures).
+
+    Returns (provider_message_id, provider_name, provider_response_ms).
+    """
+    providers = get_available_providers()
+    if not providers:
+        raise EmailDeliveryError(
+            "No email provider is configured (neither EMAIL_API_KEY nor SMTP_HOST is set)",
+            retryable=False,
+            provider="none",
+        )
+
+    # Fallback: if primary failed 3 times in a row and a second provider is configured, use it
+    chosen = providers[1] if (attempt_number >= 4 and len(providers) > 1) else providers[0]
+
+    t0 = time.perf_counter()
+    if chosen == "resend":
+        msg_id, response_ms = send_resend_message(msg, idempotency_key=idempotency_key)
+        return msg_id, "resend", response_ms
+
+    msg_id = send_smtp_message(msg)
+    response_ms = int((time.perf_counter() - t0) * 1000)
+    return msg_id, "smtp", response_ms
 
 
 # Build and send the approval notification email
@@ -244,8 +435,8 @@ def send_approval_email(
     msg.set_content(plain_text)
     msg.add_alternative(html_content, subtype="html")
 
-    # Send message using SMTP
-    send_smtp_message(msg)
+    # Send message using configured provider (Resend HTTP API or fast SMTP)
+    send_email_message(msg, idempotency_key=idempotency_key)
 
 
 # Alert user when Slack authentication is revoked or invalid
@@ -283,7 +474,7 @@ def send_slack_disconnect_alert_email(
     msg["To"] = to_email
     msg.set_content(plain_text)
     msg.add_alternative(html_content, subtype="html")
-    send_smtp_message(msg)
+    send_email_message(msg)
 
 
 def send_reminder_email(
@@ -319,7 +510,7 @@ def send_reminder_email(
     msg["To"] = to_email
     msg.set_content(plain_text)
     msg.add_alternative(html_content, subtype="html")
-    send_smtp_message(msg)
+    send_email_message(msg)
 
 
 def send_skipped_notice_email(
@@ -349,7 +540,7 @@ def send_skipped_notice_email(
     msg["To"] = to_email
     msg.set_content(plain_text)
     msg.add_alternative(html_content, subtype="html")
-    send_smtp_message(msg)
+    send_email_message(msg)
 
 
 
@@ -382,7 +573,7 @@ def send_spend_alert_email(
     msg["To"] = to_email
     msg.set_content(plain_text)
     msg.add_alternative(html_content, subtype="html")
-    send_smtp_message(msg)
+    send_email_message(msg)
 
 
 def send_subscription_reminder_email(
@@ -428,4 +619,4 @@ def send_subscription_reminder_email(
     msg["To"] = to_email
     msg.set_content(plain_text)
     msg.add_alternative(html_content, subtype="html")
-    send_smtp_message(msg)
+    send_email_message(msg)

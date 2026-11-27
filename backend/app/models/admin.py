@@ -4,7 +4,7 @@ import datetime
 import uuid
 from typing import Any, Dict, Optional
 
-from sqlalchemy import CheckConstraint, DateTime, Index, SmallInteger, Text, UniqueConstraint, func, text
+from sqlalchemy import CheckConstraint, DateTime, Index, Integer, SmallInteger, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -68,23 +68,41 @@ class EmailLog(Base):
     user_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     to_email: Mapped[str] = mapped_column(Text, nullable=False)
     type: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(Text, nullable=False)
+    subject: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="queued")
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    attempts: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="1")
+    attempts: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="0")
+    max_attempts: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="5")
+    next_attempt_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    locked_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    sent_at: Mapped[Optional[datetime.datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    provider: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    provider_response_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    total_duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     provider_message_id: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     idempotency_key: Mapped[Optional[str]] = mapped_column(Text, nullable=True, unique=True)
     payload: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('sent', 'failed', 'skipped')",
+            "status IN ('queued', 'sending', 'sent', 'failed', 'skipped', 'unknown')",
             name="ck_email_logs_status",
         ),
         Index("ix_email_logs_user_created", "user_id", "created_at"),
         Index("ix_email_logs_status", "status"),
+        Index("ix_email_logs_outbox", "status", "next_attempt_at", "created_at"),
     )
 
 

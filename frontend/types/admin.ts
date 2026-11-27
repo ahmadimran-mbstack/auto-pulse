@@ -120,7 +120,12 @@ export interface AdminUserDetailResponse {
     status: string;
     error: string | null;
     attempts: number;
+    provider?: string | null;
     provider_message_id: string | null;
+    provider_response_ms?: number | null;
+    total_duration_ms?: number | null;
+    next_attempt_at?: string | null;
+    sent_at?: string | null;
     created_at: string | null;
   }>;
   audit_logs: Array<{
@@ -314,6 +319,11 @@ export interface AdminOverviewResponse {
     posts_published_month: number;
     failed_runs_month: number;
     failed_emails_count: number;
+    email_median_send_ms_24h?: number | null;
+    email_failure_rate_24h?: number;
+    email_sent_24h?: number;
+    email_failed_24h?: number;
+    email_queued_now?: number;
   };
   daily_series: Array<{
     date: string;

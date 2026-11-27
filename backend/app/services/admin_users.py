@@ -425,7 +425,12 @@ def get_admin_user_detail(db: Session, user_id: str) -> Dict[str, Any]:
                 "status": e.status,
                 "error": e.error,
                 "attempts": e.attempts,
+                "provider": e.provider,
                 "provider_message_id": e.provider_message_id,
+                "provider_response_ms": e.provider_response_ms,
+                "total_duration_ms": e.total_duration_ms,
+                "next_attempt_at": e.next_attempt_at.isoformat() if e.next_attempt_at else None,
+                "sent_at": e.sent_at.isoformat() if e.sent_at else None,
                 "created_at": e.created_at.isoformat() if e.created_at else None,
             }
             for e in email_logs
@@ -871,28 +876,13 @@ def resend_user_email_log(
             detail={"code": "not_found", "message": "Notification log not found."},
         )
 
-    subject, plain_text, html_content = render_notification_template(row.type, row.payload or {})
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = settings.EMAIL_FROM
-    msg["To"] = row.to_email
-    msg.set_content(plain_text)
-    msg.add_alternative(html_content, subtype="html")
-
-    new_status = "failed"
-    provider_message_id: Optional[str] = None
-    error_text: Optional[str] = None
-    try:
-        provider_message_id = send_smtp_message(msg)
-        new_status = "sent"
-    except Exception as exc:
-        error_text = str(exc)[:500]
-
-    row.attempts = (row.attempts or 0) + 1
-    row.status = new_status
-    row.error = error_text
-    if provider_message_id:
-        row.provider_message_id = provider_message_id
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    row.status = "queued"
+    row.error = None
+    row.locked_at = None
+    row.next_attempt_at = now_utc
+    row.max_attempts = max(int(row.max_attempts or 5), int(row.attempts or 0) + 5)
+    row.updated_at = now_utc
 
     db.add(
         AdminAuditLog(
@@ -902,14 +892,17 @@ def resend_user_email_log(
             target_type="user",
             target_id=user_id,
             target_email=row.to_email,
-            reason=f"Resend email log {row.id} ({row.type})",
-            after_state={"attempts": row.attempts, "status": new_status},
-            email_status=new_status,
+            reason=f"Re-queued email log {row.id} ({row.type})",
+            after_state={"attempts": row.attempts, "status": "queued"},
+            email_status="queued",
         )
     )
     db.commit()
     db.refresh(row)
     invalidate_admin_overview_cache()
+
+    from app.services.notifications import _trigger_outbox_drain
+    _trigger_outbox_drain()
 
     return {
         "id": str(row.id),

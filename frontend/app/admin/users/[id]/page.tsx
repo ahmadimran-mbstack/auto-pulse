@@ -74,6 +74,13 @@ export default function AdminUserDetailPage() {
     queryFn: () => getAdminUserDetail(userId),
     enabled: Boolean(userId),
     staleTime: 0,
+    refetchInterval: (query) => {
+      const logs = query.state.data?.email_logs;
+      if (logs?.some((e) => e.status === "queued" || e.status === "sending")) {
+        return 2000;
+      }
+      return false;
+    },
   });
 
   const [statusOpen, setStatusOpen] = React.useState(false);
@@ -88,8 +95,10 @@ export default function AdminUserDetailPage() {
       qc.invalidateQueries({ queryKey: ["admin-user-detail", userId] });
       if (res.status === "sent") {
         toast.success("Email resent successfully.");
+      } else if (res.status === "queued") {
+        toast.info("Email queued for delivery.");
       } else {
-        toast.error(`Resend failed: ${res.error || "SMTP error"}`);
+        toast.error(`Resend failed: ${res.error || "Delivery error"}`);
       }
     },
     onError: (err: unknown) => {
@@ -531,7 +540,7 @@ export default function AdminUserDetailPage() {
                         {e.error || "—"}
                       </TableCell>
                       <TableCell className="text-right">
-                        {e.status === "failed" && (
+                        {(e.status === "failed" || e.status === "unknown") && (
                           <Button
                             variant="outline"
                             size="sm"
