@@ -16,10 +16,9 @@ def get_me(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
-    resolved_email, email_verified = resolve_user_email_and_verified(db, user)
+    resolved_email, _email_verified = resolve_user_email_and_verified(db, user)
     is_admin = bool(
         resolved_email
-        and email_verified
         and resolved_email in settings.admin_email_set
     )
 

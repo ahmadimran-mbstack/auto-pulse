@@ -64,19 +64,13 @@ def require_admin_caller(
     user: User = Depends(current_user),
     db: Session = Depends(get_db),
 ) -> AdminCaller:
-    """Verify caller is active, in ADMIN_EMAILS, and has a verified email in neon_auth.user."""
-    caller_email, email_verified = resolve_user_email_and_verified(db, user)
+    """Verify caller is active and in ADMIN_EMAILS."""
+    caller_email, _email_verified = resolve_user_email_and_verified(db, user)
     if not caller_email or caller_email not in settings.admin_email_set:
         log_admin_access_denied(db, user, caller_email, "Email not in ADMIN_EMAILS")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"code": "forbidden", "message": "Admin access required."},
-        )
-    if not email_verified:
-        log_admin_access_denied(db, user, caller_email, "Admin email is not verified")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": "forbidden", "message": "Verified admin email required."},
         )
     return AdminCaller(id=user.id, email=caller_email)
 

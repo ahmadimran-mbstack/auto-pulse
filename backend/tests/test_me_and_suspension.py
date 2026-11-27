@@ -59,11 +59,11 @@ def test_me_endpoint_admin_verification_and_onboarding(ed25519_keys, monkeypatch
         assert body_adm["status"] == "active"
         assert body_adm["onboarding_completed"] is False
 
-        # 2. Unverified email in ADMIN_EMAILS -> is_admin=False
+        # 2. Unverified email in ADMIN_EMAILS -> is_admin=True (verified-email rule dropped)
         t_unver = create_test_token(private_key, sub=unver_uid, email=unver_email, name="Unver")
         r_unver = client.get("/me", headers={"Authorization": f"Bearer {t_unver}"})
         assert r_unver.status_code == 200
-        assert r_unver.json()["is_admin"] is False
+        assert r_unver.json()["is_admin"] is True
 
         # 3. Normal verified user with onboarding_complete=True
         t_usr = create_test_token(private_key, sub=user_uid, email=user_email, name="Usr")
